@@ -249,8 +249,9 @@ impl<R: Runtime> ProxyService<R> {
                     node.tls,
                 );
             } else {
-                // TODO: Implement other protocols
-                // Already added a 'direct' outbound as safe fallback
+                // Unknown protocol or not yet implemented
+                // Fallback to direct but KEEP the 'proxy' tag so routing doesn't crash
+                cfg = cfg.with_direct_tag("proxy");
             }
         } else {
             // No node selected: ensure 'proxy' tag exists as a 'direct' fallback

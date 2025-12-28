@@ -20,8 +20,8 @@ const PRESETS = {
     "Smart Connect": {
         defaultPolicy: "PROXY",
         rules: [
-            { id: "1", type: "GEOIP", value: "cn", policy: "DIRECT", enabled: true, description: "Direct connection for Mainland China IPs" },
-            { id: "2", type: "DOMAIN", value: "geosite:cn", policy: "DIRECT", enabled: true, description: "Direct connection for Mainland China Domains" },
+            { id: "1", type: "GEOIP", value: "geoip-cn", policy: "DIRECT", enabled: true, description: "Direct connection for Mainland China IPs" },
+            { id: "2", type: "DOMAIN", value: "geosite:geosite-cn", policy: "DIRECT", enabled: true, description: "Direct connection for Mainland China Domains" },
             { id: "3", type: "DOMAIN_SUFFIX", value: "google.com", policy: "PROXY", enabled: true, description: "Force Google via Proxy" },
             { id: "4", type: "IP_CIDR", value: "192.168.0.0/16", policy: "DIRECT", enabled: true, description: "Local Network" },
             { id: "5", type: "DOMAIN_KEYWORD", value: "ads", policy: "REJECT", enabled: true, description: "Block Ads" },
@@ -38,8 +38,8 @@ const PRESETS = {
     "Bypass LAN & CN": {
         defaultPolicy: "PROXY",
         rules: [
-            { id: "1", type: "GEOIP", value: "cn", policy: "DIRECT", enabled: true, description: "Direct connection for Mainland China IPs" },
-            { id: "2", type: "DOMAIN", value: "geosite:cn", policy: "DIRECT", enabled: true, description: "Direct connection for Mainland China Domains" },
+            { id: "1", type: "GEOIP", value: "geoip-cn", policy: "DIRECT", enabled: true, description: "Direct connection for Mainland China IPs" },
+            { id: "2", type: "DOMAIN", value: "geosite:geosite-cn", policy: "DIRECT", enabled: true, description: "Direct connection for Mainland China Domains" },
             { id: "4", type: "IP_CIDR", value: "192.168.0.0/16", policy: "DIRECT", enabled: true, description: "Local Network" },
         ] as Rule[]
     }
