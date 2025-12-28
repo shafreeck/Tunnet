@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
-import { ArrowUpDown, Filter, Play, Square, Plus, Pencil, Trash2, Globe, RotateCw } from "lucide-react"
+import { ArrowUpDown, Filter, Play, Square, Plus, Pencil, Trash2, Globe, RotateCw, Search, Scroll, Pause, Copy } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
@@ -66,6 +66,14 @@ export function ServerList({
     onPing
 }: ServerListProps) {
     const [loading, setLoading] = useState(false)
+    const [logFilter, setLogFilter] = useState("")
+    const [autoScroll, setAutoScroll] = useState(true)
+
+    const handleCopyLogs = () => {
+        const text = logs.join("\n")
+        navigator.clipboard.writeText(text)
+        toast.success("Logs copied to clipboard")
+    }
 
     return (
         <div className="flex-1 flex flex-col min-h-0">
@@ -92,7 +100,7 @@ export function ServerList({
                     </button>
                 </div>
 
-                {!showLogs && (
+                {!showLogs ? (
                     <div className="flex gap-2">
                         <button
                             onClick={() => onEdit(null)} // Trigger Add New
@@ -109,6 +117,37 @@ export function ServerList({
                             <Filter size={16} />
                         </button>
                     </div>
+                ) : (
+                    <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-300">
+                        <div className="relative group">
+                            <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 size-3 text-text-tertiary" />
+                            <input
+                                type="text"
+                                placeholder="Filter..."
+                                value={logFilter}
+                                onChange={e => setLogFilter(e.target.value)}
+                                className="bg-black/5 dark:bg-black/20 border border-border-color rounded pl-6 pr-2 py-0.5 text-[10px] text-text-primary focus:border-primary/50 w-24 focus:w-32 transition-all outline-none"
+                            />
+                        </div>
+
+                        <div className="h-3 w-px bg-border-color mx-1"></div>
+
+                        <button
+                            onClick={() => setAutoScroll(!autoScroll)}
+                            className={cn("p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors", autoScroll ? "text-accent-green" : "text-text-secondary")}
+                            title={autoScroll ? "Auto-scroll ON" : "Auto-scroll OFF"}
+                        >
+                            {autoScroll ? <Scroll size={14} /> : <Pause size={14} />}
+                        </button>
+
+                        <button onClick={handleCopyLogs} className="p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary hover:text-text-primary transition-colors" title="Copy Logs">
+                            <Copy size={14} />
+                        </button>
+
+                        <button onClick={onClearLogs} className="p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary hover:text-red-500 transition-colors" title="Clear Logs">
+                            <Trash2 size={14} />
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -117,6 +156,8 @@ export function ServerList({
                     <LogViewer
                         logs={logs}
                         onClear={onClearLogs}
+                        filter={logFilter}
+                        autoScroll={autoScroll}
                         className="h-[calc(100vh-180px)] border-none bg-transparent backdrop-blur-none"
                     />
                 ) : (
