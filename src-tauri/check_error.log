@@ -1,0 +1,88 @@
+    Checking app v0.1.0 (/Users/shafreeck/Codes/Tunnet/src-tauri)
+error: duplicate serde attribute `skip_serializing_if`
+  --> src/config.rs:13:13
+   |
+13 |     #[serde(skip_serializing_if = "Option::is_none")]
+   |             ^^^^^^^^^^^^^^^^^^^
+
+error[E0063]: missing field `rule_set` in initializer of `RouteRule`
+   --> src/service.rs:705:34
+    |
+705 |                 route.rules.push(crate::config::RouteRule {
+    |                                  ^^^^^^^^^^^^^^^^^^^^^^^^ missing `rule_set`
+
+error[E0277]: the trait bound `SingBoxConfig: serde::Serialize` is not satisfied
+    --> src/service.rs:722:49
+     |
+ 722 |         let json = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+     |                    ---------------------------- ^^^^ unsatisfied trait bound
+     |                    |
+     |                    required by a bound introduced by this call
+     |
+help: the trait `Serialize` is not implemented for `SingBoxConfig`
+    --> src/config.rs:5:1
+     |
+   5 | pub struct SingBoxConfig {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^
+     = note: for local types consider adding `#[derive(serde::Serialize)]` to your `SingBoxConfig` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Serialize`:
+               &'a T
+               &'a mut T
+               ()
+               (T,)
+               (T0, T1)
+               (T0, T1, T2)
+               (T0, T1, T2, T3)
+               (T0, T1, T2, T3, T4)
+             and 412 others
+note: required by a bound in `to_string_pretty`
+    --> /Users/shafreeck/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.147/src/ser.rs:2266:17
+     |
+2264 | pub fn to_string_pretty<T>(value: &T) -> Result<String>
+     |        ---------------- required by a bound in this function
+2265 | where
+2266 |     T: ?Sized + Serialize,
+     |                 ^^^^^^^^^ required by this bound in `to_string_pretty`
+     = note: the full name for the type has been written to '/Users/shafreeck/Codes/Tunnet/src-tauri/target/debug/deps/app_lib-5029dd74bac9e949.long-type-11757837075242527457.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+
+error[E0277]: the trait bound `SingBoxConfig: serde::Serialize` is not satisfied
+    --> src/service.rs:422:49
+     |
+ 422 |         let json = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+     |                    ---------------------------- ^^^^ unsatisfied trait bound
+     |                    |
+     |                    required by a bound introduced by this call
+     |
+help: the trait `Serialize` is not implemented for `SingBoxConfig`
+    --> src/config.rs:5:1
+     |
+   5 | pub struct SingBoxConfig {
+     | ^^^^^^^^^^^^^^^^^^^^^^^^
+     = note: for local types consider adding `#[derive(serde::Serialize)]` to your `SingBoxConfig` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Serialize`:
+               &'a T
+               &'a mut T
+               ()
+               (T,)
+               (T0, T1)
+               (T0, T1, T2)
+               (T0, T1, T2, T3)
+               (T0, T1, T2, T3, T4)
+             and 412 others
+note: required by a bound in `to_string_pretty`
+    --> /Users/shafreeck/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.147/src/ser.rs:2266:17
+     |
+2264 | pub fn to_string_pretty<T>(value: &T) -> Result<String>
+     |        ---------------- required by a bound in this function
+2265 | where
+2266 |     T: ?Sized + Serialize,
+     |                 ^^^^^^^^^ required by this bound in `to_string_pretty`
+     = note: the full name for the type has been written to '/Users/shafreeck/Codes/Tunnet/src-tauri/target/debug/deps/app_lib-5029dd74bac9e949.long-type-11757837075242527457.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+
+Some errors have detailed explanations: E0063, E0277.
+For more information about an error, try `rustc --explain E0063`.
+error: could not compile `app` (lib) due to 4 previous errors

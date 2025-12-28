@@ -1,0 +1,206 @@
+"use client"
+
+import React, { useState, useMemo } from "react"
+import { createPortal } from "react-dom"
+import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps"
+import { cn } from "@/lib/utils"
+// @ts-ignore
+import { X, RefreshCw } from "lucide-react"
+import { getCountryCoordinates } from "@/lib/country-coords"
+
+// URL to a valid TopoJSON file
+const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"
+
+// Mapping from our display name to the map's property name
+const NAME_MAPPING: Record<string, string> = {
+    "United States": "United States of America",
+    "Korea": "South Korea",
+    "United Kingdom": "United Kingdom",
+    "Russia": "Russia",
+    "Hong Kong": "Hong Kong",
+    "Taiwan": "Taiwan"
+}
+
+interface LocationsMapProps {
+    servers: any[]
+    activeServerId: string | null
+    selectedCountry: string | null
+    onSelectCountry: (country: string | null) => void
+}
+
+export function LocationsMap({
+    servers,
+    activeServerId,
+    selectedCountry,
+    onSelectCountry
+}: LocationsMapProps) {
+    const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null)
+
+    // Get unique countries from servers to highlight them
+    const activeCountries = useMemo(() => {
+        const groups: Record<string, number> = {}
+        servers.forEach(s => {
+            if (s.country) {
+                const mapName = NAME_MAPPING[s.country] || s.country
+                groups[mapName] = (groups[mapName] || 0) + 1
+            }
+        })
+        return groups
+    }, [servers])
+
+    // Filter servers for markers if a country is selected (optional, or show all markers always?)
+    // Current logic: Show markers matching selection if selected, else show all?
+    // Actually existing logic showed filtered servers in the list, but markers?
+    // Let's look at previous code: `filteredServers` was used for the LIST, but markers iterated `filteredServers` too.
+    const filteredServers = useMemo(() => {
+        if (!selectedCountry) return servers
+        return servers.filter(s => s.country === selectedCountry)
+    }, [servers, selectedCountry])
+
+    return (
+        <div className="flex-1 flex flex-col relative w-full h-full overflow-hidden bg-white/0 rounded-xl">
+            <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
+                {/* Map specific controls could go here if needed, but main controls are in parent */}
+            </div>
+
+            <ComposableMap
+                projection="geoMercator"
+                projectionConfig={{
+                    scale: 120,
+                    center: [0, 20]
+                }}
+                className="w-full h-full"
+            >
+                <ZoomableGroup maxZoom={4} minZoom={1}>
+                    <Geographies geography={GEO_URL}>
+                        {({ geographies }) =>
+                            geographies.map((geo) => {
+                                const countryName = geo.properties.name
+                                const hasServers = activeCountries[countryName]
+                                const isSelected = selectedCountry === countryName
+
+                                return (
+                                    <Geography
+                                        key={geo.rsmKey}
+                                        geography={geo}
+                                        onClick={() => {
+                                            if (hasServers) {
+                                                onSelectCountry(isSelected ? null : countryName) // Toggle
+                                            }
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            const count = activeCountries[countryName] || 0
+                                            setTooltip({
+                                                content: count > 0 ? `${countryName} • ${count} Nodes` : countryName,
+                                                x: e.clientX,
+                                                y: e.clientY
+                                            })
+                                        }}
+                                        onMouseLeave={() => setTooltip(null)}
+                                        onMouseMove={(e) => {
+                                            setTooltip(prev => prev ? ({ ...prev, x: e.clientX, y: e.clientY }) : null)
+                                        }}
+                                        style={{
+                                            default: {
+                                                fill: hasServers ? (isSelected ? "#22c55e" : "#22c55e20") : "#18181b",
+                                                stroke: hasServers ? "#22c55e40" : "#27272a",
+                                                strokeWidth: 0.5,
+                                                outline: "none",
+                                                cursor: hasServers ? "pointer" : "default"
+                                            },
+                                            hover: {
+                                                fill: hasServers ? "#22c55e" : "#27272a",
+                                                stroke: "#27272a",
+                                                strokeWidth: 0.5,
+                                                outline: "none",
+                                                cursor: hasServers ? "pointer" : "default"
+                                            },
+                                            pressed: {
+                                                fill: hasServers ? "#16a34a" : "#18181b",
+                                                outline: "none"
+                                            }
+                                        }}
+                                    />
+                                )
+                            })
+                        }
+                    </Geographies>
+                    {filteredServers.map((server) => {
+                        let coords: [number, number] | null = null
+                        let isVerified = false
+
+                        if (server.location && typeof server.location.lat === 'number' && typeof server.location.lon === 'number') {
+                            coords = [server.location.lon, server.location.lat]
+                            isVerified = true
+                        } else if (server.countryCode) {
+                            coords = getCountryCoordinates(server.countryCode)
+                        }
+
+                        if (coords) {
+                            return (
+                                <Marker
+                                    key={server.id}
+                                    coordinates={coords}
+                                    onMouseEnter={(e) => {
+                                        setTooltip({
+                                            content: `${server.location?.city || server.location?.country || server.country || "Unknown Location"} • ${server.location?.isp || "ISP"} • ${server.location?.latency ? server.location.latency + " ms" : "N/A"}`,
+                                            x: e.clientX,
+                                            y: e.clientY
+                                        })
+                                    }}
+                                    onMouseLeave={() => setTooltip(null)}
+                                >
+                                    <g
+                                        onMouseMove={(e) => {
+                                            setTooltip(prev => prev ? ({ ...prev, x: e.clientX, y: e.clientY }) : null)
+                                        }}
+                                    >
+                                        {/* Diffusing Glow effect (Ping) - Only for verified */}
+                                        {isVerified && <circle r={6} fill="#22c55e" className="animate-ping opacity-75" style={{ animationDuration: '2s' }} />}
+
+                                        {/* Core marker */}
+                                        <circle
+                                            r={isVerified ? 6 : 4}
+                                            fill={isVerified ? "#22c55e" : "#52525b"}
+                                            stroke={isVerified ? "#000" : "#27272a"}
+                                            strokeWidth={1}
+                                            style={{ opacity: isVerified ? 1 : 0.8 }}
+                                        />
+                                    </g>
+                                </Marker>
+                            )
+                        }
+                        return null
+                    })}
+                </ZoomableGroup>
+            </ComposableMap>
+
+            {/* Custom Tooltip */}
+            {tooltip && typeof document !== 'undefined' && createPortal(
+                <div
+                    className={cn(
+                        "fixed z-[9999] px-3 py-1.5 bg-zinc-900/90 backdrop-blur-md border border-white/10 text-xs text-white rounded-lg shadow-xl pointer-events-none whitespace-nowrap transition-[transform,opacity] duration-75",
+                    )}
+                    style={{
+                        left: tooltip.x,
+                        top: tooltip.y,
+                        transform: `translate(${tooltip.x > (typeof window !== 'undefined' ? window.innerWidth / 2 : 500)
+                            ? "calc(-100% - 20px)"
+                            : "20px"
+                            }, ${tooltip.y > (typeof window !== 'undefined' ? window.innerHeight / 2 : 400)
+                                ? "calc(-100% - 20px)"
+                                : "20px"
+                            })`
+                    }}
+                >
+                    {tooltip.content}
+                </div>,
+                document.body
+            )}
+
+            <div className="absolute bottom-4 left-4 text-[10px] text-gray-500">
+                Scroll to zoom • Drag to pan
+            </div>
+        </div>
+    )
+}

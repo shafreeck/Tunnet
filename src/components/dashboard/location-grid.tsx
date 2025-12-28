@@ -1,0 +1,128 @@
+import React, { useMemo } from "react"
+import { ServerCard } from "./server-card"
+import { getRegionForCountry } from "@/lib/regions"
+import { cn } from "@/lib/utils"
+
+interface LocationGridProps {
+    servers: any[]
+    selectedRegion: string // "All Regions" or specific region
+    searchQuery: string
+    onSelectCountry: (countryName: string) => void
+}
+
+export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCountry }: LocationGridProps) {
+
+    // 1. Group servers by Country first (aggregated view)
+    const countries = useMemo(() => {
+        const map = new Map<string, {
+            country: string
+            flagUrl: string
+            count: number
+            avgPing: number
+            region: string
+            provider: string
+        }>()
+
+        servers.forEach(s => {
+            // Normalize country name
+            const country = s.country || "Unknown"
+            const region = getRegionForCountry(s.countryCode || country)
+
+            if (!map.has(country)) {
+                map.set(country, {
+                    country,
+                    flagUrl: s.flagUrl,
+                    count: 0,
+                    avgPing: 0,
+                    region,
+                    provider: s.provider || "Unknown"
+                })
+            }
+
+            const entry = map.get(country)!
+            entry.count += 1
+            // Simple average for ping (mock calculation if needed, or real)
+            // If ping is 0 or undefined, maybe ignored? 
+            if (s.ping > 0) {
+                // Weighted average or just sum? Let's just keep last known or min?
+                // Let's do min ping (best latency) for the card display
+                if (entry.avgPing === 0 || s.ping < entry.avgPing) {
+                    entry.avgPing = s.ping
+                }
+            }
+        })
+
+        return Array.from(map.values())
+    }, [servers])
+
+    // 2. Filter by Search & Region
+    const filteredCountries = useMemo(() => {
+        return countries.filter(c => {
+            const matchesSearch = c.country.toLowerCase().includes(searchQuery.toLowerCase())
+            const matchesRegion = selectedRegion === "All Regions" || selectedRegion === "Favorites"
+                ? true
+                : c.region === selectedRegion
+
+            if (selectedRegion === "Favorites") {
+                // Mock: Return false for now or check some favorite flag
+                return false
+            }
+
+            return matchesSearch && matchesRegion
+        })
+    }, [countries, searchQuery, selectedRegion])
+
+    // 3. Group by Region for display
+    const groups = useMemo(() => {
+        const g: Record<string, typeof filteredCountries> = {}
+        const regionOrder = ["Asia Pacific", "Americas", "Europe", "Other"]
+
+        filteredCountries.forEach(c => {
+            if (!g[c.region]) g[c.region] = []
+            g[c.region].push(c)
+        })
+
+        return regionOrder
+            .filter(r => g[r] && g[r].length > 0)
+            .map(r => ({ name: r, items: g[r] }))
+
+    }, [filteredCountries])
+
+    if (filteredCountries.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+                <p>No locations found matching your criteria.</p>
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-8 p-4 pb-20 overflow-y-auto h-full sidebar-scroll">
+            {groups.map((group) => (
+                <div key={group.name} className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
+                    <div className="flex items-center gap-2">
+                        <div className="size-2 rounded-full bg-accent-blue" />
+                        <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                            {group.name}
+                        </h2>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
+                        {group.items.map((country) => (
+                            <ServerCard
+                                key={country.country}
+                                countryName={country.country}
+                                flagUrl={country.flagUrl}
+                                locationCount={country.count}
+                                providerName={country.provider} // Display one provider or "Multiple"
+                                usagePercent={Math.floor(Math.random() * 80) + 10} // Mock usage
+                                ping={country.avgPing}
+                                onClick={() => onSelectCountry(country.country)}
+                            />
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+    )
+}
