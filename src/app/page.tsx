@@ -530,7 +530,7 @@ export default function Home() {
         subscription={activeSubscription}
       />
       <main className="flex-1 flex flex-col h-full relative overflow-hidden rounded-xl bg-black/10 backdrop-blur-sm border border-white/5">
-        {currentView !== "locations" && currentView !== "rules" && currentView !== "settings" && (
+        {currentView !== "locations" && currentView !== "rules" && currentView !== "settings" && currentView !== "proxies" && (
           <Header
             isConnected={isConnected}
             onToggle={toggleProxy}

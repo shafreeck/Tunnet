@@ -69,13 +69,13 @@ export function ServerList({
 
     return (
         <div className="flex-1 flex flex-col min-h-0">
-            <div className="flex items-center justify-between mb-4 mt-2 px-1 shrink-0 sticky top-0 bg-black/20 backdrop-blur-xl z-20 py-2 -mx-1 rounded-t-xl border-b border-white/5">
+            <div className="flex items-center justify-between mb-4 mt-2 px-1 shrink-0 sticky top-0 bg-sidebar-bg backdrop-blur-xl z-20 py-2 -mx-1 rounded-t-xl border-b border-border-color">
                 <div className="flex items-center gap-6">
                     <button
                         onClick={() => setShowLogs(false)}
                         className={cn(
                             "text-[10px] font-bold uppercase tracking-widest pl-1 transition-colors",
-                            !showLogs ? "text-white" : "text-text-tertiary hover:text-white/60"
+                            !showLogs ? "text-text-primary" : "text-text-tertiary hover:text-text-primary"
                         )}
                     >
                         Server List {loading && "(Loading...)"}
@@ -84,11 +84,11 @@ export function ServerList({
                         onClick={() => setShowLogs(true)}
                         className={cn(
                             "flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors",
-                            showLogs ? "text-white" : "text-text-tertiary hover:text-white/60"
+                            showLogs ? "text-text-primary" : "text-text-tertiary hover:text-text-primary"
                         )}
                     >
                         Logs
-                        <div className={cn("size-1.5 rounded-full transition-colors", showLogs ? "bg-accent-green" : "bg-white/20")} />
+                        <div className={cn("size-1.5 rounded-full transition-colors", showLogs ? "bg-accent-green" : "bg-text-tertiary/20")} />
                     </button>
                 </div>
 
@@ -97,15 +97,15 @@ export function ServerList({
                         <button
                             onClick={() => onEdit(null)} // Trigger Add New
                             className={cn(
-                                "p-1.5 transition-colors rounded hover:bg-white/5",
-                                "text-text-secondary hover:text-white"
+                                "p-1.5 transition-colors rounded hover:bg-black/5 dark:hover:bg-white/5",
+                                "text-text-secondary hover:text-text-primary"
                             )}
                             title="Add New Node"
                         >
                             <Plus size={16} />
                         </button>
                         {/* Filter button placeholder */}
-                        <button className="p-1.5 text-text-secondary hover:text-white transition-colors rounded hover:bg-white/5">
+                        <button className="p-1.5 text-text-secondary hover:text-text-primary transition-colors rounded hover:bg-black/5 dark:hover:bg-white/5">
                             <Filter size={16} />
                         </button>
                     </div>
@@ -162,8 +162,8 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
         <div
             onClick={onClick}
             className={cn(
-                "group glass-card flex items-center p-3 rounded-xl cursor-pointer relative overflow-hidden transition-all duration-200",
-                isSelected ? "bg-white/5 border-white/20" : "hover:bg-white/5",
+                "group glass-card flex items-center p-3 rounded-xl cursor-pointer relative overflow-hidden transition-all duration-200 border border-transparent",
+                isSelected ? "bg-card-bg border-border-color shadow-sm" : "hover:bg-black/5 dark:hover:bg-white/5",
                 // If running, we might want a different border or glow?
                 // For now, relies on the `isRunning` indicator within the card.
                 isRunning && "border-primary/30 bg-primary/5"
@@ -173,7 +173,7 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
 
             {isSelected && <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-xl transition-colors", isRunning ? "bg-accent-green shadow-[0_0_10px_rgba(34,197,94,0.5)]" : "bg-primary")} ></div>}
 
-            <div className="size-10 rounded-full bg-black/30 overflow-hidden flex-shrink-0 mr-4 shadow-inner ml-2 flex items-center justify-center">
+            <div className="size-10 rounded-full bg-black/5 dark:bg-black/30 overflow-hidden flex-shrink-0 mr-4 shadow-inner ml-2 flex items-center justify-center">
                 {server.flagUrl ? (
                     <img className="w-full h-full object-cover" src={server.flagUrl} alt={server.country} />
                 ) : (
@@ -185,7 +185,7 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
                 <div className="flex items-center gap-2">
                     <h4 className={cn(
                         "font-medium truncate text-sm transition-colors",
-                        isSelected ? "text-white" : "text-gray-200 group-hover:text-white"
+                        isSelected ? "text-text-primary" : "text-text-secondary group-hover:text-text-primary"
                     )}>
                         {server.name}
                     </h4>
@@ -205,7 +205,7 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
                         </span>
                     ))}
                 </div>
-                <p className="text-text-secondary text-xs truncate mt-0.5 group-hover:text-gray-400">
+                <p className="text-text-tertiary text-xs truncate mt-0.5 group-hover:text-text-secondary">
                     {server.provider}
                 </p>
             </div>
@@ -234,7 +234,7 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
                         </button>
                         <button
                             onClick={(e) => { e.stopPropagation(); onEdit(server); }}
-                            className="p-1.5 text-text-secondary hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                            className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/10 rounded-lg transition-colors"
                             title="Edit"
                         >
                             <Pencil size={14} />
@@ -273,7 +273,7 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
                             <Play size={14} fill="white" className="ml-0.5" />
                         </div>
                     ) : (
-                        <Play size={16} fill="currentColor" className="text-text-secondary group-hover:text-white opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all" />
+                        <Play size={16} fill="currentColor" className="text-text-secondary group-hover:text-text-primary opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all" />
                     )}
                 </div>
             </div>

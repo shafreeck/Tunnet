@@ -165,18 +165,18 @@ export function RulesView() {
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* Unified Header Style */}
-            <div className="border-b border-white/5 bg-black/5 backdrop-blur-md p-8 pb-6 shrink-0 relative z-20">
+            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-8 pb-6 shrink-0 relative z-20">
                 <div className="max-w-5xl mx-auto w-full">
                     <div className="flex items-start justify-between mb-8">
                         <div>
-                            <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">路由规则</h2>
-                            <p className="text-sm text-gray-500 font-medium">配置流量如何通过域名、IP 等特征进行分流</p>
+                            <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">路由规则</h2>
+                            <p className="text-sm text-text-secondary font-medium">配置流量如何通过域名、IP 等特征进行分流</p>
                         </div>
                         <div className="flex gap-4">
                             <div className="relative">
                                 <button
                                     onClick={() => setIsPresetOpen(!isPresetOpen)}
-                                    className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold transition-all border border-white/5"
+                                    className="flex items-center gap-2 px-4 py-2 bg-card-bg hover:bg-black/5 dark:hover:bg-white/10 rounded-xl text-xs font-bold transition-all border border-border-color"
                                 >
                                     <span className="opacity-50">预设方案:</span>
                                     <span>{currentPreset}</span>
@@ -185,14 +185,14 @@ export function RulesView() {
                                 {isPresetOpen && (
                                     <>
                                         <div className="fixed inset-0 z-10" onClick={() => setIsPresetOpen(false)} />
-                                        <div className="absolute right-0 top-full mt-2 w-52 bg-[#15151a]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-20 py-1 overflow-hidden animate-in zoom-in-95 duration-200">
+                                        <div className="absolute right-0 top-full mt-2 w-52 bg-card-bg backdrop-blur-xl border border-border-color rounded-2xl shadow-2xl z-20 py-1 overflow-hidden animate-in zoom-in-95 duration-200">
                                             {Object.keys(PRESETS).map((name) => (
                                                 <button
                                                     key={name}
                                                     onClick={() => handleApplyPreset(name)}
                                                     className={cn(
-                                                        "w-full text-left px-4 py-3 text-xs hover:bg-white/5 transition-colors flex items-center justify-between font-bold",
-                                                        currentPreset === name ? "text-primary bg-primary/5" : "text-gray-400"
+                                                        "w-full text-left px-4 py-3 text-xs hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center justify-between font-bold",
+                                                        currentPreset === name ? "text-primary bg-primary/5" : "text-text-secondary"
                                                     )}
                                                 >
                                                     {name}
@@ -215,22 +215,22 @@ export function RulesView() {
 
                     <div className="flex items-center gap-4">
                         <div className="relative flex-1 group">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-white transition-colors" size={16} />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-text-primary transition-colors" size={16} />
                             <input
                                 placeholder="搜索规则..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full bg-white/5 border border-white/5 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-white/20 transition-all font-medium placeholder:text-gray-600"
+                                className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/20 rounded-xl py-2.5 pl-10 pr-4 text-sm text-text-primary focus:outline-none transition-all font-medium placeholder:text-text-tertiary"
                             />
                         </div>
-                        <div className="flex bg-white/5 p-1 rounded-xl border border-white/5">
+                        <div className="flex bg-card-bg p-1 rounded-xl border border-border-color">
                             {(["ALL", "PROXY", "DIRECT", "REJECT"] as const).map(policy => (
                                 <button
                                     key={policy}
                                     onClick={() => setSelectedPolicy(policy)}
                                     className={cn(
                                         "px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all uppercase tracking-wider",
-                                        selectedPolicy === policy ? "bg-white/10 text-white shadow-sm" : "text-gray-500 hover:text-gray-300"
+                                        selectedPolicy === policy ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:text-text-primary"
                                     )}
                                 >
                                     {policy}
@@ -242,7 +242,7 @@ export function RulesView() {
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto px-8 py-8 sidebar-scroll bg-black/5">
+            <div className="flex-1 overflow-y-auto px-8 py-8 sidebar-scroll bg-transparent">
                 <div className="max-w-5xl mx-auto w-full space-y-3 pb-32">
                     {filteredRules.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-gray-600">
@@ -253,7 +253,7 @@ export function RulesView() {
                         filteredRules.map((rule) => (
                             <div
                                 key={rule.id}
-                                className="glass-card flex items-center justify-between p-4 rounded-2xl hover:bg-white/8 transition-all duration-300 group ring-1 ring-white/5 hover:ring-white/10"
+                                className="glass-card flex items-center justify-between p-4 rounded-2xl hover:bg-black/5 dark:hover:bg-white/8 transition-all duration-300 group border border-transparent hover:border-border-color"
                             >
                                 <div className="flex items-center gap-6 flex-1">
                                     <div className="w-32 shrink-0">
@@ -263,8 +263,8 @@ export function RulesView() {
                                         </div>
                                     </div>
                                     <div className="flex flex-col flex-1 min-w-0">
-                                        <span className="text-sm font-semibold text-white font-mono truncate">{rule.value}</span>
-                                        {rule.description && <span className="text-xs text-gray-500 truncate mt-0.5">{rule.description}</span>}
+                                        <span className="text-sm font-semibold text-text-primary font-mono truncate">{rule.value}</span>
+                                        {rule.description && <span className="text-xs text-text-secondary truncate mt-0.5">{rule.description}</span>}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-8">
@@ -289,12 +289,12 @@ export function RulesView() {
             <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
                 <button
                     onClick={() => setIsFallbackOpen(!isFallbackOpen)}
-                    className="pointer-events-auto glass-card flex items-center gap-4 px-6 py-3 rounded-2xl border-white/10 shadow-2xl hover:bg-white/10 transition-all active:scale-95 group"
+                    className="pointer-events-auto glass-card flex items-center gap-4 px-6 py-3 rounded-2xl border-border-color shadow-2xl hover:bg-black/5 dark:hover:bg-white/10 transition-all active:scale-95 group"
                 >
                     <div className="flex flex-col items-start">
-                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-none mb-1">默认分流策略</span>
+                        <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest leading-none mb-1">默认分流策略</span>
                         <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-white">所有其它流量</span>
+                            <span className="text-sm font-bold text-text-primary">所有其它流量</span>
                             <div className={cn("size-1.5 rounded-full animate-pulse bg-primary")} />
                         </div>
                     </div>
@@ -312,9 +312,9 @@ export function RulesView() {
             {isDialogOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-xl bg-black/60 animate-in fade-in duration-500">
                     <div className="fixed inset-0" onClick={() => setIsDialogOpen(false)} />
-                    <div className="relative w-full max-w-lg glass-card border-white/10 rounded-[2.5rem] shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300">
-                        <div className="px-10 py-8 border-b border-white/5 bg-white/5">
-                            <h3 className="text-xl font-bold text-white tracking-tight">{editingRule ? "编辑路由规则" : "新增路由规则"}</h3>
+                    <div className="relative w-full max-w-lg glass-card border border-border-color rounded-[2.5rem] shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300">
+                        <div className="px-10 py-8 border-b border-border-color bg-sidebar-bg">
+                            <h3 className="text-xl font-bold text-text-primary tracking-tight">{editingRule ? "编辑路由规则" : "新增路由规则"}</h3>
                         </div>
                         <div className="p-10 flex flex-col gap-6">
                             <div className="space-y-3">
@@ -326,20 +326,20 @@ export function RulesView() {
                                 </div>
                             </div>
                             <div className="space-y-3">
-                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-1">特征值</label>
-                                <input value={dialogData.value} onChange={(e) => setDialogData({ ...dialogData, value: e.target.value })} className="w-full bg-white/5 border border-white/5 rounded-2xl py-3.5 px-5 text-sm text-white focus:outline-none focus:border-primary/50 transition-all font-mono" />
+                                <label className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest pl-1">特征值</label>
+                                <input value={dialogData.value} onChange={(e) => setDialogData({ ...dialogData, value: e.target.value })} className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/20 rounded-2xl py-3.5 px-5 text-sm text-text-primary focus:outline-none transition-all font-mono" />
                             </div>
                             <div className="space-y-3">
-                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-1">出口动作</label>
-                                <div className="flex bg-white/5 p-1.5 rounded-[1.25rem] border border-white/5">
+                                <label className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest pl-1">出口动作</label>
+                                <div className="flex bg-card-bg p-1.5 rounded-[1.25rem] border border-border-color">
                                     {(["PROXY", "DIRECT", "REJECT"] as const).map(policy => (
-                                        <button key={policy} onClick={() => setDialogData({ ...dialogData, policy })} className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-bold transition-all uppercase tracking-widest", dialogData.policy === policy ? (policy === "PROXY" ? "bg-purple-500 text-white shadow-lg" : policy === "DIRECT" ? "bg-emerald-500 text-white shadow-lg" : "bg-red-500 text-white shadow-lg") : "text-gray-500 hover:text-white")}>{policy}</button>
+                                        <button key={policy} onClick={() => setDialogData({ ...dialogData, policy })} className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-bold transition-all uppercase tracking-widest", dialogData.policy === policy ? (policy === "PROXY" ? "bg-purple-500 text-white shadow-lg" : policy === "DIRECT" ? "bg-emerald-500 text-white shadow-lg" : "bg-red-500 text-white shadow-lg") : "text-text-secondary hover:text-text-primary")}>{policy}</button>
                                     ))}
                                 </div>
                             </div>
                         </div>
-                        <div className="px-10 py-8 border-t border-white/5 bg-white/2 flex justify-end gap-4">
-                            <button onClick={() => setIsDialogOpen(false)} className="px-6 py-3 rounded-2xl text-xs font-bold text-gray-500 hover:text-white transition-all">取消</button>
+                        <div className="px-10 py-8 border-t border-border-color bg-sidebar-bg flex justify-end gap-4">
+                            <button onClick={() => setIsDialogOpen(false)} className="px-6 py-3 rounded-2xl text-xs font-bold text-text-secondary hover:text-text-primary transition-all">取消</button>
                             <button onClick={handleSaveRule} className="px-8 py-3 rounded-2xl text-xs font-bold bg-primary hover:bg-primary-hover text-white transition-all shadow-xl shadow-primary/20 scale-100 active:scale-95">确定保存</button>
                         </div>
                     </div>

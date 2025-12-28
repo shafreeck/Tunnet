@@ -39,7 +39,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mod
                         <XCircle className="absolute text-white/50 drop-shadow-lg size-9 fill-white/5" />
                     )}
                 </div>
-                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-surface-dark/90 backdrop-blur-md border border-white/10 pl-1 pr-2 py-0.5 rounded-full shadow-lg flex items-center gap-1">
+                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-card-bg backdrop-blur-md border border-border-color pl-1 pr-2 py-0.5 rounded-full shadow-lg flex items-center gap-1">
                     <span className={`size-2 rounded-full ${isConnected ? 'bg-accent-green' : 'bg-red-500'} animate-pulse`}></span>
                     <span className={`${isConnected ? 'text-accent-green' : 'text-red-500'} text-[10px] font-bold tracking-wider uppercase`}>
                         {isConnected ? 'Active' : 'Stopped'}
@@ -47,24 +47,24 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mod
                 </div>
             </div >
 
-            <h1 className="text-3xl font-bold text-white mb-2 tracking-tight text-center drop-shadow-md">
+            <h1 className="text-3xl font-bold text-text-primary mb-2 tracking-tight text-center drop-shadow-md">
                 {displayName}
             </h1>
 
-            <div className="flex items-center gap-3 text-text-secondary text-xs font-medium mb-8 bg-black/20 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/5 shadow-inner">
-                <span className="flex items-center gap-1.5 text-white/90">
-                    <Wifi className={`size-3.5 ${isConnected ? 'text-accent-green' : 'text-gray-500'}`} />
+            <div className="flex items-center gap-3 text-text-secondary text-xs font-medium mb-8 bg-card-bg backdrop-blur-md px-4 py-1.5 rounded-full border border-border-color shadow-sm">
+                <span className="flex items-center gap-1.5 text-text-primary">
+                    <Wifi className={`size-3.5 ${isConnected ? 'text-accent-green' : 'text-text-tertiary'}`} />
                     {isConnected ? 'Connected' : 'Offline'}
                 </span>
-                <span className="w-px h-3 bg-white/10"></span>
-                <span className="flex items-center gap-1.5 font-mono text-white/80">
+                <span className="w-px h-3 bg-border-color"></span>
+                <span className="flex items-center gap-1.5 font-mono text-text-secondary">
                     <Bolt className="size-3.5" />
                     {isConnected ? (realIp || 'Checking IP...') : '--'}
                 </span>
-                <span className="w-px h-3 bg-white/10"></span>
+                <span className="w-px h-3 bg-border-color"></span>
                 <button
                     onClick={onTunToggle}
-                    className="flex items-center gap-1.5 transition-colors hover:text-white text-gray-500"
+                    className="flex items-center gap-1.5 transition-colors hover:text-text-primary text-text-secondary"
                     title="Toggle TUN Mode (Requires Helper)"
                 >
                     {tunEnabled && (
@@ -76,22 +76,22 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mod
                 </button>
             </div>
 
-            <div className="flex bg-black/30 p-1 rounded-lg border border-white/5 backdrop-blur-md mb-8">
+            <div className="flex bg-card-bg p-1 rounded-lg border border-border-color backdrop-blur-md mb-8">
                 <button
                     onClick={() => onModeChange('global')}
-                    className={`px-6 py-1.5 rounded-md text-xs font-medium transition-all ${mode === 'global' ? 'bg-white/10 text-white shadow-sm' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
+                    className={`px-6 py-1.5 rounded-md text-xs font-medium transition-all ${mode === 'global' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5'}`}
                 >
                     Global
                 </button>
                 <button
                     onClick={() => onModeChange('rule')}
-                    className={`px-6 py-1.5 rounded-md text-xs font-medium transition-all ${mode === 'rule' ? 'bg-white/10 text-white shadow-sm' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
+                    className={`px-6 py-1.5 rounded-md text-xs font-medium transition-all ${mode === 'rule' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5'}`}
                 >
                     Rule
                 </button>
                 <button
                     onClick={() => onModeChange('direct')}
-                    className={`px-6 py-1.5 rounded-md text-xs font-medium transition-all ${mode === 'direct' ? 'bg-white/10 text-white shadow-sm' : 'text-text-secondary hover:text-white hover:bg-white/5'}`}
+                    className={`px-6 py-1.5 rounded-md text-xs font-medium transition-all ${mode === 'direct' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5'}`}
                 >
                     Direct
                 </button>
@@ -111,16 +111,16 @@ export function Header({ isConnected, onToggle, isLoading }: HeaderProps) {
         <header className="flex items-center justify-between px-8 py-5 z-30">
             <div data-tauri-drag-region className="flex-1 h-full cursor-default"></div>
             <div className="flex items-center gap-4">
-                <button className="apple-button flex items-center gap-2 text-white px-4 py-1.5 rounded-lg shadow-sm hover:bg-white/10 active:bg-white/20">
+                <button className="apple-button flex items-center gap-2 text-text-primary px-4 py-1.5 rounded-lg shadow-sm hover:bg-black/5 dark:hover:bg-white/10 active:bg-black/10 dark:active:bg-white/20 transition-all">
                     <RefreshCw className="size-4" />
                     <span className="text-xs font-medium">Update</span>
                 </button>
                 <button
                     onClick={onToggle}
                     disabled={isLoading}
-                    className={`bg-white text-black hover:bg-gray-100 active:bg-gray-200 border border-transparent px-5 py-1.5 rounded-lg shadow-lg shadow-black/20 flex items-center gap-2 transition-all group ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`bg-primary text-white hover:brightness-110 active:scale-95 border border-transparent px-5 py-1.5 rounded-lg shadow-lg flex items-center gap-2 transition-all group ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                    <Power className={`size-4 ${isConnected ? 'text-accent-red' : 'text-green-600'} group-hover:scale-110 transition-transform`} />
+                    <Power className={`size-4 ${isConnected ? 'text-red-200' : 'text-emerald-200'} group-hover:scale-110 transition-transform`} />
                     <span className="font-semibold text-xs tracking-wide">
                         {isLoading ? "WAIT..." : (isConnected ? "DISCONNECT" : "CONNECT")}
                     </span>

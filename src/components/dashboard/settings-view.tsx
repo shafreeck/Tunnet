@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
+import { useTheme } from "next-themes"
 import {
     Monitor,
     Zap,
@@ -13,7 +14,10 @@ import {
     Search,
     RefreshCw,
     Power,
-    ChevronRight
+    ChevronRight,
+    Sun,
+    Moon,
+    Laptop
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -36,10 +40,10 @@ export function SettingsView({ initialCategory = "general" }: SettingsViewProps)
     ]
 
     return (
-        <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
+        <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500 text-foreground">
             {/* Top Navigation Tabs */}
-            <div className="h-14 border-b border-white/5 flex items-center px-8 bg-black/2 backdrop-blur-md shrink-0">
-                <div className="flex bg-white/5 p-1 rounded-xl border border-white/5">
+            <div className="h-14 border-b border-black/[0.02] dark:border-white/[0.02] flex items-center px-8 bg-transparent shrink-0">
+                <div className="flex bg-card-bg p-1 rounded-xl border border-border-color">
                     {categories.map((cat) => (
                         <button
                             key={cat.id}
@@ -48,7 +52,7 @@ export function SettingsView({ initialCategory = "general" }: SettingsViewProps)
                                 "flex items-center gap-2 px-6 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 relative",
                                 activeCategory === cat.id
                                     ? "bg-primary text-white shadow-lg shadow-primary/20"
-                                    : "text-gray-400 hover:text-white hover:bg-white/5"
+                                    : "text-secondary hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"
                             )}
                         >
                             {cat.icon}
@@ -59,14 +63,14 @@ export function SettingsView({ initialCategory = "general" }: SettingsViewProps)
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto sidebar-scroll px-8 py-10 bg-black/5">
+            <div className="flex-1 overflow-y-auto sidebar-scroll px-8 py-10">
                 <div className="max-w-3xl mx-auto pb-20">
                     <div className="mb-10 animate-in fade-in slide-in-from-left-4 duration-500">
-                        <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-3">
+                        <h2 className="text-2xl font-bold text-foreground mb-2 flex items-center gap-3">
                             {categories.find(c => c.id === activeCategory)?.icon}
                             {categories.find(c => c.id === activeCategory)?.label}设置
                         </h2>
-                        <p className="text-sm text-gray-500 tracking-wide">
+                        <p className="text-sm text-secondary tracking-wide">
                             配置您的代理服务器、网络行为以及系统集成选项。
                         </p>
                     </div>
@@ -89,7 +93,7 @@ function Section({ title, children, icon }: { title: string, children: React.Rea
         <div className="space-y-4 mb-10 last:mb-0">
             <div className="flex items-center gap-2 px-1">
                 {icon && <span className="text-primary">{icon}</span>}
-                <h3 className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.2em]">{title}</h3>
+                <h3 className="text-[11px] font-bold text-secondary uppercase tracking-[0.2em]">{title}</h3>
             </div>
             <div className="space-y-3">
                 {children}
@@ -110,16 +114,16 @@ function SettingItem({
     icon?: React.ReactNode
 }) {
     return (
-        <div className="glass-card flex items-center justify-between p-5 rounded-3xl hover:bg-white/8 transition-all duration-500 ring-1 ring-white/5 hover:ring-white/10 group">
+        <div className="glass-card flex items-center justify-between p-5 rounded-3xl transition-all duration-500 ring-1 ring-border-color group">
             <div className="flex items-center gap-5">
                 {icon && (
-                    <div className="size-12 rounded-2xl bg-white/5 flex items-center justify-center text-gray-400 group-hover:text-primary transition-all duration-300 group-hover:bg-primary/10 group-hover:scale-110">
+                    <div className="size-12 rounded-2xl bg-black/5 dark:bg-white/5 flex items-center justify-center text-secondary group-hover:text-primary transition-all duration-300 group-hover:bg-primary/10 group-hover:scale-110">
                         {icon}
                     </div>
                 )}
                 <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-semibold text-white group-hover:text-primary/90 transition-colors">{title}</span>
-                    {description && <span className="text-xs text-gray-500 max-w-[450px] leading-relaxed">{description}</span>}
+                    <span className="text-sm font-semibold text-foreground group-hover:text-primary/90 transition-colors">{title}</span>
+                    {description && <span className="text-xs text-secondary max-w-[450px] leading-relaxed">{description}</span>}
                 </div>
             </div>
             <div className="flex items-center">
@@ -135,7 +139,7 @@ function CustomSwitch({ checked, onChange }: { checked: boolean, onChange: (v: b
             onClick={() => onChange(!checked)}
             className={cn(
                 "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none focus:ring-0",
-                checked ? "bg-primary" : "bg-white/10"
+                checked ? "bg-primary" : "bg-black/10 dark:bg-white/10"
             )}
         >
             <span
@@ -150,12 +154,37 @@ function CustomSwitch({ checked, onChange }: { checked: boolean, onChange: (v: b
 }
 
 function GeneralSettings() {
+    const { theme, setTheme } = useTheme()
     const [launchAtLogin, setLaunchAtLogin] = useState(false)
     const [startMinimized, setStartMinimized] = useState(true)
     const [autoUpdate, setAutoUpdate] = useState(true)
 
     return (
         <div className="py-2">
+            <Section title="外观" icon={<Monitor size={14} />}>
+                <div className="glass-card p-1.5 rounded-2xl flex border border-border-color">
+                    {[
+                        { id: "light", label: "亮色", icon: <Sun size={16} /> },
+                        { id: "dark", label: "暗色", icon: <Moon size={16} /> },
+                        { id: "system", label: "跟随系统", icon: <Laptop size={16} /> }
+                    ].map((mode) => (
+                        <button
+                            key={mode.id}
+                            onClick={() => setTheme(mode.id)}
+                            className={cn(
+                                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all",
+                                theme === mode.id
+                                    ? "bg-white dark:bg-white/10 text-black dark:text-white shadow-sm"
+                                    : "text-secondary hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"
+                            )}
+                        >
+                            {mode.icon}
+                            {mode.label}
+                        </button>
+                    ))}
+                </div>
+            </Section>
+
             <Section title="启动行为" icon={<Power size={14} />}>
                 <SettingItem
                     title="开机自启动"
@@ -222,7 +251,7 @@ function ConnectionSettings() {
                     <input
                         type="number"
                         defaultValue={2080}
-                        className="w-24 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:border-primary/50 transition-all font-mono"
+                        className="w-24 bg-card-bg border border-border-color rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:border-primary/50 transition-all font-mono text-foreground"
                     />
                 </SettingItem>
             </Section>
@@ -233,7 +262,7 @@ function ConnectionSettings() {
                     description="确定虚拟网络接口的处理方式。gVisor 提供最佳的安全性和兼容性。"
                     icon={<Shield size={20} />}
                 >
-                    <select className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-primary/50 transition-all cursor-pointer">
+                    <select className="bg-card-bg border border-border-color rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-primary/50 transition-all cursor-pointer text-foreground">
                         <option value="gvisor">gVisor (推荐)</option>
                         <option value="system">System</option>
                         <option value="mixed">Mixed</option>
@@ -267,7 +296,7 @@ function DnsSettings() {
                     description="选择优先使用 IPv4 还是 IPv6 进行域名解析。"
                     icon={<Globe size={20} />}
                 >
-                    <select className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-primary/50 transition-all cursor-pointer">
+                    <select className="bg-card-bg border border-border-color rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-primary/50 transition-all cursor-pointer text-foreground">
                         <option value="ipv4">Prefer IPv4</option>
                         <option value="ipv6">Prefer IPv6</option>
                         <option value="only4">Only IPv4</option>
@@ -276,13 +305,13 @@ function DnsSettings() {
             </Section>
 
             <Section title="上游服务器配置">
-                <div className="glass-card p-6 rounded-3xl border border-white/5">
+                <div className="glass-card p-6 rounded-3xl border border-border-color">
                     <div className="flex items-center justify-between mb-4">
-                        <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">DNS 服务器列表</span>
+                        <span className="text-xs font-bold text-secondary uppercase tracking-wider">DNS 服务器列表</span>
                         <span className="text-[10px] text-primary bg-primary/10 px-2 py-0.5 rounded-full font-bold">每行一个地址</span>
                     </div>
                     <textarea
-                        className="w-full h-40 bg-white/5 border border-white/5 rounded-2xl p-4 text-xs font-mono text-gray-300 focus:outline-none focus:border-primary/30 transition-all resize-none shadow-inner"
+                        className="w-full h-40 bg-card-bg border border-border-color rounded-2xl p-4 text-xs font-mono text-foreground focus:outline-none focus:border-primary/30 transition-all resize-none shadow-inner"
                         defaultValue={"8.8.8.8\n114.114.114.114\nhttps://dns.google/dns-query"}
                     />
                 </div>
@@ -300,7 +329,7 @@ function AdvancedSettings() {
                     description="确定核心引擎输出的信息详细程度，仅在出现连接问题时建议调高。"
                     icon={<Bug size={20} />}
                 >
-                    <select className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-primary/50 transition-all cursor-pointer">
+                    <select className="bg-card-bg border border-border-color rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-primary/50 transition-all cursor-pointer text-foreground">
                         <option value="info">Info (默认)</option>
                         <option value="debug">Debug</option>
                         <option value="trace">Trace</option>
@@ -317,8 +346,8 @@ function AdvancedSettings() {
                     icon={<Database size={20} />}
                 >
                     <div className="flex items-center gap-3">
-                        <code className="text-[10px] bg-white/5 px-3 py-1.5 rounded-lg border border-white/5 text-gray-400 font-mono italic">~/Library/Application.../cache.db</code>
-                        <button className="p-2.5 rounded-2xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all hover:scale-110 active:scale-90">
+                        <code className="text-[10px] bg-black/5 dark:bg-white/5 px-3 py-1.5 rounded-lg border border-border-color text-secondary font-mono italic">~/Library/Application.../cache.db</code>
+                        <button className="p-2.5 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-secondary hover:text-primary transition-all hover:scale-110 active:scale-90">
                             <Search size={16} />
                         </button>
                     </div>
@@ -330,8 +359,8 @@ function AdvancedSettings() {
                     <div className="absolute top-0 right-0 w-32 h-32 bg-destructive/5 blur-3xl rounded-full -mr-16 -mt-16 group-hover:bg-destructive/10 transition-all"></div>
                     <div className="flex items-center justify-between relative z-10">
                         <div className="flex flex-col gap-1">
-                            <span className="text-sm font-bold text-white uppercase tracking-wide">恢复出厂设置</span>
-                            <span className="text-xs text-gray-500 max-w-[400px]">将应用恢复到初始状态，删除所有自定义规则、订阅和节点。此操作不可撤销。</span>
+                            <span className="text-sm font-bold text-foreground uppercase tracking-wide">恢复出厂设置</span>
+                            <span className="text-xs text-secondary max-w-[400px]">将应用恢复到初始状态，删除所有自定义规则、订阅和节点。此操作不可撤销。</span>
                         </div>
                         <button className="px-6 py-2.5 rounded-2xl bg-destructive/10 hover:bg-destructive/100 hover:text-white text-destructive text-xs font-bold transition-all border border-destructive/20 active:scale-95 shadow-xl">
                             立即重置
@@ -356,29 +385,29 @@ function AboutSection() {
             </div>
 
             <div className="flex flex-col items-center gap-2 text-center relative z-10">
-                <h2 className="text-4xl font-extrabold tracking-tighter text-white">Tunnet</h2>
+                <h2 className="text-4xl font-extrabold tracking-tighter text-foreground">Tunnet</h2>
                 <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">Alpha Access</span>
-                    <span className="text-[10px] text-gray-500 font-mono uppercase tracking-widest">v0.1.0 (2025.12.28)</span>
+                    <span className="text-[10px] text-secondary font-mono uppercase tracking-widest">v0.1.0 (2025.12.28)</span>
                 </div>
             </div>
 
             <div className="grid grid-cols-2 gap-5 w-full max-w-md mt-4 relative z-10">
-                <a href="#" className="glass-card p-5 rounded-3xl flex flex-col items-center gap-3 hover:bg-white/10 group active:scale-95">
-                    <div className="size-10 rounded-2xl bg-white/5 flex items-center justify-center group-hover:scale-110 group-hover:bg-primary/20 transition-all duration-300">
-                        <Globe size={20} className="text-gray-400 group-hover:text-primary" />
+                <a href="#" className="glass-card p-5 rounded-3xl flex flex-col items-center gap-3 hover:bg-black/5 dark:hover:bg-white/10 group active:scale-95">
+                    <div className="size-10 rounded-2xl bg-card-bg flex items-center justify-center group-hover:scale-110 group-hover:bg-primary/20 transition-all duration-300">
+                        <Globe size={20} className="text-secondary group-hover:text-primary" />
                     </div>
-                    <span className="text-[11px] font-bold text-gray-400 group-hover:text-white uppercase tracking-widest transition-colors">项目官网</span>
+                    <span className="text-[11px] font-bold text-secondary group-hover:text-primary uppercase tracking-widest transition-colors">项目官网</span>
                 </a>
-                <a href="#" className="glass-card p-5 rounded-3xl flex flex-col items-center gap-3 hover:bg-white/10 group active:scale-95">
-                    <div className="size-10 rounded-2xl bg-white/5 flex items-center justify-center group-hover:scale-110 group-hover:bg-primary/20 transition-all duration-300">
-                        <Shield size={20} className="text-gray-400 group-hover:text-primary" />
+                <a href="#" className="glass-card p-5 rounded-3xl flex flex-col items-center gap-3 hover:bg-black/5 dark:hover:bg-white/10 group active:scale-95">
+                    <div className="size-10 rounded-2xl bg-card-bg flex items-center justify-center group-hover:scale-110 group-hover:bg-primary/20 transition-all duration-300">
+                        <Shield size={20} className="text-secondary group-hover:text-primary" />
                     </div>
-                    <span className="text-[11px] font-bold text-gray-400 group-hover:text-white uppercase tracking-widest transition-colors">隐私保护</span>
+                    <span className="text-[11px] font-bold text-secondary group-hover:text-primary uppercase tracking-widest transition-colors">隐私保护</span>
                 </a>
             </div>
 
-            <p className="text-[10px] text-gray-600 font-medium mt-10 text-center tracking-widest">
+            <p className="text-[10px] text-tertiary font-medium mt-10 text-center tracking-widest">
                 TUNNET PROJECT &copy; 2025. CRAFTED FOR PRIVACY & FREEDOM.
             </p>
         </div>

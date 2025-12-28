@@ -15,66 +15,78 @@
   --color-accent-red: #FF3B30;
   --color-accent-orange: #FF9500;
 
-  --color-sidebar-dark: #18181b;
-  --color-surface-dark: #2c2c2e;
-  --color-border-dark: #38383a;
+  /* Semantic Colors - Mapped to Variables */
+  --color-app-bg: var(--app-bg);
+  --color-sidebar-bg: var(--sidebar-bg);
+  --color-surface: var(--surface);
+  --color-card-bg: var(--card-bg);
+  --color-border-color: var(--border-color);
 
-  --color-text-primary: #FFFFFF;
-  --color-text-secondary: #86868b;
-  --color-text-tertiary: #636366;
-
-  --color-border: var(--border);
-  --color-ring: var(--ring);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
 
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
   --radius-2xl: 1.5rem;
   --radius-3xl: 2rem;
 
-  --shadow-floating: 0 20px 40px -10px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-floating: 0 20px 40px -10px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-color);
 }
 
 :root {
   --font-display: -apple-system, BlinkMacSystemFont, "San Francisco", "Helvetica Neue", sans-serif;
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --font-geist-mono: "Geist Mono", monospace;
+
+  /* Light Mode (Apple Style) */
+  --app-bg: #f5f5f7;
+  --app-bg-gradient: radial-gradient(circle at 50% -20%, #ffffff 0%, #f2f2f7 80%);
+
+  --sidebar-bg: rgba(245, 245, 247, 0.75);
+  --sidebar-border: rgba(0, 0, 0, 0.05);
+
+  --surface: #ffffff;
+  --card-bg: rgba(255, 255, 255, 0.6);
+  --card-hover: rgba(255, 255, 255, 0.85);
+  --card-border: rgba(0, 0, 0, 0.06);
+
+  --text-primary: #1d1d1f;
+  --text-secondary: #86868b;
+  --text-tertiary: #6e6e73;
+
+  --border-color: rgba(0, 0, 0, 0.08);
+
+  /* Helper Utils */
+  --glass-panel-bg: rgba(255, 255, 255, 0.6);
+  --glass-panel-border: rgba(0, 0, 0, 0.05);
+
+  --glass-gloss: rgba(255, 255, 255, 0.4);
 }
 
 .dark {
-  --background: #000000;
-  --foreground: #ffffff;
-  --radius: 0.75rem;
-  --border: rgba(255, 255, 255, 0.08);
+  /* Dark Mode (Original Tunnet) */
+  --app-bg: #000000;
+  --app-bg-gradient: radial-gradient(circle at 50% -10%, #1c1c2e 0%, #000000 90%);
+
+  --sidebar-bg: rgba(40, 40, 45, 0.45);
+  --sidebar-border: rgba(255, 255, 255, 0.12);
+
+  --surface: #1c1c1e;
+  --card-bg: rgba(255, 255, 255, 0.05);
+  --card-hover: rgba(255, 255, 255, 0.1);
+  --card-border: rgba(255, 255, 255, 0.05);
+
+  --text-primary: #FFFFFF;
+  --text-secondary: #86868b;
+  --text-tertiary: #636366;
+
+  --border-color: rgba(255, 255, 255, 0.12);
+
+  /* Helper Utils */
+  --glass-panel-bg: rgba(30, 30, 30, 0.6);
+  --glass-panel-border: rgba(255, 255, 255, 0.08);
+
+  --glass-gloss: rgba(255, 255, 255, 0.05);
 }
 
 html,
@@ -85,59 +97,67 @@ body {
 }
 
 .app-window {
-  @apply font-sans h-screen w-screen overflow-hidden selection:bg-primary/30 selection:text-white antialiased;
-  background: #000;
-  background-image: radial-gradient(circle at 50% -10%, #1c1c2e 0%, #000000 90%);
+  @apply font-sans h-screen w-screen overflow-hidden selection:bg-primary/30 antialiased;
+  background: var(--app-bg);
+  background-image: var(--app-bg-gradient);
   border-radius: 24px;
   /* macOS 26 style */
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
-  /* Subtle border for definition */
+  box-shadow: 0 0 0 1px var(--border-color);
+  color: var(--text-primary);
+  transition: background 0.5s ease, color 0.3s ease;
 }
 
 @layer utilities {
   .glass-panel {
-    background: rgba(30, 30, 30, 0.6);
+    background: var(--glass-panel-bg);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--glass-panel-border);
   }
 
   .glass-sidebar {
-    background: rgba(40, 40, 45, 0.45);
+    background: var(--sidebar-bg);
     backdrop-filter: blur(40px) saturate(180%);
     -webkit-backdrop-filter: blur(40px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+    border-right: 1px solid var(--sidebar-border);
+    transition: background 0.3s ease, border-color 0.3s ease;
   }
 
+  /* Universal Glass Card for Lists/Items */
   .glass-card {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--card-bg);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--card-border);
     transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
   }
 
   .glass-card:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.1);
-    transform: scale(1.005);
+    background: var(--card-hover);
+    border-color: var(--border-color);
+    transform: scale(1.002);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
   }
 
   .apple-button {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--glass-gloss);
     backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
     transition: all 0.2s ease;
   }
 
   .apple-button:active {
-    background: rgba(255, 255, 255, 0.2);
+    opacity: 0.7;
     transform: scale(0.96);
   }
 
-  .glow-effect {
-    box-shadow: 0 0 50px -10px rgba(52, 199, 89, 0.25);
+  .text-primary-foreground {
+    color: var(--text-primary);
+  }
+
+  .text-secondary-foreground {
+    color: var(--text-secondary);
   }
 }
 
@@ -151,22 +171,18 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--border-color);
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.3);
+  background-color: var(--text-tertiary);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
-  }
-
-  body {
-    @apply bg-background text-foreground;
+    border-color: var(--border-color);
   }
 }

@@ -32,19 +32,19 @@ export function ServerCard({
     return (
         <div
             onClick={onClick}
-            className="group relative bg-[#18181b]/60 hover:bg-[#27272a]/60 border border-white/5 hover:border-white/10 rounded-2xl p-5 transition-all duration-300 cursor-pointer overflow-hidden backdrop-blur-sm"
+            className="group relative bg-card-bg hover:border-primary/20 border border-border-color rounded-2xl p-5 transition-all duration-300 cursor-pointer overflow-hidden backdrop-blur-sm shadow-sm hover:shadow-md"
         >
             {/* Header: Flag & Ping */}
             <div className="flex justify-between items-start mb-3">
-                <div className="relative size-10 rounded-full overflow-hidden shadow-lg border border-white/10 bg-black/20 flex items-center justify-center">
+                <div className="relative size-10 rounded-full overflow-hidden shadow-sm border border-border-color bg-black/5 dark:bg-black/20 flex items-center justify-center">
                     {flagUrl ? (
                         <img src={flagUrl} alt={countryName} className="w-full h-full object-cover" />
                     ) : (
-                        <Globe className="text-gray-500 size-5" />
+                        <Globe className="text-text-tertiary size-5" />
                     )}
                 </div>
                 {ping !== undefined && ping > 0 && (
-                    <div className="flex items-center gap-1.5 bg-black/40 px-2 py-1 rounded-full border border-white/5">
+                    <div className="flex items-center gap-1.5 bg-black/5 dark:bg-black/40 px-2 py-1 rounded-full border border-border-color">
                         <div className={cn("size-1.5 rounded-full", ping < 100 ? "bg-emerald-500" : ping < 200 ? "bg-yellow-500" : "bg-red-500")} />
                         <span className={cn("text-[10px] font-bold font-mono", getPingColor(ping))}>
                             {ping}ms
@@ -55,21 +55,21 @@ export function ServerCard({
 
             {/* Content */}
             <div className="space-y-1">
-                <h3 className="text-white font-bold text-lg tracking-tight group-hover:text-accent-green transition-colors">
+                <h3 className="text-text-primary font-bold text-lg tracking-tight group-hover:text-primary transition-colors">
                     {countryName}
                 </h3>
-                <p className="text-xs text-gray-500 font-medium">
+                <p className="text-xs text-text-secondary font-medium">
                     {locationCount} Locations • {providerName}
                 </p>
             </div>
 
             {/* Footer / Usage (Mock) */}
             <div className="mt-6 flex items-center justify-between">
-                <span className="text-[10px] text-gray-600 font-medium">
+                <span className="text-[10px] text-text-tertiary font-medium">
                     Usage: {usagePercent > 0 ? `${usagePercent}%` : "Low"}
                 </span>
 
-                <div className="text-gray-600 group-hover:text-white transition-transform duration-300 group-hover:translate-x-1">
+                <div className="text-text-tertiary group-hover:text-text-primary transition-transform duration-300 group-hover:translate-x-1">
                     <ChevronRight size={16} />
                 </div>
             </div>

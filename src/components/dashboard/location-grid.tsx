@@ -90,7 +90,7 @@ export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCou
 
     if (filteredCountries.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+            <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
                 <p>No locations found matching your criteria.</p>
             </div>
         )
@@ -102,7 +102,7 @@ export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCou
                 <div key={group.name} className="space-y-4 animate-in slide-in-from-bottom-2 duration-500">
                     <div className="flex items-center gap-2">
                         <div className="size-2 rounded-full bg-accent-blue" />
-                        <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                        <h2 className="text-xs font-bold text-text-tertiary uppercase tracking-widest">
                             {group.name}
                         </h2>
                     </div>

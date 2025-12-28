@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react"
 import { createPortal } from "react-dom"
 import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps"
+import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
 // @ts-ignore
 import { X, RefreshCw } from "lucide-react"
@@ -47,6 +48,15 @@ export function LocationsMap({
         })
         return groups
     }, [servers])
+
+    const { resolvedTheme } = useTheme()
+    const isDark = resolvedTheme === 'dark'
+
+    // Theme Colors
+    const mapFill = isDark ? "#18181b" : "#ffffff"
+    const mapStroke = isDark ? "#27272a" : "#d4d4d8"
+    const nodeDisconnected = isDark ? "#52525b" : "#a1a1aa"
+    const nodeStroke = isDark ? "#27272a" : "#ffffff"
 
     // Filter servers for markers if a country is selected (optional, or show all markers always?)
     // Current logic: Show markers matching selection if selected, else show all?
@@ -102,21 +112,21 @@ export function LocationsMap({
                                         }}
                                         style={{
                                             default: {
-                                                fill: hasServers ? (isSelected ? "#22c55e" : "#22c55e20") : "#18181b",
-                                                stroke: hasServers ? "#22c55e40" : "#27272a",
+                                                fill: hasServers ? (isSelected ? "#22c55e" : "#22c55e20") : mapFill,
+                                                stroke: hasServers ? "#22c55e40" : mapStroke,
                                                 strokeWidth: 0.5,
                                                 outline: "none",
                                                 cursor: hasServers ? "pointer" : "default"
                                             },
                                             hover: {
-                                                fill: hasServers ? "#22c55e" : "#27272a",
-                                                stroke: "#27272a",
+                                                fill: hasServers ? "#22c55e" : mapStroke, // Slightly lighter on hover for empty? Or mapped?
+                                                stroke: mapStroke,
                                                 strokeWidth: 0.5,
                                                 outline: "none",
                                                 cursor: hasServers ? "pointer" : "default"
                                             },
                                             pressed: {
-                                                fill: hasServers ? "#16a34a" : "#18181b",
+                                                fill: hasServers ? "#16a34a" : mapFill,
                                                 outline: "none"
                                             }
                                         }}
@@ -161,8 +171,8 @@ export function LocationsMap({
                                         {/* Core marker */}
                                         <circle
                                             r={isVerified ? 6 : 4}
-                                            fill={isVerified ? "#22c55e" : "#52525b"}
-                                            stroke={isVerified ? "#000" : "#27272a"}
+                                            fill={isVerified ? "#22c55e" : nodeDisconnected}
+                                            stroke={isVerified ? "#000" : nodeStroke}
                                             strokeWidth={1}
                                             style={{ opacity: isVerified ? 1 : 0.8 }}
                                         />

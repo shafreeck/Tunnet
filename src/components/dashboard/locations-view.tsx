@@ -73,27 +73,27 @@ export function LocationsView({
     return (
         <div className={cn(
             "flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500",
-            viewMode === "map" && "bg-[#050505]"
+            viewMode === "map" && "bg-transparent"
         )}>
             {/* Unified Header Style */}
-            <div className="border-b border-white/5 bg-black/5 backdrop-blur-md p-8 pb-6 shrink-0 relative z-30">
+            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent px-8 pt-6 pb-2 shrink-0 relative z-30">
                 <div className="max-w-5xl mx-auto w-full">
-                    <div className="flex items-start justify-between mb-8">
+                    <div className="flex items-start justify-between mb-4">
                         <div>
-                            <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">节点地区</h2>
-                            <p className="text-sm text-gray-500 font-medium">
+                            <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">节点地区</h2>
+                            <p className="text-sm text-text-secondary font-medium">
                                 在 {totalCountries} 个国家/地区拥有 {servers.length} 个可用节点
                             </p>
                         </div>
 
                         <div className="flex items-center gap-4">
                             {/* View Mode Switcher */}
-                            <div className="flex bg-white/5 p-1 rounded-xl border border-white/5">
+                            <div className="flex bg-card-bg p-1 rounded-xl border border-border-color">
                                 <button
                                     onClick={() => setViewMode("map")}
                                     className={cn(
                                         "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all",
-                                        viewMode === "map" ? "bg-white/10 text-white shadow-sm" : "text-gray-500 hover:text-gray-300"
+                                        viewMode === "map" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:text-text-primary"
                                     )}
                                 >
                                     <MapIcon size={14} />
@@ -103,7 +103,7 @@ export function LocationsView({
                                     onClick={() => setViewMode("grid")}
                                     className={cn(
                                         "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all",
-                                        viewMode === "grid" ? "bg-white/10 text-white shadow-sm" : "text-gray-500 hover:text-gray-300"
+                                        viewMode === "grid" ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:text-text-primary"
                                     )}
                                 >
                                     <LayoutGrid size={14} />
@@ -115,7 +115,7 @@ export function LocationsView({
                                 onClick={handleRefreshLocations}
                                 disabled={isRefreshing}
                                 className={cn(
-                                    "p-2.5 bg-white/5 border border-white/5 rounded-xl text-gray-400 hover:text-white hover:bg-white/10 transition-all active:scale-95 shadow-lg",
+                                    "p-2.5 bg-card-bg border border-border-color rounded-xl text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-95 shadow-lg",
                                     isRefreshing && "animate-spin text-primary"
                                 )}
                             >
@@ -127,15 +127,15 @@ export function LocationsView({
                     {viewMode === "grid" && (
                         <div className="flex items-center gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
                             <div className="relative flex-1 group">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-white transition-colors" size={16} />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-text-primary transition-colors" size={16} />
                                 <input
                                     placeholder="搜索地区或节点..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full bg-white/5 border border-white/5 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-white/20 transition-all font-medium placeholder:text-gray-600"
+                                    className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/20 rounded-xl py-2.5 pl-10 pr-4 text-sm text-text-primary focus:outline-none transition-all font-medium placeholder:text-text-tertiary"
                                 />
                             </div>
-                            <div className="flex bg-white/5 p-1 rounded-xl border border-white/5 overflow-hidden">
+                            <div className="flex bg-card-bg p-1 rounded-xl border border-border-color overflow-hidden">
                                 {["All Regions", "Asia Pacific", "Europe", "Americas", "Favorites"].map((region) => (
                                     <button
                                         key={region}
@@ -143,8 +143,8 @@ export function LocationsView({
                                         className={cn(
                                             "px-4 py-1.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap uppercase tracking-tighter",
                                             selectedRegion === region
-                                                ? "bg-white/10 text-white shadow-sm"
-                                                : "text-gray-500 hover:text-gray-300"
+                                                ? "bg-primary text-white shadow-sm"
+                                                : "text-text-secondary hover:text-text-primary"
                                         )}
                                     >
                                         {region}
@@ -157,7 +157,7 @@ export function LocationsView({
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 relative overflow-hidden bg-black/5">
+            <div className="flex-1 relative overflow-hidden bg-transparent">
                 {viewMode === "grid" ? (
                     <div className="h-full overflow-y-auto px-8 py-8 sidebar-scroll">
                         <div className="max-w-5xl mx-auto w-full">
@@ -186,40 +186,40 @@ export function LocationsView({
 
                 {/* Shared Server List Sidebar/Drawer - Re-styled */}
                 <div className={cn(
-                    "absolute top-6 bottom-6 right-6 w-[400px] glass-card border-white/10 rounded-[2.5rem] shadow-[0_0_50px_rgba(0,0,0,0.3)] flex flex-col overflow-hidden transition-all duration-500 transform z-40",
+                    "absolute top-6 bottom-6 right-6 w-[400px] glass-card border border-border-color rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden transition-all duration-500 transform z-40",
                     (showListValues || (viewMode === 'map' && selectedCountry)) ? "translate-x-0 opacity-100" : "translate-x-[120%] opacity-0"
                 )}>
-                    <div className="p-8 border-b border-white/5 bg-white/5 flex items-center justify-between">
+                    <div className="p-8 border-b border-border-color bg-card-bg flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="size-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary">
                                 <GlobeIcon size={20} />
                             </div>
                             <div className="flex flex-col">
-                                <span className="text-sm font-black text-white uppercase tracking-tight">
+                                <span className="text-sm font-black text-text-primary uppercase tracking-tight">
                                     {selectedCountry || "地区节点"}
                                 </span>
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest">
                                     {filteredServersForList.length} 个节点就绪
                                 </span>
                             </div>
                         </div>
                         <button
                             onClick={() => { setShowListValues(false); setSelectedCountry(null); }}
-                            className="size-10 flex items-center justify-center hover:bg-white/10 rounded-full text-gray-400 hover:text-white transition-all active:scale-90"
+                            className="size-10 flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 rounded-full text-text-secondary hover:text-text-primary transition-all active:scale-90"
                         >
                             <LayoutGrid size={20} className="rotate-45" />
                         </button>
                     </div>
 
                     {/* Search inside Drawer */}
-                    <div className="px-6 py-4 border-b border-white/5 bg-white/2">
+                    <div className="px-6 py-4 border-b border-border-color bg-sidebar-bg">
                         <div className="relative group">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-white transition-colors" size={14} />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-text-primary transition-colors" size={14} />
                             <input
                                 placeholder="搜索当前区域节点..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full bg-white/5 border border-white/5 rounded-xl py-2 pl-9 pr-4 text-xs text-white focus:outline-none focus:border-white/20 transition-all placeholder:text-gray-600"
+                                className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/20 rounded-xl py-2 pl-9 pr-4 text-xs text-text-primary focus:outline-none transition-all placeholder:text-text-tertiary"
                             />
                         </div>
                     </div>
