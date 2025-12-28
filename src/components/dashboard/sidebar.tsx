@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { Search, Rocket, Globe, Settings, Sliders, Info, Server } from "lucide-react"
+import { Search, Rocket, Globe, Settings, Sliders, Info, Server, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export type ViewType = "dashboard" | "locations" | "rules" | "settings" | "proxies"
@@ -86,42 +86,39 @@ export function Sidebar({ currentView, onViewChange, subscription }: SidebarProp
                 <div
                     onClick={() => onViewChange("proxies")}
                     className={cn(
-                        "p-3 rounded-xl bg-card-bg border border-border-color space-y-3 transition-all duration-200 cursor-pointer group",
-                        "hover:border-primary/20 hover:shadow-lg active:scale-95"
+                        "rounded-lg px-3 py-2 transition-all duration-200 cursor-pointer group select-none",
+                        "hover:bg-black/5 dark:hover:bg-white/10 active:scale-95"
                     )}
                 >
-                    <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-secondary group-hover:text-primary transition-colors">Subscription Status</span>
-                        {total > 0 && (
-                            <span className="text-[10px] text-accent-green bg-accent-green/10 px-1.5 py-0.5 rounded">Active</span>
-                        )}
-                    </div>
-
                     {total > 0 ? (
-                        <>
-                            <div className="space-y-1">
-                                <div className="flex justify-between text-[11px] text-tertiary">
-                                    <span>Used: {formatBytes(used)}</span>
-                                    <span>Total: {formatBytes(total)}</span>
-                                </div>
-                                <div className="h-1.5 w-full bg-black/5 dark:bg-white/10 rounded-full overflow-hidden">
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-secondary group-hover:text-primary transition-colors">Subscription</span>
+                                <span className="text-[10px] font-medium text-accent-green bg-accent-green/10 px-1.5 py-0.5 rounded">Active</span>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <div className="h-1 w-full bg-black/5 dark:bg-white/10 rounded-full overflow-hidden">
                                     <div
-                                        className="h-full bg-gradient-to-r from-accent-green to-emerald-400 transition-all duration-500"
+                                        className="h-full bg-primary transition-all duration-500"
                                         style={{ width: `${percent}%` }}
                                     />
                                 </div>
-                            </div>
-                            {subscription?.expire && (
-                                <div className="text-[10px] text-tertiary text-right">
-                                    Exp: {new Date(subscription.expire * 1000).toLocaleDateString()}
+                                <div className="flex justify-between text-[10px] text-tertiary font-medium">
+                                    <span>{formatBytes(used)}</span>
+                                    <span>{formatBytes(total)}</span>
                                 </div>
-                            )}
-                        </>
+                            </div>
+                        </div>
                     ) : (
-                        <div className="text-xs text-tertiary group-hover:text-secondary transition-colors">
-                            Tunnet v0.1.0-alpha
-                            <br />
-                            <span className="text-[10px] opacity-70">No active subscription data</span>
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-center size-8 rounded-full bg-black/5 dark:bg-white/5 text-tertiary group-hover:bg-primary/10 group-hover:text-primary transition-all">
+                                <Zap size={16} />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-xs font-medium text-secondary group-hover:text-primary transition-colors">Subscription</span>
+                                <span className="text-[10px] text-tertiary">No active plan</span>
+                            </div>
                         </div>
                     )}
                 </div>
