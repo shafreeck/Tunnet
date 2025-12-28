@@ -209,8 +209,8 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
             className={cn(
                 "group flex items-center p-3 rounded-xl cursor-pointer relative overflow-hidden transition-all duration-200 border border-transparent",
                 isSelected
-                    ? "bg-primary/10 dark:bg-primary/20 border-primary/20" // Selected: Tinted with accent color
-                    : "hover:bg-black/5 dark:hover:bg-white/5", // Hover: Subtle interaction
+                    ? "bg-primary/10 dark:bg-primary/20 border-primary/20" // Selected: Tinted
+                    : "bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10", // Idle: Visible Card, Hover: Brighter
                 // If running, we might want a different border or glow?
                 // For now, relies on the `isRunning` indicator within the card.
                 isRunning && "border-primary/30"
