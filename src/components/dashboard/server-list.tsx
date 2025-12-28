@@ -48,6 +48,7 @@ interface ServerListProps {
     logs: string[]
     onClearLogs: () => void
     onPing?: (id: string) => void
+    hideHeader?: boolean
 }
 
 export function ServerList({
@@ -63,7 +64,8 @@ export function ServerList({
     setShowLogs,
     logs,
     onClearLogs,
-    onPing
+    onPing,
+    hideHeader = false
 }: ServerListProps) {
     const [loading, setLoading] = useState(false)
     const [logFilter, setLogFilter] = useState("")
@@ -77,79 +79,81 @@ export function ServerList({
 
     return (
         <div className="flex-1 flex flex-col min-h-0">
-            <div className="flex items-center justify-between mb-4 mt-2 px-1 shrink-0 sticky top-0 bg-sidebar-bg backdrop-blur-xl z-20 py-2 -mx-1 rounded-t-xl border-b border-border-color">
-                <div className="flex items-center gap-6">
-                    <button
-                        onClick={() => setShowLogs(false)}
-                        className={cn(
-                            "text-[10px] font-bold uppercase tracking-widest pl-1 transition-colors",
-                            !showLogs ? "text-text-primary" : "text-text-tertiary hover:text-text-primary"
-                        )}
-                    >
-                        Server List {loading && "(Loading...)"}
-                    </button>
-                    <button
-                        onClick={() => setShowLogs(true)}
-                        className={cn(
-                            "flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors",
-                            showLogs ? "text-text-primary" : "text-text-tertiary hover:text-text-primary"
-                        )}
-                    >
-                        Logs
-                        <div className={cn("size-1.5 rounded-full transition-colors", showLogs ? "bg-accent-green" : "bg-text-tertiary/20")} />
-                    </button>
-                </div>
-
-                {!showLogs ? (
-                    <div className="flex gap-2">
+            {!hideHeader && (
+                <div className="flex items-center justify-between mb-4 mt-2 px-1 shrink-0 sticky top-0 bg-sidebar-bg backdrop-blur-xl z-20 py-2 -mx-1 rounded-t-xl border-b border-border-color">
+                    <div className="flex items-center gap-6">
                         <button
-                            onClick={() => onEdit(null)} // Trigger Add New
+                            onClick={() => setShowLogs(false)}
                             className={cn(
-                                "p-1.5 transition-colors rounded hover:bg-black/5 dark:hover:bg-white/5",
-                                "text-text-secondary hover:text-text-primary"
+                                "text-[10px] font-bold uppercase tracking-widest pl-1 transition-colors",
+                                !showLogs ? "text-text-primary" : "text-text-tertiary hover:text-text-primary"
                             )}
-                            title="Add New Node"
                         >
-                            <Plus size={16} />
+                            Server List {loading && "(Loading...)"}
                         </button>
-                        {/* Filter button placeholder */}
-                        <button className="p-1.5 text-text-secondary hover:text-text-primary transition-colors rounded hover:bg-black/5 dark:hover:bg-white/5">
-                            <Filter size={16} />
-                        </button>
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-300">
-                        <div className="relative group">
-                            <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 size-3 text-text-tertiary" />
-                            <input
-                                type="text"
-                                placeholder="Filter..."
-                                value={logFilter}
-                                onChange={e => setLogFilter(e.target.value)}
-                                className="bg-black/5 dark:bg-black/20 border border-border-color rounded pl-6 pr-2 py-0.5 text-[10px] text-text-primary focus:border-primary/50 w-24 focus:w-32 transition-all outline-none"
-                            />
-                        </div>
-
-                        <div className="h-3 w-px bg-border-color mx-1"></div>
-
                         <button
-                            onClick={() => setAutoScroll(!autoScroll)}
-                            className={cn("p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors", autoScroll ? "text-accent-green" : "text-text-secondary")}
-                            title={autoScroll ? "Auto-scroll ON" : "Auto-scroll OFF"}
+                            onClick={() => setShowLogs(true)}
+                            className={cn(
+                                "flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors",
+                                showLogs ? "text-text-primary" : "text-text-tertiary hover:text-text-primary"
+                            )}
                         >
-                            {autoScroll ? <Scroll size={14} /> : <Pause size={14} />}
-                        </button>
-
-                        <button onClick={handleCopyLogs} className="p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary hover:text-text-primary transition-colors" title="Copy Logs">
-                            <Copy size={14} />
-                        </button>
-
-                        <button onClick={onClearLogs} className="p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary hover:text-red-500 transition-colors" title="Clear Logs">
-                            <Trash2 size={14} />
+                            Logs
+                            <div className={cn("size-1.5 rounded-full transition-colors", showLogs ? "bg-accent-green" : "bg-text-tertiary/20")} />
                         </button>
                     </div>
-                )}
-            </div>
+
+                    {!showLogs ? (
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => onEdit(null)} // Trigger Add New
+                                className={cn(
+                                    "p-1.5 transition-colors rounded hover:bg-black/5 dark:hover:bg-white/5",
+                                    "text-text-secondary hover:text-text-primary"
+                                )}
+                                title="Add New Node"
+                            >
+                                <Plus size={16} />
+                            </button>
+                            {/* Filter button placeholder */}
+                            <button className="p-1.5 text-text-secondary hover:text-text-primary transition-colors rounded hover:bg-black/5 dark:hover:bg-white/5">
+                                <Filter size={16} />
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-300">
+                            <div className="relative group">
+                                <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 size-3 text-text-tertiary" />
+                                <input
+                                    type="text"
+                                    placeholder="Filter..."
+                                    value={logFilter}
+                                    onChange={e => setLogFilter(e.target.value)}
+                                    className="bg-black/5 dark:bg-black/20 border border-border-color rounded pl-6 pr-2 py-0.5 text-[10px] text-text-primary focus:border-primary/50 w-24 focus:w-32 transition-all outline-none"
+                                />
+                            </div>
+
+                            <div className="h-3 w-px bg-border-color mx-1"></div>
+
+                            <button
+                                onClick={() => setAutoScroll(!autoScroll)}
+                                className={cn("p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 transition-colors", autoScroll ? "text-accent-green" : "text-text-secondary")}
+                                title={autoScroll ? "Auto-scroll ON" : "Auto-scroll OFF"}
+                            >
+                                {autoScroll ? <Scroll size={14} /> : <Pause size={14} />}
+                            </button>
+
+                            <button onClick={handleCopyLogs} className="p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary hover:text-text-primary transition-colors" title="Copy Logs">
+                                <Copy size={14} />
+                            </button>
+
+                            <button onClick={onClearLogs} className="p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary hover:text-red-500 transition-colors" title="Clear Logs">
+                                <Trash2 size={14} />
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
 
             <div className="flex-1">
                 {showLogs ? (
@@ -204,10 +208,10 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
             onClick={onClick}
             className={cn(
                 "group glass-card flex items-center p-3 rounded-xl cursor-pointer relative overflow-hidden transition-all duration-200 border border-transparent",
-                isSelected ? "bg-card-bg border-border-color shadow-sm" : "hover:bg-black/5 dark:hover:bg-white/5",
+                isSelected ? "bg-black/5 dark:bg-white/10 border-border-color shadow-sm" : "hover:bg-black/5 dark:hover:bg-white/5",
                 // If running, we might want a different border or glow?
                 // For now, relies on the `isRunning` indicator within the card.
-                isRunning && "border-primary/30 bg-primary/5"
+                isRunning && "border-primary/30 bg-primary/5 dark:bg-primary/10"
             )}>
 
 
