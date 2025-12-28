@@ -22,6 +22,12 @@ const NAME_MAPPING: Record<string, string> = {
     "Taiwan": "Taiwan"
 }
 
+// Reverse mapping for click handling (Map Name -> Display Name)
+const REVERSE_NAME_MAPPING: Record<string, string> = Object.entries(NAME_MAPPING).reduce((acc, [k, v]) => {
+    acc[v] = k
+    return acc
+}, {} as Record<string, string>)
+
 interface LocationsMapProps {
     servers: any[]
     activeServerId: string | null
@@ -87,7 +93,7 @@ export function LocationsMap({
                             geographies.map((geo) => {
                                 const countryName = geo.properties.name
                                 const hasServers = activeCountries[countryName]
-                                const isSelected = selectedCountry === countryName
+                                const isSelected = selectedCountry === countryName || (selectedCountry && NAME_MAPPING[selectedCountry] === countryName)
 
                                 return (
                                     <Geography
@@ -95,7 +101,11 @@ export function LocationsMap({
                                         geography={geo}
                                         onClick={() => {
                                             if (hasServers) {
-                                                onSelectCountry(isSelected ? null : countryName) // Toggle
+                                                // Convert Map Name back to Internal Name if needed
+                                                const internalName = REVERSE_NAME_MAPPING[countryName] || countryName
+                                                // Check both directions for toggle logic
+                                                const currentlySelected = selectedCountry === internalName
+                                                onSelectCountry(currentlySelected ? null : internalName)
                                             }
                                         }}
                                         onMouseEnter={(e) => {
