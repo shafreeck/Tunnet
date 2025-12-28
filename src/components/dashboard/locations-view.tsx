@@ -186,8 +186,9 @@ export function LocationsView({
 
                 {/* Shared Server List Sidebar/Drawer - Re-styled */}
                 <div className={cn(
-                    "absolute top-6 bottom-6 right-6 w-[400px] glass-card border border-border-color rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden transition-all duration-500 transform z-40",
-                    "bg-white/95 dark:bg-black/95 backdrop-blur-xl", // Increased opacity and blur
+                    "absolute top-6 bottom-6 right-6 w-[400px] glass-card border border-border-color rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden transition-all duration-300 transform z-40",
+                    "bg-white/80 dark:bg-black/60 backdrop-blur-md", // Default: More transparent
+                    "hover:bg-white/95 hover:dark:bg-black/95 hover:backdrop-blur-xl hover:shadow-2xl", // Hover: Solid & Focused
                     (showListValues || (viewMode === 'map' && selectedCountry)) ? "translate-x-0 opacity-100" : "translate-x-[120%] opacity-0"
                 )}>
                     <div className="p-8 border-b border-border-color bg-card-bg flex items-center justify-between">
