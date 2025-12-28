@@ -64,16 +64,8 @@ export function SettingsView({ initialCategory = "general" }: SettingsViewProps)
 
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto sidebar-scroll px-8 py-10">
-                <div className="max-w-3xl mx-auto pb-20">
-                    <div className="mb-10 animate-in fade-in slide-in-from-left-4 duration-500">
-                        <h2 className="text-2xl font-bold text-foreground mb-2 flex items-center gap-3">
-                            {categories.find(c => c.id === activeCategory)?.icon}
-                            {categories.find(c => c.id === activeCategory)?.label}设置
-                        </h2>
-                        <p className="text-sm text-secondary tracking-wide">
-                            配置您的代理服务器、网络行为以及系统集成选项。
-                        </p>
-                    </div>
+                <div className="max-w-3xl mx-auto pb-10">
+
 
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
                         {activeCategory === "general" && <GeneralSettings />}
@@ -374,7 +366,7 @@ function AdvancedSettings() {
 
 function AboutSection() {
     return (
-        <div className="flex flex-col items-center justify-center py-20 gap-10">
+        <div className="flex flex-col items-center justify-center py-10 gap-10">
             <div className="relative">
                 <div className="absolute inset-0 bg-primary/30 blur-3xl rounded-full animate-pulse"></div>
                 <div className="size-32 rounded-[2.5rem] bg-gradient-to-br from-primary to-primary-hover p-1 shadow-2xl relative z-10">
