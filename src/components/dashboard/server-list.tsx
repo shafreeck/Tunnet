@@ -207,13 +207,13 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
         <div
             onClick={onClick}
             className={cn(
-                "group glass-card flex items-center p-3 rounded-xl cursor-pointer relative overflow-hidden transition-all duration-200 border border-transparent",
+                "group flex items-center p-3 rounded-xl cursor-pointer relative overflow-hidden transition-all duration-200 border border-transparent",
                 isSelected
-                    ? "bg-black/5 dark:bg-white/[0.03] border-border-color/50 shadow-sm" // Reduced brightness further (3%)
-                    : "hover:bg-black/5 dark:hover:bg-white/[0.02] opacity-90 hover:opacity-100", // Hover subtle (2%)
+                    ? "bg-primary/10 dark:bg-primary/20 border-primary/20" // Selected: Tinted with accent color
+                    : "hover:bg-black/5 dark:hover:bg-white/5", // Hover: Subtle interaction
                 // If running, we might want a different border or glow?
                 // For now, relies on the `isRunning` indicator within the card.
-                isRunning && "border-primary/20 bg-primary/5 dark:bg-primary/10"
+                isRunning && "border-primary/30"
             )}>
 
             {isSelected && <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-xl transition-colors", isRunning ? "bg-accent-green shadow-[0_0_10px_rgba(34,197,94,0.5)]" : "bg-primary")} ></div>}
