@@ -209,7 +209,8 @@ export default function Home() {
 
   // Helper to map backend nodes to UI servers
   const updateServersState = (nodes: any[]) => {
-    const mapped = nodes.map((node: any) => ({
+    const safeNodes = Array.isArray(nodes) ? nodes : [];
+    const mapped = safeNodes.map((node: any) => ({
       ...node,
       provider: node.protocol.toUpperCase(),
       flagUrl: getFlagUrl(node.location?.country || node.name || ""),
@@ -270,17 +271,16 @@ export default function Home() {
 
   const handleSaveNode = async (node: Node) => {
     try {
-      let updatedList: any[]
       if (node.id) {
         // Edit
-        updatedList = await invoke("update_node", { id: node.id, node })
+        await invoke("update_node", { id: node.id, node })
         toast.success("Node updated")
       } else {
         // Add
-        updatedList = await invoke("add_node", { node })
+        await invoke("add_node", { node })
         toast.success("Node added")
       }
-      updateServersState(updatedList)
+      fetchProfiles()
       setEditorOpen(false)
     } catch (e: any) {
       toast.error(`Save failed: ${e}`)
@@ -298,8 +298,8 @@ export default function Home() {
     const id = nodeToDelete
 
     try {
-      const updatedList: any[] = await invoke("delete_node", { id })
-      updateServersState(updatedList)
+      await invoke("delete_node", { id })
+      fetchProfiles()
       toast.success("Node deleted")
       if (activeServerId === id) {
         setActiveServerId(null)
