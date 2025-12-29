@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { RefreshCw, Trash2, Globe, Server, MoreHorizontal, Database, Zap } from "lucide-react"
+import { RefreshCw, Trash2, Globe, Server, MoreHorizontal, Database, Zap, PlusCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface Subscription {
@@ -19,12 +19,16 @@ interface SubscriptionsViewProps {
     profiles: Subscription[]
     onUpdate: (id: string) => void
     onDelete: (id: string) => void
+    onAdd?: () => void
+    onSelect?: (id: string) => void
+    isImporting?: boolean
 }
 
-export function SubscriptionsView({ profiles, onUpdate, onDelete }: SubscriptionsViewProps) {
+export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelect, isImporting }: SubscriptionsViewProps) {
 
     // Helper formats
     const formatBytes = (bytes: number, decimals = 1) => {
+        if (bytes === 0) return '0 B'
         if (!itemsValid(bytes)) return '0 B'
         const k = 1024
         const dm = decimals < 0 ? 0 : decimals
@@ -39,9 +43,21 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete }: Subscription
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* Unified Header */}
             <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent px-8 pt-6 pb-2 shrink-0">
-                <div className="max-w-5xl mx-auto w-full">
-                    <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">订阅管理</h2>
-                    <p className="text-sm text-text-secondary font-medium">查看并同步您的节点订阅信息</p>
+                <div className="max-w-5xl mx-auto w-full flex items-center justify-between">
+                    <div>
+                        <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">订阅管理</h2>
+                        <p className="text-sm text-text-secondary font-medium">查看并同步您的节点订阅信息</p>
+                    </div>
+
+                    {onAdd && (
+                        <button
+                            onClick={onAdd}
+                            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary-hover transition-colors font-medium text-sm shadow-lg shadow-primary/20 hover:shadow-primary/30 active:scale-95"
+                        >
+                            <PlusCircle size={18} />
+                            <span>导入订阅</span>
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -49,42 +65,56 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete }: Subscription
             <div className="flex-1 overflow-y-auto px-8 py-10 sidebar-scroll bg-transparent">
                 <div className="max-w-5xl mx-auto w-full">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
+                        {/* Loading Skeleton */}
+                        {isImporting && (
+                            <div className="glass-card flex flex-col p-6 rounded-[2rem] bg-card-bg/50 border border-border-color relative overflow-hidden animate-pulse">
+                                <div className="flex justify-between items-start mb-6">
+                                    <div className="flex items-start gap-4">
+                                        <div className="size-14 rounded-2xl bg-black/5 dark:bg-white/5 flex items-center justify-center">
+                                            <div className="size-8 bg-black/5 dark:bg-white/5 rounded-full" />
+                                        </div>
+                                        <div className="flex flex-col gap-2 w-32 pt-1">
+                                            <div className="h-5 bg-black/5 dark:bg-white/5 rounded-md w-full" />
+                                            <div className="h-3 bg-black/5 dark:bg-white/5 rounded-md w-2/3" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-end">
+                                            <div className="h-3 bg-black/5 dark:bg-white/5 rounded-md w-16" />
+                                            <div className="h-3 bg-black/5 dark:bg-white/5 rounded-md w-8" />
+                                        </div>
+                                        <div className="h-3 w-full bg-black/5 dark:bg-white/5 rounded-full overflow-hidden" />
+                                    </div>
+                                    <div className="flex items-center justify-between pt-4 border-t border-border-color border-dashed opacity-50">
+                                        <div className="flex items-center gap-4">
+                                            <div className="h-8 w-24 bg-black/5 dark:bg-white/5 rounded-xl" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]" />
+                            </div>
+                        )}
+
                         {profiles.map(profile => {
                             const used = (profile.upload || 0) + (profile.download || 0)
                             const total = profile.total || 0
                             const percent = total > 0 ? Math.min(100, (used / total) * 100) : 0
 
                             return (
-                                <div key={profile.id} className="glass-card flex flex-col p-6 rounded-[2rem] bg-card-bg hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-500 group border border-border-color relative overflow-hidden">
+                                <div key={profile.id} onClick={() => onSelect && onSelect(profile.id)} className="glass-card flex flex-col p-6 rounded-[2rem] bg-card-bg hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-500 group border border-border-color relative overflow-hidden cursor-pointer">
                                     <div className="flex justify-between items-start mb-6">
-                                        <div className="flex items-start gap-4">
-                                            <div className="size-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform duration-500">
+                                        <div className="flex items-start gap-4 overflow-hidden">
+                                            <div className="size-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0 group-hover:scale-110 transition-transform duration-500">
                                                 <Globe size={28} />
                                             </div>
-                                            <div className="flex flex-col gap-1">
-                                                <h3 className="font-bold text-text-primary text-lg group-hover:text-primary transition-colors uppercase tracking-tight">{profile.name}</h3>
-                                                <span className="text-[10px] font-mono text-text-tertiary truncate max-w-[200px]" title={profile.url}>
+                                            <div className="flex flex-col gap-1 min-w-0">
+                                                <h3 className="font-bold text-text-primary text-lg group-hover:text-primary transition-colors uppercase tracking-tight truncate">{profile.name}</h3>
+                                                <span className="text-[10px] font-mono text-text-tertiary truncate" title={profile.url}>
                                                     {profile.url ? profile.url.replace(/^https?:\/\//, '') : "Local Profile"}
                                                 </span>
                                             </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            {profile.url && (
-                                                <button
-                                                    onClick={() => onUpdate(profile.id)}
-                                                    className="p-2.5 text-text-tertiary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/10 rounded-2xl transition-all active:scale-90"
-                                                    title="Update Subscription"
-                                                >
-                                                    <RefreshCw size={18} />
-                                                </button>
-                                            )}
-                                            <button
-                                                onClick={() => onDelete(profile.id)}
-                                                className="p-2.5 text-text-tertiary hover:text-red-400 hover:bg-red-400/10 rounded-2xl transition-all active:scale-90"
-                                                title="Delete Subscription"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
                                         </div>
                                     </div>
 
@@ -106,32 +136,53 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete }: Subscription
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border-color">
-                                            <div className="flex items-center gap-3">
-                                                <div className="size-8 rounded-xl bg-black/5 dark:bg-white/5 flex items-center justify-center text-text-secondary">
-                                                    <Database size={14} />
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <span className="text-[9px] font-bold text-text-tertiary uppercase">节点数量</span>
-                                                    <span className="text-xs font-bold text-text-secondary">{profile.nodes.length} Nodes</span>
-                                                </div>
-                                            </div>
-                                            {profile.expire && (
+                                        <div className="flex items-center justify-between pt-4 border-t border-border-color">
+                                            <div className="flex items-center gap-4">
                                                 <div className="flex items-center gap-3">
                                                     <div className="size-8 rounded-xl bg-black/5 dark:bg-white/5 flex items-center justify-center text-text-secondary">
-                                                        <Zap size={14} />
+                                                        <Database size={14} />
                                                     </div>
                                                     <div className="flex flex-col">
-                                                        <span className="text-[9px] font-bold text-text-tertiary uppercase">到期时间</span>
-                                                        <span className="text-xs font-bold text-text-secondary">{new Date(profile.expire * 1000).toLocaleDateString()}</span>
+                                                        <span className="text-[9px] font-bold text-text-tertiary uppercase">节点数量</span>
+                                                        <span className="text-xs font-bold text-text-secondary">{profile.nodes.length} Nodes</span>
                                                     </div>
                                                 </div>
-                                            )}
+                                                {profile.expire && (
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="size-8 rounded-xl bg-black/5 dark:bg-white/5 flex items-center justify-center text-text-secondary">
+                                                            <Zap size={14} />
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[9px] font-bold text-text-tertiary uppercase">到期时间</span>
+                                                            <span className="text-xs font-bold text-text-secondary">{new Date(profile.expire * 1000).toLocaleDateString()}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="flex items-center gap-1">
+                                                {profile.url && (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); onUpdate(profile.id); }}
+                                                        className="p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-90"
+                                                        title="刷新订阅"
+                                                    >
+                                                        <RefreshCw size={16} />
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); onDelete(profile.id); }}
+                                                    className="p-2 text-text-secondary hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all active:scale-90"
+                                                    title="删除订阅"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
 
                                     {/* Subtle Overlay Glow */}
-                                    <div className="absolute -bottom-10 -right-10 size-40 bg-primary/5 blur-3xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    <div className="absolute -bottom-10 -right-10 size-40 bg-primary/5 blur-3xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                                 </div>
                             )
                         })}

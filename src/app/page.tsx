@@ -183,7 +183,7 @@ export default function Home() {
 
   const fetchProfiles = () => {
     invoke("get_profiles").then((profiles: any) => {
-      setProfiles(profiles)
+      setProfiles(profiles.reverse()) // Show newest first
 
       // Flatten nodes for server list
       const allNodes = profiles.flatMap((p: any) => p.nodes)
@@ -227,29 +227,48 @@ export default function Home() {
     localStorage.setItem("proxyMode", proxyMode)
   }, [proxyMode])
 
+  // Import State
+  const [isImporting, setIsImporting] = useState(false)
+
   const handleImport = async (url: string) => {
     if (!url) return
+    setIsImporting(true)
     try {
+      // 1. Snapshot existing profiles to identify the new one later
+      const preProfiles: any[] = await invoke("get_profiles")
+      const preIds = new Set(preProfiles.map(p => p.id))
+
+      // 2. Perform Import
       // TODO: Add name support in separate modal or prompt? For now auto-name in backend
       await invoke("import_subscription", { url, name: null })
-      const updatedProfiles: any = await invoke("get_profiles")
-      setProfiles(updatedProfiles) // Use local var to ensure we have latest
 
-      // Auto-detect locations for the imported nodes
-      const allNodes = updatedProfiles.flatMap((p: any) => p.nodes)
+      // 3. update UI immediately to show the new card
+      const postProfiles: any[] = await invoke("get_profiles")
+      // Reverse to show newest at top (backend appends, so reverse order is correct)
+      setProfiles(postProfiles.reverse())
+
+      // Flatten nodes for server list immediately
+      const allNodes = postProfiles.flatMap((p: any) => p.nodes)
       updateServersState(allNodes)
-      toast.success(`Subscription imported. detecting locations...`)
 
-      // Trigger location check for all nodes (or just new ones if we could track them)
-      // Since import can bring many nodes, we'll just check all for now or optimize later.
-      const ids = allNodes.map((n: any) => n.id)
+      toast.success(`导入完成，后台正在更新节点...`)
+      setIsImporting(false) // Stop loading animation immediately
+
+      // 4. Find the NEW profile(s) and probe in background
+      const newProfiles = postProfiles.filter(p => !preIds.has(p.id))
+      const newNodes = newProfiles.flatMap(p => p.nodes)
+      const ids = newNodes.map(n => n.id)
+
       if (ids.length > 0) {
+        // Run in background, refresh UI when done
+        // NO AWAIT here to ensure UI is unblocked
         invoke("check_node_locations", { nodeIds: ids }).then(() => {
-          fetchProfiles() // Refresh again to show flags
-        })
+          fetchProfiles()
+        }).catch(e => console.error("Background probe failed:", e))
       }
     } catch (e: any) {
       toast.error(`Import failed: ${e}`)
+      setIsImporting(false)
     }
   }
 
@@ -467,6 +486,13 @@ export default function Home() {
   // Derive active subscription stats
   const activeSubscription = profiles.find(p => p.nodes.some((n: any) => n.id === activeServerId))
 
+  const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<string | null>(null)
+
+  const handleSubscriptionSelect = (id: string) => {
+    setSelectedSubscriptionId(id)
+    setCurrentView("subscription_detail" as any)
+  }
+
   // Sub-components for views to keep return clean
   const renderView = () => {
     switch (currentView) {
@@ -497,7 +523,69 @@ export default function Home() {
             profiles={profiles}
             onUpdate={handleUpdateProfile}
             onDelete={handleDeleteProfile}
+            onAdd={() => setShowAddModal(true)}
+            onSelect={handleSubscriptionSelect}
+            isImporting={isImporting}
           />
+        )
+      case "subscription_detail" as any:
+        const subscription = profiles.find(p => p.id === selectedSubscriptionId)
+        if (!subscription) return <div>Subscription not found</div>
+
+        // Filter servers to show only ones from this subscription
+        // We need to map subscription nodes to the `servers` format (which `updateServersState` does into `servers` state)
+        // But `servers` contains ALL nodes. So we filter `servers` by checking if ID is in subscription nodes.
+        const subNodeIds = new Set(subscription.nodes.map((n: any) => n.id))
+        const subServers = servers.filter(s => subNodeIds.has(s.id))
+
+        return (
+          <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent px-8 pt-6 pb-2 shrink-0 relative z-30">
+              <div className="max-w-5xl mx-auto w-full flex items-center gap-4 mb-4">
+                <button
+                  onClick={() => setCurrentView("proxies")}
+                  className="p-2 -ml-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-text-secondary hover:text-text-primary transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+                </button>
+                <div>
+                  <h2 className="text-2xl font-bold text-text-primary tracking-tight">{subscription.name}</h2>
+                  <p className="text-sm text-text-secondary font-medium">
+                    {subServers.length} Nodes
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-8 py-8 sidebar-scroll">
+              <div className="max-w-5xl mx-auto w-full pb-20">
+                <ServerList
+                  servers={subServers}
+                  activeServerId={activeServerId}
+                  isConnected={isConnected}
+                  onSelect={(id) => setActiveServerId(id)}
+                  onToggle={handleServerToggle}
+                  onImport={handleImport}
+                  onEdit={(node) => {
+                    if (node) {
+                      setEditingNode(node as unknown as Node)
+                      setEditorOpen(true)
+                    } else {
+                      // Pre-fill subscription ID if adding new? Not supported yet.
+                      setShowAddModal(true)
+                    }
+                  }}
+                  onDelete={handleDeleteNode}
+                  showLogs={showLogs}
+                  setShowLogs={setShowLogs}
+                  logs={logs}
+                  onClearLogs={() => setLogs([])}
+                  onPing={handlePingNode}
+                  hideHeader={true}
+                />
+              </div>
+            </div>
+          </div>
         )
       case "rules":
         return <RulesView />
@@ -554,12 +642,12 @@ export default function Home() {
     <div className="h-screen flex gap-2 p-2 overflow-hidden" data-tauri-drag-region>
       <WindowControls />
       <Sidebar
-        currentView={currentView}
+        currentView={currentView as any}
         onViewChange={setCurrentView as any}
         subscription={activeSubscription}
       />
       <main className="flex-1 flex flex-col h-full relative overflow-hidden rounded-xl bg-black/10 backdrop-blur-sm border border-white/5">
-        {currentView !== "locations" && currentView !== "rules" && currentView !== "settings" && currentView !== "proxies" && (
+        {currentView !== "locations" && currentView !== "rules" && currentView !== "settings" && currentView !== "proxies" && (currentView as any) !== "subscription_detail" && (
           <Header
             isConnected={isConnected}
             onToggle={toggleProxy}
