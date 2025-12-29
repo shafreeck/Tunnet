@@ -22,12 +22,34 @@ impl<R: Runtime> CoreManager<R> {
     }
 
     pub fn get_core_path(&self) -> PathBuf {
-        self.app
+        let install_path = self
+            .app
             .path()
             .app_local_data_dir()
             .expect("failed to resolve app local data dir")
             .join("bin")
-            .join(SING_BOX_FILENAME)
+            .join(SING_BOX_FILENAME);
+
+        if install_path.exists() {
+            return install_path;
+        }
+
+        // Fallback for development: check resources folder
+        let resource_path = self
+            .app
+            .path()
+            .resource_dir()
+            .ok()
+            .map(|p| p.join("resources").join(SING_BOX_FILENAME));
+
+        // If resource path exists, use it. Otherwise return install path (it will fail later, but that's expected)
+        if let Some(p) = resource_path {
+            if p.exists() {
+                return p;
+            }
+        }
+
+        install_path
     }
 
     pub async fn check_and_download(&self) -> Result<(), String> {

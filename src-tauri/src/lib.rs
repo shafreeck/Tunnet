@@ -189,6 +189,14 @@ async fn delete_rule(
     service.delete_rule(&id).await
 }
 
+#[tauri::command]
+async fn url_test(
+    node_id: String,
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<u64, String> {
+    service.url_test(node_id).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -226,7 +234,10 @@ pub fn run() {
             save_rules,
             add_rule,
             update_rule,
-            delete_rule
+            add_rule,
+            update_rule,
+            delete_rule,
+            url_test
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

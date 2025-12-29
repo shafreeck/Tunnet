@@ -527,6 +527,7 @@ impl<R: Runtime> ProxyService<R> {
         // but for now we just append. Maybe check for duplicate URL?
         // Let's allow duplicates for now to be safe, user can delete.
         profiles.push(new_profile);
+        info!("Imported subscription. Total profiles: {}", profiles.len());
         self.manager.save_profiles(&profiles)
     }
 
@@ -694,8 +695,12 @@ impl<R: Runtime> ProxyService<R> {
 
         // 3. Gen Config
         let mut cfg = crate::config::SingBoxConfig::new();
+        // Clear DNS to avoid "outbound detour not found: proxy" since we don't have a "proxy" outbound in probe config
+        cfg.dns = None;
+
         if let Some(route) = &mut cfg.route {
             route.rules.clear();
+            route.default_domain_resolver = None;
         }
 
         for (node, port) in &probe_plan {
@@ -718,7 +723,7 @@ impl<R: Runtime> ProxyService<R> {
                     node.tls,
                 );
             } else {
-                cfg = cfg.with_direct();
+                cfg = cfg.with_direct_tag(&outbound_tag);
             }
 
             if let Some(route) = &mut cfg.route {
@@ -837,9 +842,306 @@ impl<R: Runtime> ProxyService<R> {
                 }
             }
         }
+        info!(
+            "Probe finished. Updated {} nodes across {} profiles. Saving...",
+            updates.len(),
+            profiles.len()
+        );
         self.manager.save_profiles(&profiles)?;
 
         Ok(())
+    }
+
+    pub async fn url_test(&self, node_id: String) -> Result<u64, String> {
+        let profiles = self.manager.load_profiles()?;
+        let mut target_node: Option<crate::profile::Node> = None;
+
+        for p in profiles {
+            for n in p.nodes {
+                if n.id == node_id {
+                    target_node = Some(n);
+                    break;
+                }
+            }
+            if target_node.is_some() {
+                break;
+            }
+        }
+
+        let node = target_node.ok_or("Node not found")?;
+
+        // 0. Pre-check: Verify Core Binary works
+        let core_path = self.manager.get_core_path();
+        let version_check = Command::new(&core_path).arg("version").output();
+        match version_check {
+            Ok(out) => {
+                if !out.status.success() {
+                    let stderr = String::from_utf8_lossy(&out.stderr);
+                    return Err(format!(
+                        "Sing-box binary check failed ({}). Stderr: {}",
+                        core_path.display(),
+                        stderr
+                    ));
+                }
+            }
+            Err(e) => {
+                return Err(format!(
+                    "Failed to execute sing-box at {}: {}",
+                    core_path.display(),
+                    e
+                ));
+            }
+        }
+
+        // Alloc port
+        let port = match std::net::TcpListener::bind("127.0.0.1:0") {
+            Ok(l) => l.local_addr().map_err(|e| e.to_string())?.port(),
+            Err(e) => return Err(format!("Failed to bind port: {}", e)),
+        };
+
+        // Gen Config
+        let mut cfg = crate::config::SingBoxConfig::new();
+        cfg.dns = None;
+        if let Some(route) = &mut cfg.route {
+            route.rules.clear();
+            route.default_domain_resolver = None;
+        }
+
+        // Disable cache file to avoid lock contention
+        if let Some(exp) = &mut cfg.experimental {
+            if let Some(cache) = &mut exp.cache_file {
+                cache.enabled = false;
+            }
+        }
+
+        let inbound_tag = "in_temp";
+        let outbound_tag = "out_temp";
+
+        cfg = cfg.with_mixed_inbound(port, inbound_tag);
+
+        match node.protocol.as_str() {
+            "vmess" => {
+                cfg = cfg.with_vmess_outbound(
+                    outbound_tag,
+                    node.server.clone(),
+                    node.port,
+                    node.uuid.clone().unwrap(),
+                    node.cipher.clone().unwrap_or("auto".to_string()),
+                    0,
+                    node.network.clone(),
+                    node.path.clone(),
+                    node.host.clone(),
+                    node.tls,
+                );
+            }
+            "shadowsocks" | "ss" => {
+                cfg = cfg.with_shadowsocks_outbound(
+                    outbound_tag,
+                    node.server.clone(),
+                    node.port,
+                    node.cipher
+                        .clone()
+                        .unwrap_or("chacha20-ietf-poly1305".to_string()),
+                    node.password.clone().unwrap_or_default(),
+                );
+            }
+            "trojan" => {
+                let mut transport_config = None;
+                // Trojan usually uses tcp or ws. Check 'network' field
+                if let Some(net) = &node.network {
+                    if net == "ws" {
+                        let mut headers = None;
+                        if let Some(ref h) = node.host {
+                            let mut map = std::collections::HashMap::new();
+                            map.insert("Host".to_string(), h.clone());
+                            headers = Some(map);
+                        }
+                        transport_config = Some(crate::config::TransportConfig {
+                            transport_type: "ws".to_string(),
+                            path: node.path.clone(),
+                            headers,
+                        });
+                    }
+                }
+
+                cfg.outbounds.push(crate::config::Outbound {
+                    outbound_type: "trojan".to_string(),
+                    tag: outbound_tag.to_string(),
+                    server: Some(node.server.clone()),
+                    server_port: Some(node.port),
+                    password: node.password.clone(),
+                    method: None,
+                    uuid: None,
+                    security: None,
+                    alter_id: None,
+                    transport: transport_config,
+                    tls: Some(crate::config::OutboundTls {
+                        enabled: true,
+                        server_name: node.host.clone().or(Some(node.server.clone())),
+                        insecure: Some(true), // Allow insecure for testing
+                    }),
+                    connect_timeout: Some("5s".to_string()),
+                });
+            }
+            _ => {
+                return Err(format!(
+                    "Unsupported protocol for latency test: {}",
+                    node.protocol
+                ));
+            }
+        }
+
+        // Add Route Rule
+        if let Some(route) = &mut cfg.route {
+            route.rules.push(crate::config::RouteRule {
+                inbound: Some(vec![inbound_tag.to_string()]),
+                outbound: Some(outbound_tag.to_string()),
+                ..Default::default()
+            });
+        }
+
+        // Define app_local_data early
+        let app_local_data = self.app.path().app_local_data_dir().unwrap();
+
+        // Set log output to file
+        let log_file_path = app_local_data.join(format!("url_test_{}.log", node.id));
+        cfg.log = Some(crate::config::LogConfig {
+            level: Some("trace".to_string()),
+            output: None, // Print to stdout/stderr
+        });
+
+        let config_file_path = app_local_data.join(format!("url_test_{}.json", node.id));
+        let json = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+        std::fs::write(&config_file_path, &json).map_err(|e| e.to_string())?;
+
+        let core_path = self.manager.get_core_path();
+        let mut cmd = Command::new(&core_path);
+        cmd.arg("run")
+            .arg("-c")
+            .arg(&config_file_path)
+            .arg("-D")
+            .arg(&app_local_data);
+
+        // Pipe stdout and stderr to capture all output
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+        let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+
+        let stderr = child.stderr.take().unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let output_log = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        let output_log_clone = output_log.clone();
+        let output_log_clone2 = output_log.clone();
+
+        std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader};
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(l) = line {
+                    if let Ok(mut g) = output_log_clone.lock() {
+                        g.push_str(&l);
+                        g.push('\n');
+                    }
+                }
+            }
+        });
+
+        std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader};
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(l) = line {
+                    if let Ok(mut g) = output_log_clone2.lock() {
+                        g.push_str(&l);
+                        g.push('\n');
+                    }
+                }
+            }
+        });
+
+        // Wait for startup
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+        if let Ok(Some(status)) = child.try_wait() {
+            let log_content = std::fs::read_to_string(&log_file_path).unwrap_or_default();
+            let output_content = output_log.lock().unwrap().clone();
+            return Err(format!(
+                "Test process exited early ({}). Path: {}. Output: {}. Config: {}",
+                status,
+                core_path.display(),
+                output_content,
+                config_file_path.display()
+            ));
+        }
+
+        let url = "http://ip-api.com/json";
+        let proxy_url = format!("http://127.0.0.1:{}", port);
+
+        let client_builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(5));
+
+        let client = match reqwest::Proxy::all(&proxy_url) {
+            Ok(p) => client_builder.proxy(p).build(),
+            Err(e) => {
+                let _ = child.kill();
+                return Err(e.to_string());
+            }
+        }
+        .map_err(|e| {
+            let _ = child.kill();
+            e.to_string()
+        })?;
+
+        let start = std::time::Instant::now();
+
+        let mut attempts = 0;
+        let mut result = Err("Init".to_string());
+
+        while attempts < 3 {
+            // Check if child is still running before request
+            if let Ok(Some(status)) = child.try_wait() {
+                let output_content = output_log.lock().unwrap().clone();
+                result = Err(format!(
+                    "Process died mid-test ({}). Output: {}",
+                    status, output_content
+                ));
+                break;
+            }
+
+            result = client.get(url).send().await.map_err(|e| e.to_string());
+            if result.is_ok() {
+                break;
+            }
+            if let Err(ref e) = result {
+                // If refused, it might be that the process hasn't bound the port yet or just died
+                if e.contains("refused") || e.contains("reset") {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    attempts += 1;
+                    continue;
+                }
+            }
+            break;
+        }
+
+        let _ = child.kill();
+
+        match result {
+            Ok(_) => {
+                let _ = child.wait();
+                let _ = std::fs::remove_file(&config_file_path);
+                let _ = std::fs::remove_file(&log_file_path);
+                Ok(start.elapsed().as_millis() as u64)
+            }
+            Err(e) => {
+                let output_content = output_log.lock().unwrap().clone();
+                // Persist config file for debug
+                Err(format!(
+                    "Request failed: {}. Output: {}. Config: {}",
+                    e,
+                    output_content,
+                    config_file_path.display()
+                ))
+            }
+        }
     }
 }
 

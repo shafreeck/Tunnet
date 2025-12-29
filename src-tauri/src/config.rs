@@ -123,7 +123,7 @@ pub struct Route {
     pub default_domain_resolver: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct RouteRule {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inbound: Option<Vec<String>>,
