@@ -267,6 +267,7 @@ impl<R: Runtime> CoreManager<R> {
         url: &str,
         name: Option<String>,
     ) -> Result<crate::profile::Profile, String> {
+        let url = url.trim();
         if url.starts_with("http://") || url.starts_with("https://") {
             let client = Client::new();
             let res = client

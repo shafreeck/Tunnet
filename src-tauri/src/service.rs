@@ -743,45 +743,69 @@ impl<R: Runtime> ProxyService<R> {
                     );
                 }
                 "trojan" => {
-                    let mut transport_config = None;
-                    if let Some(net) = &node.network {
-                        if net == "ws" {
-                            let mut headers = None;
-                            if let Some(ref h) = node.host {
-                                let mut map = std::collections::HashMap::new();
-                                map.insert("Host".to_string(), h.clone());
-                                headers = Some(map);
-                            }
-                            transport_config = Some(crate::config::TransportConfig {
-                                transport_type: "ws".to_string(),
-                                path: node.path.clone(),
-                                headers,
-                            });
-                        }
-                    }
+                    cfg = cfg.with_trojan_outbound(
+                        &outbound_tag,
+                        node.server.clone(),
+                        node.port,
+                        node.password.clone().unwrap_or_default(),
+                        node.network.clone(),
+                        node.path.clone(),
+                        node.host.clone(),
+                        node.sni.clone(),
+                        node.insecure,
+                    );
+                }
+                "vless" => {
+                    cfg = cfg.with_vless_outbound(
+                        &outbound_tag,
+                        node.server.clone(),
+                        node.port,
+                        node.uuid.clone().unwrap_or_default(),
+                        node.flow.clone(),
+                        node.network.clone(),
+                        node.path.clone(),
+                        node.host.clone(),
+                        node.tls,
+                        node.insecure,
+                        node.sni.clone(),
+                        node.alpn.clone(),
+                    );
+                }
+                "hysteria2" | "hy2" => {
+                    let up_mbps = node.up.as_ref().and_then(|s| s.parse().ok());
+                    let down_mbps = node.down.as_ref().and_then(|s| s.parse().ok());
 
-                    cfg.outbounds.push(crate::config::Outbound {
-                        outbound_type: "trojan".to_string(),
-                        tag: outbound_tag.to_string(),
-                        server: Some(node.server.clone()),
-                        server_port: Some(node.port),
-                        password: node.password.clone(),
-                        method: None,
-                        uuid: None,
-                        security: None,
-                        alter_id: None,
-                        transport: transport_config,
-                        tls: Some(crate::config::OutboundTls {
-                            enabled: true,
-                            server_name: node.host.clone().or(Some(node.server.clone())),
-                            insecure: Some(true),
-                        }),
-                        connect_timeout: Some("5s".to_string()),
-                    });
+                    cfg = cfg.with_hysteria2_outbound(
+                        &outbound_tag,
+                        node.server.clone(),
+                        node.port,
+                        node.password.clone().unwrap_or_default(),
+                        node.sni.clone(),
+                        node.insecure,
+                        node.alpn.clone(),
+                        up_mbps,
+                        down_mbps,
+                        node.obfs.clone(),
+                        node.obfs_password.clone(),
+                    );
+                }
+                "tuic" => {
+                    cfg = cfg.with_tuic_outbound(
+                        &outbound_tag,
+                        node.server.clone(),
+                        node.port,
+                        node.uuid.clone().unwrap_or_default(),
+                        node.password.clone(),
+                        node.sni.clone(),
+                        node.insecure,
+                        node.alpn.clone(),
+                        None, // congestion_controller
+                        None, // udp_relay_mode
+                    );
                 }
                 _ => {
+                    // Start of next block - removing the previous fallback
                     warn!("Skipping unsupported protocol for probe: {}", node.protocol);
-                    // Skip adding route rule for this node so it doesn't get routed partially
                     continue;
                 }
             }
@@ -902,11 +926,6 @@ impl<R: Runtime> ProxyService<R> {
                 }
             }
         }
-        info!(
-            "Probe finished. Updated {} nodes across {} profiles. Saving...",
-            updates.len(),
-            profiles.len()
-        );
         self.manager.save_profiles(&profiles)?;
 
         Ok(())
@@ -1006,42 +1025,65 @@ impl<R: Runtime> ProxyService<R> {
                 );
             }
             "trojan" => {
-                let mut transport_config = None;
-                // Trojan usually uses tcp or ws. Check 'network' field
-                if let Some(net) = &node.network {
-                    if net == "ws" {
-                        let mut headers = None;
-                        if let Some(ref h) = node.host {
-                            let mut map = std::collections::HashMap::new();
-                            map.insert("Host".to_string(), h.clone());
-                            headers = Some(map);
-                        }
-                        transport_config = Some(crate::config::TransportConfig {
-                            transport_type: "ws".to_string(),
-                            path: node.path.clone(),
-                            headers,
-                        });
-                    }
-                }
+                cfg = cfg.with_trojan_outbound(
+                    &outbound_tag,
+                    node.server.clone(),
+                    node.port,
+                    node.password.clone().unwrap_or_default(),
+                    node.network.clone(),
+                    node.path.clone(),
+                    node.host.clone(),
+                    node.sni.clone(),
+                    node.insecure,
+                );
+            }
+            "vless" => {
+                cfg = cfg.with_vless_outbound(
+                    &outbound_tag,
+                    node.server.clone(),
+                    node.port,
+                    node.uuid.clone().unwrap_or_default(),
+                    node.flow.clone(),
+                    node.network.clone(),
+                    node.path.clone(),
+                    node.host.clone(),
+                    node.tls,
+                    node.insecure,
+                    node.sni.clone(),
+                    node.alpn.clone(),
+                );
+            }
+            "hysteria2" | "hy2" => {
+                let up_mbps = node.up.as_ref().and_then(|s| s.parse().ok());
+                let down_mbps = node.down.as_ref().and_then(|s| s.parse().ok());
 
-                cfg.outbounds.push(crate::config::Outbound {
-                    outbound_type: "trojan".to_string(),
-                    tag: outbound_tag.to_string(),
-                    server: Some(node.server.clone()),
-                    server_port: Some(node.port),
-                    password: node.password.clone(),
-                    method: None,
-                    uuid: None,
-                    security: None,
-                    alter_id: None,
-                    transport: transport_config,
-                    tls: Some(crate::config::OutboundTls {
-                        enabled: true,
-                        server_name: node.host.clone().or(Some(node.server.clone())),
-                        insecure: Some(true), // Allow insecure for testing
-                    }),
-                    connect_timeout: Some("5s".to_string()),
-                });
+                cfg = cfg.with_hysteria2_outbound(
+                    &outbound_tag,
+                    node.server.clone(),
+                    node.port,
+                    node.password.clone().unwrap_or_default(),
+                    node.sni.clone(),
+                    node.insecure,
+                    node.alpn.clone(),
+                    up_mbps,
+                    down_mbps,
+                    node.obfs.clone(),
+                    node.obfs_password.clone(),
+                );
+            }
+            "tuic" => {
+                cfg = cfg.with_tuic_outbound(
+                    &outbound_tag,
+                    node.server.clone(),
+                    node.port,
+                    node.uuid.clone().unwrap_or_default(),
+                    node.password.clone(),
+                    node.sni.clone(),
+                    node.insecure,
+                    node.alpn.clone(),
+                    None,
+                    None,
+                );
             }
             _ => {
                 return Err(format!(

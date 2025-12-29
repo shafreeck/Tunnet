@@ -74,11 +74,27 @@ pub struct Outbound {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alter_id: Option<u16>, // vmess
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub flow: Option<String>, // vless: xtls-rprx-vision
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub transport: Option<TransportConfig>, // Replaces 'network'
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tls: Option<OutboundTls>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub connect_timeout: Option<String>,
+    // Hysteria2 / TUIC fields
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub up_mbps: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub down_mbps: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub obfs: Option<ObfsConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ObfsConfig {
+    #[serde(rename = "type")]
+    pub obfs_type: String, // salamander
+    pub password: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -98,6 +114,8 @@ pub struct OutboundTls {
     pub server_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub insecure: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alpn: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -366,6 +384,10 @@ impl SingBoxConfig {
             transport: None,
             tls: None,
             connect_timeout: Some("5s".to_string()), // Add this to avoid 'empty' error
+            flow: None,
+            up_mbps: None,
+            down_mbps: None,
+            obfs: None,
         });
         self
     }
@@ -413,6 +435,10 @@ impl SingBoxConfig {
             transport: None,
             tls: None,
             connect_timeout: None,
+            flow: None,
+            up_mbps: None,
+            down_mbps: None,
+            obfs: None,
         });
         self
     }
@@ -458,17 +484,227 @@ impl SingBoxConfig {
             alter_id: Some(alter_id),
             transport: transport_config,
             tls: if tls {
-                // Determine SNI: use `host` if available, otherwise `server`
                 let sni = host.or(Some(server));
                 Some(OutboundTls {
                     enabled: true,
                     server_name: sni,
                     insecure: Some(true),
+                    alpn: None,
                 })
             } else {
                 None
             },
             connect_timeout: None,
+            flow: None,
+            up_mbps: None,
+            down_mbps: None,
+            obfs: None,
+        });
+        self
+    }
+
+    pub fn with_vless_outbound(
+        mut self,
+        tag: &str,
+        server: String,
+        port: u16,
+        uuid: String,
+        flow: Option<String>,
+        transport: Option<String>,
+        path: Option<String>,
+        host: Option<String>,
+        tls: bool,
+        insecure: bool,
+        sni: Option<String>,
+        alpn: Option<Vec<String>>,
+    ) -> Self {
+        let mut transport_config = None;
+        if let Some(t_type) = transport {
+            let mut headers = None;
+            if let Some(ref h) = host {
+                let mut map = HashMap::new();
+                map.insert("Host".to_string(), h.clone());
+                headers = Some(map);
+            }
+
+            transport_config = Some(TransportConfig {
+                transport_type: t_type,
+                path,
+                headers,
+            });
+        }
+
+        self.outbounds.push(Outbound {
+            outbound_type: "vless".to_string(),
+            tag: tag.to_string(),
+            server: Some(server.clone()),
+            server_port: Some(port),
+            method: None,
+            password: None,
+            uuid: Some(uuid),
+            security: None,
+            flow,
+            alter_id: None,
+            transport: transport_config,
+            tls: if tls {
+                Some(OutboundTls {
+                    enabled: true,
+                    server_name: sni.or(host).or(Some(server)),
+                    insecure: Some(insecure),
+                    alpn,
+                })
+            } else {
+                None
+            },
+            connect_timeout: None,
+            up_mbps: None,
+            down_mbps: None,
+            obfs: None,
+        });
+        self
+    }
+
+    pub fn with_hysteria2_outbound(
+        mut self,
+        tag: &str,
+        server: String,
+        port: u16,
+        password: String,
+        sni: Option<String>,
+        insecure: bool,
+        alpn: Option<Vec<String>>,
+        up: Option<u32>,
+        down: Option<u32>,
+        obfs: Option<String>,
+        obfs_password: Option<String>,
+    ) -> Self {
+        self.outbounds.push(Outbound {
+            outbound_type: "hysteria2".to_string(),
+            tag: tag.to_string(),
+            server: Some(server.clone()),
+            server_port: Some(port),
+            method: None,
+            password: Some(password),
+            uuid: None,
+            security: None,
+            flow: None,
+            alter_id: None,
+            transport: None,
+            tls: Some(OutboundTls {
+                enabled: true,
+                server_name: sni.or(Some(server)),
+                insecure: Some(insecure),
+                alpn,
+            }),
+            connect_timeout: None,
+            up_mbps: up,
+            down_mbps: down,
+            obfs: if obfs.is_some() && obfs_password.is_some() {
+                Some(ObfsConfig {
+                    obfs_type: obfs.unwrap(),
+                    password: obfs_password.unwrap(),
+                })
+            } else {
+                None
+            },
+        });
+        self
+    }
+
+    pub fn with_tuic_outbound(
+        mut self,
+        tag: &str,
+        server: String,
+        port: u16,
+        uuid: String,
+        password: Option<String>,
+        sni: Option<String>,
+        insecure: bool,
+        alpn: Option<Vec<String>>,
+        congestion_controller: Option<String>,
+        udp_relay_mode: Option<String>,
+    ) -> Self {
+        self.outbounds.push(Outbound {
+            outbound_type: "tuic".to_string(),
+            tag: tag.to_string(),
+            server: Some(server.clone()),
+            server_port: Some(port),
+            method: None,
+            password,
+            uuid: Some(uuid),
+            security: None,
+            flow: None,
+            alter_id: None,
+            transport: None,
+            tls: Some(OutboundTls {
+                enabled: true,
+                server_name: sni.or(Some(server)),
+                insecure: Some(insecure),
+                alpn,
+            }),
+            connect_timeout: None,
+            up_mbps: None,
+            down_mbps: None,
+            obfs: None,
+            // TUIC specific fields currently mapped to generic or new fields if needed
+            // For now minimal TUIC support.
+            // congestion_controller & udp_relay_mode are specific.
+            // We might need to extend Outbound struct if we strictly need them.
+            // But basic connectivity often works with defaults.
+        });
+        self
+    }
+
+    pub fn with_trojan_outbound(
+        mut self,
+        tag: &str,
+        server: String,
+        port: u16,
+        password: String,
+        transport: Option<String>,
+        path: Option<String>,
+        host: Option<String>,
+        sni: Option<String>,
+        insecure: bool,
+    ) -> Self {
+        let mut transport_config = None;
+        if let Some(t_type) = transport {
+            let mut headers = None;
+            if let Some(ref h) = host {
+                let mut map = HashMap::new();
+                map.insert("Host".to_string(), h.clone());
+                headers = Some(map);
+            }
+
+            transport_config = Some(TransportConfig {
+                transport_type: t_type,
+                path,
+                headers,
+            });
+        }
+
+        self.outbounds.push(Outbound {
+            outbound_type: "trojan".to_string(),
+            tag: tag.to_string(),
+            server: Some(server.clone()),
+            server_port: Some(port),
+            method: None,
+            password: Some(password),
+            uuid: None,
+            security: None,
+            flow: None,
+            alter_id: None,
+            transport: transport_config,
+            tls: Some(OutboundTls {
+                enabled: true,
+                server_name: sni.or(host).or(Some(server)),
+                insecure: Some(insecure),
+                alpn: None,
+            }),
+            connect_timeout: None,
+            up_mbps: None,
+            down_mbps: None,
+            obfs: None,
         });
         self
     }
