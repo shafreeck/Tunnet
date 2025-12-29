@@ -703,27 +703,87 @@ impl<R: Runtime> ProxyService<R> {
             route.default_domain_resolver = None;
         }
 
+        // Disable cache file to avoid lock contention
+        if let Some(exp) = &mut cfg.experimental {
+            if let Some(cache) = &mut exp.cache_file {
+                cache.enabled = false;
+            }
+        }
+
         for (node, port) in &probe_plan {
             let inbound_tag = format!("in_{}", node.id);
             let outbound_tag = format!("out_{}", node.id);
 
             cfg = cfg.with_mixed_inbound(*port, &inbound_tag);
 
-            if node.protocol == "vmess" {
-                cfg = cfg.with_vmess_outbound(
-                    &outbound_tag,
-                    node.server.clone(),
-                    node.port,
-                    node.uuid.clone().unwrap_or_default(),
-                    node.cipher.clone().unwrap_or("auto".to_string()),
-                    0,
-                    node.network.clone(),
-                    node.path.clone(),
-                    node.host.clone(),
-                    node.tls,
-                );
-            } else {
-                cfg = cfg.with_direct_tag(&outbound_tag);
+            match node.protocol.as_str() {
+                "vmess" => {
+                    cfg = cfg.with_vmess_outbound(
+                        &outbound_tag,
+                        node.server.clone(),
+                        node.port,
+                        node.uuid.clone().unwrap_or_default(),
+                        node.cipher.clone().unwrap_or("auto".to_string()),
+                        0,
+                        node.network.clone(),
+                        node.path.clone(),
+                        node.host.clone(),
+                        node.tls,
+                    );
+                }
+                "shadowsocks" | "ss" => {
+                    cfg = cfg.with_shadowsocks_outbound(
+                        &outbound_tag,
+                        node.server.clone(),
+                        node.port,
+                        node.cipher
+                            .clone()
+                            .unwrap_or("chacha20-ietf-poly1305".to_string()),
+                        node.password.clone().unwrap_or_default(),
+                    );
+                }
+                "trojan" => {
+                    let mut transport_config = None;
+                    if let Some(net) = &node.network {
+                        if net == "ws" {
+                            let mut headers = None;
+                            if let Some(ref h) = node.host {
+                                let mut map = std::collections::HashMap::new();
+                                map.insert("Host".to_string(), h.clone());
+                                headers = Some(map);
+                            }
+                            transport_config = Some(crate::config::TransportConfig {
+                                transport_type: "ws".to_string(),
+                                path: node.path.clone(),
+                                headers,
+                            });
+                        }
+                    }
+
+                    cfg.outbounds.push(crate::config::Outbound {
+                        outbound_type: "trojan".to_string(),
+                        tag: outbound_tag.to_string(),
+                        server: Some(node.server.clone()),
+                        server_port: Some(node.port),
+                        password: node.password.clone(),
+                        method: None,
+                        uuid: None,
+                        security: None,
+                        alter_id: None,
+                        transport: transport_config,
+                        tls: Some(crate::config::OutboundTls {
+                            enabled: true,
+                            server_name: node.host.clone().or(Some(node.server.clone())),
+                            insecure: Some(true),
+                        }),
+                        connect_timeout: Some("5s".to_string()),
+                    });
+                }
+                _ => {
+                    warn!("Skipping unsupported protocol for probe: {}", node.protocol);
+                    // Skip adding route rule for this node so it doesn't get routed partially
+                    continue;
+                }
             }
 
             if let Some(route) = &mut cfg.route {
