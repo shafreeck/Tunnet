@@ -183,6 +183,17 @@ pub struct RuleSet {
 pub struct ExperimentalConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_file: Option<CacheFileConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clash_api: Option<ClashApiConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ClashApiConfig {
+    pub external_controller: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_ui: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secret: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -241,7 +252,7 @@ pub struct DnsRule {
 }
 
 impl SingBoxConfig {
-    pub fn new() -> Self {
+    pub fn new(clash_api_port: Option<u16>) -> Self {
         // Basic DNS for Tun Mode v1.12+ Format
         let dns = DnsConfig {
             servers: vec![
@@ -280,6 +291,23 @@ impl SingBoxConfig {
                 action: Some("route".to_string()),
             }],
         };
+
+        let mut experimental = ExperimentalConfig {
+            cache_file: Some(CacheFileConfig {
+                enabled: true,
+                path: "cache.db".to_string(),
+            }),
+            clash_api: None,
+        };
+
+        if let Some(port) = clash_api_port {
+            experimental.clash_api = Some(ClashApiConfig {
+                external_controller: format!("127.0.0.1:{}", port),
+                external_ui: None,
+                secret: None,
+            });
+        }
+
         Self {
             log: Some(LogConfig {
                 level: Some("debug".to_string()),
@@ -320,12 +348,7 @@ impl SingBoxConfig {
                 auto_detect_interface: Some(true),
                 default_domain_resolver: Some("local".to_string()),
             }),
-            experimental: Some(ExperimentalConfig {
-                cache_file: Some(CacheFileConfig {
-                    enabled: true,
-                    path: "cache.db".to_string(),
-                }),
-            }),
+            experimental: Some(experimental),
         }
     }
 

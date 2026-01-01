@@ -11,6 +11,7 @@ pub struct ProxyStatus {
     pub node: Option<crate::profile::Node>,
     pub tun_mode: bool,
     pub routing_mode: String,
+    pub clash_api_port: Option<u16>,
 }
 
 pub struct ProxyService<R: Runtime> {
@@ -20,6 +21,7 @@ pub struct ProxyService<R: Runtime> {
     tun_mode: Mutex<bool>,
     latest_node: Mutex<Option<crate::profile::Node>>,
     latest_routing_mode: Mutex<String>,
+    clash_api_port: Mutex<Option<u16>>,
     start_lock: tokio::sync::Mutex<()>, // Ensure serialized start operations
 }
 
@@ -33,6 +35,7 @@ impl<R: Runtime> ProxyService<R> {
             tun_mode: Mutex::new(false),
             latest_node: Mutex::new(None),
             latest_routing_mode: Mutex::new("rule".to_string()),
+            clash_api_port: Mutex::new(None),
             start_lock: tokio::sync::Mutex::new(()),
         }
     }
@@ -89,7 +92,21 @@ impl<R: Runtime> ProxyService<R> {
             }
         };
 
-        self.write_config(node_opt, tun_mode, &routing_mode, &settings)?;
+        // Allocate a dynamic port for Clash API
+        // We bind to port 0, get the assigned port, and then drop the listener
+        let clash_port = std::net::TcpListener::bind("127.0.0.1:0")
+            .map(|l| l.local_addr().ok().map(|a| a.port()))
+            .unwrap_or(None);
+
+        if let Some(port) = clash_port {
+            info!("Allocated Clash API port: {}", port);
+        } else {
+            warn!("Failed to allocate Clash API port");
+        }
+
+        *self.clash_api_port.lock().unwrap() = clash_port;
+
+        self.write_config(node_opt, tun_mode, &routing_mode, &settings, clash_port)?;
 
         let config_file_path = self
             .app
@@ -211,9 +228,10 @@ impl<R: Runtime> ProxyService<R> {
         tun_mode: bool,
         _routing_mode: &str,
         settings: &crate::settings::AppSettings,
+        clash_api_port: Option<u16>,
     ) -> Result<(), String> {
         let app_local_data = self.app.path().app_local_data_dir().unwrap();
-        let mut cfg = crate::config::SingBoxConfig::new();
+        let mut cfg = crate::config::SingBoxConfig::new(clash_api_port);
 
         if tun_mode {
             cfg = cfg.with_tun_inbound(settings.tun_mtu);
@@ -563,6 +581,7 @@ impl<R: Runtime> ProxyService<R> {
             node: self.latest_node.lock().unwrap().clone(),
             tun_mode: current_tun,
             routing_mode: self.latest_routing_mode.lock().unwrap().clone(),
+            clash_api_port: *self.clash_api_port.lock().unwrap(),
         }
     }
 
@@ -1076,7 +1095,7 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         // 3. Gen Config
-        let mut cfg = crate::config::SingBoxConfig::new();
+        let mut cfg = crate::config::SingBoxConfig::new(None);
         // Clear DNS to avoid "outbound detour not found: proxy" since we don't have a "proxy" outbound in probe config
         cfg.dns = None;
 
@@ -1361,7 +1380,7 @@ impl<R: Runtime> ProxyService<R> {
         };
 
         // Gen Config
-        let mut cfg = crate::config::SingBoxConfig::new();
+        let mut cfg = crate::config::SingBoxConfig::new(None);
         cfg.dns = None;
         if let Some(route) = &mut cfg.route {
             route.rules.clear();

@@ -69,7 +69,12 @@ async fn check_ip(
             .build()
             .map_err(|e| e.to_string())?
     } else {
-        let proxy = reqwest::Proxy::all("http://127.0.0.1:2080").map_err(|e| e.to_string())?;
+        let port = service
+            .get_app_settings()
+            .map(|s| s.mixed_port)
+            .unwrap_or(2080);
+        let proxy =
+            reqwest::Proxy::all(format!("http://127.0.0.1:{}", port)).map_err(|e| e.to_string())?;
         client_builder
             .proxy(proxy)
             .build()
