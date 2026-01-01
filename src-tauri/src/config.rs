@@ -336,7 +336,7 @@ impl SingBoxConfig {
                         domain: None,
                         domain_suffix: None,
                         domain_keyword: None,
-                        ip_cidr: Some(vec!["0.0.0.0/0".to_string(), "::/0".to_string()]),
+                        ip_cidr: None,
                         port: None,
                         outbound: Some("proxy".to_string()),
                         rule_set: None,

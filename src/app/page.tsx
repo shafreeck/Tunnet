@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
-import { listen } from "@tauri-apps/api/event"
+import { listen, emit } from "@tauri-apps/api/event"
 import { Sidebar } from "@/components/dashboard/sidebar"
 import { LocationsView } from "@/components/dashboard/locations-view"
 import { SubscriptionsView } from "@/components/dashboard/subscriptions-view"
@@ -51,23 +51,30 @@ export default function Home() {
   // Proxy Mode State
   const [proxyMode, setProxyMode] = useState<'global' | 'rule' | 'direct'>('rule')
   const [tunEnabled, setTunEnabled] = useState(false)
+  const [ipRefreshKey, setIpRefreshKey] = useState(0)
 
   useEffect(() => {
     let timer: NodeJS.Timeout
     if (isConnected) {
       // Fetch Real IP using backend proxy client with a delay to ensure core is ready
       // Fetch Real IP using backend proxy client with a retry mechanism
+      // Clear current details and sync to other windows when starting a fresh check
+      setConnectionDetails(null)
+      emit("connection-details-update", null)
+
       const checkIpWithRetry = async (retries = 3) => {
         try {
           const data: any = await invoke("check_ip")
           if (data.status === "success") {
-            setConnectionDetails({
+            const details = {
               ip: data.query,
               country: data.country,
-              countryCode: data.countryCode.toLowerCase()
-            })
-            // REMOVED: Syncing detected country to the active server in the list.
-            // We want to keep the server list showing the PROXY location, not the Exit location.
+              countryCode: data.countryCode.toLowerCase(),
+              isp: data.isp
+            };
+            setConnectionDetails(details)
+            // Sync to other windows (e.g. tray)
+            emit("connection-details-update", details)
           }
         } catch (err) {
           console.error(`Failed to fetch IP (retries left: ${retries}):`, err)
@@ -83,7 +90,7 @@ export default function Home() {
       setConnectionDetails(null)
     }
     return () => clearTimeout(timer)
-  }, [isConnected, activeServerId])
+  }, [isConnected, activeServerId, ipRefreshKey])
 
   useEffect(() => {
     let pollTimer: NodeJS.Timeout
@@ -161,6 +168,9 @@ export default function Home() {
         setIsConnected(result.is_running)
         setTunEnabled(result.tun_mode)
         setProxyMode(result.routing_mode as any)
+
+        // Trigger IP refresh after successful sync
+        setIpRefreshKey(prev => prev + 1)
       } catch (e) {
         console.error("Failed to sync proxy", e)
         if (pulseId !== lastPulseIdRef.current) return
@@ -255,13 +265,36 @@ export default function Home() {
       if (status.node) {
         lastAppliedConfigRef.current = `${status.node.id}:${status.routing_mode}:${status.tun_mode}`
       }
+
+      // Trigger IP refresh on status change if running
+      if (status.is_running) {
+        setIpRefreshKey(prev => prev + 1)
+      }
+    })
+
+    // Listen for IP updates from other windows
+    const unlistenIp = listen<any>("connection-details-update", (event) => {
+      setConnectionDetails(event.payload)
+    })
+
+    // Listen for requests from other windows (e.g. Tray) to share current IP info
+    const unlistenIpRequest = listen("request-connection-details", () => {
+      if (connectionDetailsRef.current) {
+        emit("connection-details-update", connectionDetailsRef.current)
+      }
     })
 
     return () => {
       unlisten.then(f => f())
       unlistenStatus.then(f => f())
+      unlistenIp.then(f => f())
+      unlistenIpRequest.then(f => f())
     }
   }, [])
+
+  // Keep ref updated for listener access
+  const connectionDetailsRef = useRef(connectionDetails)
+  useEffect(() => { connectionDetailsRef.current = connectionDetails }, [connectionDetails])
 
   const fetchProfiles = () => {
     invoke("get_profiles").then((profiles: any) => {

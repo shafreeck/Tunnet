@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
-import { listen } from "@tauri-apps/api/event"
+import { listen, emit } from "@tauri-apps/api/event"
 import { AppSettings, defaultSettings, getAppSettings, saveAppSettings } from "@/lib/settings"
 import { Power, Settings, Globe, Shield, Zap, LayoutDashboard, Server } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -28,6 +28,9 @@ export default function TrayPage() {
     const [traffic, setTraffic] = useState({ up: 0, down: 0 })
     const [trafficHistory, setTrafficHistory] = useState<{ up: number, down: number }[]>(new Array(30).fill({ up: 0, down: 0 }))
 
+    const ipInfoRef = useRef(ipInfo)
+    useEffect(() => { ipInfoRef.current = ipInfo }, [ipInfo])
+
     useEffect(() => {
         setMounted(true)
         // Initial load
@@ -50,9 +53,18 @@ export default function TrayPage() {
             setIsTransitioning(false) // Stop loading when status confirmed
         })
 
+        // Listen for IP updates from other windows (e.g. Dashboard)
+        const unlistenIp = listen<any>("connection-details-update", (event) => {
+            setIpInfo(event.payload)
+        })
+
+        // Request current connection details from other windows (e.g. Dashboard)
+        emit("request-connection-details")
+
         return () => {
             unlistenSettings.then(f => f())
             unlistenStatus.then(f => f())
+            unlistenIp.then(f => f())
         }
     }, [])
 
@@ -60,11 +72,25 @@ export default function TrayPage() {
     useEffect(() => {
         if (status.is_running) {
             setCheckingIp(true)
-            // Small delay to ensure proxy is ready or just debounce
+            // Large delay to allow Dashboard to probe first and sync results
+            // This satisfies "no need for separate probe" if Dashboard is open
             const timer = setTimeout(() => {
+                // If we already received IP info from another window (Dashboard), skip our own probe
+                if (ipInfoRef.current) {
+                    setCheckingIp(false)
+                    return
+                }
+
                 invoke("check_ip")
                     .then((info: any) => {
-                        setIpInfo(info)
+                        const details = {
+                            ip: info.query,
+                            country: info.country,
+                            countryCode: info.countryCode.toLowerCase(),
+                            isp: info.isp
+                        }
+                        setIpInfo(details)
+                        emit("connection-details-update", details)
                     })
                     .catch((e) => {
                         console.error("Failed to check IP", e)
@@ -419,7 +445,7 @@ export default function TrayPage() {
                                         <span className="animate-pulse opacity-70">Checking IP...</span>
                                     ) : ipInfo ? (
                                         <div className="flex items-center gap-2 overflow-hidden">
-                                            <span className="font-mono">{ipInfo.query}</span>
+                                            <span className="font-mono">{ipInfo.ip}</span>
                                             <span className="w-px h-2.5 bg-text-tertiary/30 shrink-0" />
                                             <span className="shrink-0">{ipInfo.countryCode}</span>
                                             {ipInfo.isp && (
