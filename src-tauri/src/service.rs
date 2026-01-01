@@ -1504,6 +1504,61 @@ impl<R: Runtime> ProxyService<R> {
     pub async fn update_core(&self) -> Result<(), String> {
         self.manager.update_core().await
     }
+
+    // --- Tray Helpers ---
+
+    pub async fn toggle_system_proxy(&self) -> Result<bool, String> {
+        let mut settings = self.manager.load_settings()?;
+        settings.system_proxy = !settings.system_proxy;
+        self.manager.save_settings(&settings)?;
+
+        let _ = self.app.emit("settings-update", &settings);
+
+        let is_running = self.is_proxy_running();
+
+        // If running, apply changes
+        if is_running {
+            if settings.system_proxy {
+                self.enable_system_proxy(settings.mixed_port);
+            } else {
+                self.disable_system_proxy();
+            }
+        }
+
+        Ok(settings.system_proxy)
+    }
+
+    pub async fn set_routing_mode(&self, mode: &str) -> Result<(), String> {
+        // Mode: "rule", "global", "direct"
+
+        // 1. Check if we need to restart
+        let is_running = self.is_proxy_running();
+        if !is_running {
+            // If not running, just update internal state for next start?
+            // Or should we start it?
+            // Tray "Mode" implies running mode.
+            // Ideally we just update the "preferred" mode for next launch if stopped.
+            // But if running, we restart.
+        }
+
+        let mut _settings = self.manager.load_settings()?;
+        // Note: Currently routing mode is passed to start_proxy, not saved in settings directly?
+        // Let's check start_proxy signature.
+        // Logic: start_proxy takes `routing_mode` arg.
+        // But we probably want to persist this preference?
+        // Usually apps remember the last mode.
+        // Let's assume for now we just restart with new mode if running.
+
+        if is_running {
+            let node = self.latest_node.lock().unwrap().clone();
+            let tun_mode = *self.tun_mode.lock().unwrap();
+
+            // Restart
+            self.start_proxy(node, tun_mode, mode.to_string()).await?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<R: Runtime> Drop for ProxyService<R> {

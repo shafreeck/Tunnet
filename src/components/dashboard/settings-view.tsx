@@ -48,6 +48,18 @@ export function SettingsView({ initialCategory = "general" }: SettingsViewProps)
 
     useEffect(() => {
         refreshSettings()
+
+        // Listen for backend updates (e.g. from System Tray)
+        import("@tauri-apps/api/event").then(({ listen }) => {
+            const unlisten = listen<AppSettings>("settings-update", (event) => {
+                console.log("Settings updated from backend:", event.payload)
+                setSettings(event.payload)
+            })
+
+            return () => {
+                unlisten.then(f => f())
+            }
+        })
     }, [refreshSettings])
 
     const updateSetting = async (key: keyof AppSettings, value: any) => {

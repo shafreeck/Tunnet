@@ -22,6 +22,19 @@
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "shadow": false
+      },
+      {
+        "label": "tray",
+        "url": "/tray",
+        "width": 320,
+        "height": 450,
+        "resizable": false,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "shadow": false
       }
     ],
     "security": {

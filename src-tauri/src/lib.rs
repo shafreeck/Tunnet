@@ -234,14 +234,70 @@ async fn update_singbox_core(service: State<'_, ProxyService<tauri::Wry>>) -> Re
     result
 }
 
+#[tauri::command]
+async fn open_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
+    app.exit(0);
+    Ok(())
+}
+
+#[tauri::command]
+async fn hide_tray_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("tray") {
+        window.hide().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_routing_mode_command(
+    service: State<'_, ProxyService<tauri::Wry>>,
+    mode: String,
+) -> Result<(), String> {
+    service.set_routing_mode(&mode).await
+}
+
+use std::sync::atomic::{AtomicI64, Ordering};
+static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .on_window_event(|window, event| {
+            let label = window.label();
+            match event {
+                tauri::WindowEvent::Focused(focused) if label == "tray" => {
+                    if !*focused {
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as i64;
+                        let last_click = LAST_CLICK_TIME.load(Ordering::Relaxed);
+                        if (now - last_click) > 500 {
+                            let _ = window.hide();
+                        }
+                    }
+                }
+                tauri::WindowEvent::CloseRequested { api, .. } if label == "main" => {
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
+                _ => {}
+            }
+        })
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -255,41 +311,46 @@ pub fn run() {
             app.manage(proxy_service);
 
             // System Tray Setup
-            use tauri::menu::{Menu, MenuItem};
             use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
-
-            let show_i =
-                MenuItem::with_id(app.handle(), "show", "Show Tunnet", true, None::<&str>).unwrap();
-            let quit_i =
-                MenuItem::with_id(app.handle(), "quit", "Quit", true, None::<&str>).unwrap();
-            let menu = Menu::with_items(app.handle(), &[&show_i, &quit_i]).unwrap();
 
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
-                .menu(&menu)
                 .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id().as_ref() {
-                    "show" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
-                    }
-                    "quit" => {
-                        app.exit(0);
-                    }
-                    _ => {}
-                })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
+                        position,
                         ..
                     } = event
                     {
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as i64;
+                        let last_click = LAST_CLICK_TIME.load(Ordering::Relaxed);
+
+                        if (now - last_click) < 200 {
+                            return;
+                        }
+                        LAST_CLICK_TIME.store(now, Ordering::Relaxed);
+
                         let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
+                        if let Some(window) = app.get_webview_window("tray") {
+                            if window.is_visible().unwrap_or(false) {
+                                let _ = window.hide();
+                            } else {
+                                // Calculate position
+                                let _ = window.set_position(tauri::Position::Physical(
+                                    tauri::PhysicalPosition {
+                                        x: (position.x as i32) - 160,
+                                        y: (position.y as i32) + 0,
+                                    },
+                                ));
+
+                                let _ = window.show();
+                                let _ = window.set_focus(); // Re-enabled for blur detection
+                                let _ = window.set_always_on_top(true);
+                            }
                         }
                     }
                 })
@@ -304,6 +365,8 @@ pub fn run() {
                     }
                 }
             }
+
+            // Allow tray window to focus on setup? No, it's hidden by default.
 
             Ok(())
         })
@@ -326,18 +389,26 @@ pub fn run() {
             save_rules,
             add_rule,
             update_rule,
-            add_rule,
-            update_rule,
-            delete_rule,
             delete_rule,
             url_test,
             get_app_settings,
             save_app_settings,
             check_singbox_update,
-            update_singbox_core
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+            update_singbox_core,
+            // New commands
+            open_main_window,
+            quit_app,
+            hide_tray_window,
+            set_routing_mode_command
+        ]);
+    builder
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                api.prevent_exit();
+            }
+        });
 }
 
 #[tauri::command]
