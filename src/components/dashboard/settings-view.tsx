@@ -101,8 +101,9 @@ export function SettingsView({ initialCategory = "general" }: SettingsViewProps)
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500 text-foreground">
             {/* Top Navigation Tabs */}
-            <div className="h-14 border-b border-black/[0.02] dark:border-white/[0.02] flex items-center px-8 bg-transparent shrink-0">
-                <div className="flex bg-card-bg p-1 rounded-xl border border-border-color">
+            <div className="h-14 border-b border-black/[0.02] dark:border-white/[0.02] flex items-center px-8 bg-transparent shrink-0 relative z-30">
+                <div className="absolute inset-0 z-0" data-tauri-drag-region />
+                <div className="flex bg-card-bg p-1 rounded-xl border border-border-color relative z-10">
                     {categories.map((cat) => (
                         <button
                             key={cat.id}

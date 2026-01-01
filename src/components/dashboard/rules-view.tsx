@@ -166,13 +166,14 @@ export function RulesView() {
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* Unified Header Style */}
             <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-8 pb-6 shrink-0 relative z-20">
-                <div className="max-w-5xl mx-auto w-full">
+                <div className="absolute inset-0 z-0" data-tauri-drag-region />
+                <div className="max-w-5xl mx-auto w-full relative z-10 pointer-events-none">
                     <div className="flex items-start justify-between mb-8">
                         <div>
                             <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">路由规则</h2>
                             <p className="text-sm text-text-secondary font-medium">配置流量如何通过域名、IP 等特征进行分流</p>
                         </div>
-                        <div className="flex gap-4">
+                        <div className="flex gap-4 pointer-events-auto">
                             <div className="relative">
                                 <button
                                     onClick={() => setIsPresetOpen(!isPresetOpen)}
@@ -213,7 +214,7 @@ export function RulesView() {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 pointer-events-auto">
                         <div className="relative flex-1 group">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-text-primary transition-colors" size={16} />
                             <input

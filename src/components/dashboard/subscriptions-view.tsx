@@ -22,6 +22,7 @@ interface SubscriptionsViewProps {
     onAdd?: () => void
     onSelect?: (id: string) => void
     onUpdateAll?: () => void
+    isImporting?: boolean
 }
 
 export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelect, onUpdateAll, isImporting }: SubscriptionsViewProps) {
@@ -42,14 +43,15 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* Unified Header */}
-            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent px-8 pt-6 pb-2 shrink-0">
-                <div className="max-w-5xl mx-auto w-full flex items-center justify-between">
+            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent px-8 pt-6 pb-2 shrink-0 relative z-30">
+                <div className="absolute inset-0 z-0" data-tauri-drag-region />
+                <div className="max-w-5xl mx-auto w-full flex items-center justify-between relative z-10 pointer-events-none">
                     <div>
                         <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">订阅管理</h2>
                         <p className="text-sm text-text-secondary font-medium">查看并同步您的节点订阅信息</p>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 pointer-events-auto">
                         {onUpdateAll && (
                             <button
                                 onClick={onUpdateAll}

@@ -77,7 +77,8 @@ export function LocationsView({
         )}>
             {/* Unified Header Style */}
             <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent px-8 pt-6 pb-2 shrink-0 relative z-30">
-                <div className="max-w-5xl mx-auto w-full">
+                <div className="absolute inset-0 z-0" data-tauri-drag-region />
+                <div className="max-w-5xl mx-auto w-full relative z-10 pointer-events-none">
                     <div className="flex items-start justify-between mb-4">
                         <div>
                             <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">节点地区</h2>
@@ -88,7 +89,7 @@ export function LocationsView({
 
                         <div className="flex items-center gap-4">
                             {/* View Mode Switcher */}
-                            <div className="flex bg-card-bg p-1 rounded-xl border border-border-color">
+                            <div className="flex bg-card-bg p-1 rounded-xl border border-border-color pointer-events-auto">
                                 <button
                                     onClick={() => setViewMode("map")}
                                     className={cn(
@@ -115,7 +116,7 @@ export function LocationsView({
                                 onClick={handleRefreshLocations}
                                 disabled={isRefreshing}
                                 className={cn(
-                                    "p-2.5 bg-card-bg border border-border-color rounded-xl text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-95 shadow-lg",
+                                    "p-2.5 bg-card-bg border border-border-color rounded-xl text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-95 shadow-lg pointer-events-auto",
                                     isRefreshing && "animate-spin text-primary"
                                 )}
                             >
@@ -125,7 +126,7 @@ export function LocationsView({
                     </div>
 
                     {viewMode === "grid" && (
-                        <div className="flex items-center gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="flex items-center gap-4 animate-in fade-in slide-in-from-top-2 duration-300 pointer-events-auto">
                             <div className="relative flex-1 group">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-text-primary transition-colors" size={16} />
                                 <input
