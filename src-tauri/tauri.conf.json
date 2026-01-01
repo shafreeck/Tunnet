@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Tunnet",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.shafreeck.tunnet",
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:4000",
@@ -50,7 +50,8 @@
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
-      "icons/icon.ico"
+      "icons/icon.ico",
+      "icons/icon.png"
     ],
     "resources": [
       "resources/geoip-cn.srs",

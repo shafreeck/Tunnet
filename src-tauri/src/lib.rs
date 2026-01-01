@@ -336,8 +336,13 @@ pub fn run() {
             // System Tray Setup
             use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
+            // Load dedicated monochromatic tray icon
+            let tray_icon_bytes = include_bytes!("../resources/tray-icon.png");
+            let tray_icon =
+                tauri::image::Image::from_bytes(tray_icon_bytes).expect("Failed to load tray icon");
+
+            let tray = TrayIconBuilder::new()
+                .icon(tray_icon)
                 .show_menu_on_left_click(false)
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
@@ -378,6 +383,9 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            #[cfg(target_os = "macos")]
+            let _ = tray.set_icon_as_template(true);
 
             // Handle Start Minimized
             let service = app.state::<ProxyService<tauri::Wry>>();

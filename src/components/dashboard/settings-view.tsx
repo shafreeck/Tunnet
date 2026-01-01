@@ -574,10 +574,8 @@ function AboutSection() {
         <div className="flex flex-col items-center justify-center py-10 gap-10">
             <div className="relative">
                 <div className="absolute inset-0 bg-primary/30 blur-3xl rounded-full animate-pulse"></div>
-                <div className="size-32 rounded-[2.5rem] bg-gradient-to-br from-primary to-primary-hover p-1 shadow-2xl relative z-10">
-                    <div className="w-full h-full rounded-[2.25rem] bg-black flex items-center justify-center">
-                        <Rocket size={64} className="text-primary" />
-                    </div>
+                <div className="relative z-10">
+                    <Rocket size={128} />
                 </div>
             </div>
 
@@ -598,22 +596,12 @@ function AboutSection() {
 
 function Rocket(props: any) {
     return (
-        <svg
-            {...props}
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
-            <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
-            <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
-            <path d="M9 12H4s.55-3.03 2-5c1.62-2.2 5-3 5-3" />
-            <path d="M12 15v5s3.03-.55 5-2c2.2-1.62 3-5 3-5" />
-        </svg>
+        <img
+            src="/app-icon.png"
+            alt="Tunnet Icon"
+            width={props.size || 64}
+            height={props.size || 64}
+            className="rounded-2xl shadow-lg"
+        />
     )
 }
