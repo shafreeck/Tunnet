@@ -1,6 +1,6 @@
 [package]
-name = "app"
-default-run = "app"
+name = "tunnet"
+default-run = "Tunnet"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
@@ -15,6 +15,10 @@ rust-version = "1.77.2"
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[[bin]]
+name = "Tunnet"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2.5.3", features = [] }
 
@@ -23,9 +27,10 @@ serde_json = "1.0"
 serde_yaml = "0.9"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.9.5", features = ["macos-private-api"] }
+tauri = { version = "2.9.5", features = ["macos-private-api", "tray-icon"] }
 tauri-plugin-log = "2"
 tauri-plugin-os = "2"
+tauri-plugin-autostart = "2"
 reqwest = { version = "0.11", features = ["json", "stream", "rustls-tls"] }
 tokio = { version = "1", features = ["full"] }
 flate2 = "1.0"

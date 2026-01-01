@@ -51,6 +51,8 @@ pub struct Inbound {
     pub stack: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub interface_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mtu: Option<u16>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -327,13 +329,13 @@ impl SingBoxConfig {
         }
     }
 
-    pub fn with_mixed_inbound(mut self, port: u16, tag: &str) -> Self {
+    pub fn with_mixed_inbound(mut self, port: u16, tag: &str, set_system_proxy: bool) -> Self {
         self.inbounds.push(Inbound {
             inbound_type: "mixed".to_string(),
             tag: tag.to_string(),
             listen: Some("127.0.0.1".to_string()),
             listen_port: Some(port),
-            set_system_proxy: Some(false),
+            set_system_proxy: Some(set_system_proxy),
             auto_route: None,
             strict_route: None,
             address: None,
@@ -341,11 +343,12 @@ impl SingBoxConfig {
             route_exclude_address: None,
             stack: None,
             interface_name: None,
+            mtu: None,
         });
         self
     }
 
-    pub fn with_tun_inbound(mut self) -> Self {
+    pub fn with_tun_inbound(mut self, mtu: u16) -> Self {
         self.inbounds.push(Inbound {
             inbound_type: "tun".to_string(),
             tag: "tun-in".to_string(),
@@ -359,6 +362,7 @@ impl SingBoxConfig {
             route_exclude_address: None,
             stack: Some("gvisor".to_string()),
             interface_name: None,
+            mtu: Some(mtu),
         });
         self
     }
@@ -621,8 +625,8 @@ impl SingBoxConfig {
         sni: Option<String>,
         insecure: bool,
         alpn: Option<Vec<String>>,
-        congestion_controller: Option<String>,
-        udp_relay_mode: Option<String>,
+        _congestion_controller: Option<String>,
+        _udp_relay_mode: Option<String>,
     ) -> Self {
         self.outbounds.push(Outbound {
             outbound_type: "tuic".to_string(),

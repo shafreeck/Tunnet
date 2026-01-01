@@ -11,6 +11,7 @@ use tauri::{AppHandle, Manager, Runtime};
 
 const SING_BOX_RELEASE_URL: &str = "https://github.com/SagerNet/sing-box/releases/download/v1.12.14/sing-box-1.12.14-darwin-arm64.tar.gz";
 const SING_BOX_FILENAME: &str = "sing-box";
+const SETTINGS_FILENAME: &str = "settings.json";
 
 pub struct CoreManager<R: Runtime> {
     app: AppHandle<R>,
@@ -378,4 +379,169 @@ impl<R: Runtime> CoreManager<R> {
             serde_json::from_str(&content).map_err(|e| e.to_string())?;
         Ok(rules)
     }
+
+    pub fn get_settings_path(&self) -> PathBuf {
+        self.app
+            .path()
+            .app_local_data_dir()
+            .expect("failed to resolve app local data dir")
+            .join(SETTINGS_FILENAME)
+    }
+
+    pub fn save_settings(&self, settings: &crate::settings::AppSettings) -> Result<(), String> {
+        let path = self.get_settings_path();
+        let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
+        fs::write(&path, json).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn load_settings(&self) -> Result<crate::settings::AppSettings, String> {
+        let path = self.get_settings_path();
+        if !path.exists() {
+            return Ok(crate::settings::AppSettings::default());
+        }
+        let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let settings: crate::settings::AppSettings =
+            serde_json::from_str(&content).map_err(|e| e.to_string())?;
+        Ok(settings)
+    }
+
+    /// Check for core updates via GitHub Releases
+    /// Returns: Ok(Some(version_string)) if update available, Ok(None) if up to date, Err on failure
+    pub async fn check_core_update(&self) -> Result<Option<String>, String> {
+        // 1. Get current version
+        let core_path = self.get_core_path();
+        if !core_path.exists() {
+            return Ok(Some("Missing".to_string())); // Treat missing as update available
+        }
+
+        // Parse "sing-box version 1.12.14..." -> "1.12.14"
+        let output = std::process::Command::new(&core_path)
+            .arg("version")
+            .output()
+            .map_err(|e| format!("Failed to run core: {}", e))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Example output: "sing-box version 1.12.14"
+        let current_version = stdout
+            .split_whitespace()
+            .nth(2)
+            .ok_or("Failed to parse local version")?
+            .to_string();
+
+        // 2. Fetch latest release from GitHub
+        let release = self.get_latest_release("SagerNet", "sing-box").await?;
+        let remote_version = release.tag_name.trim_start_matches('v'); // "v1.13.0" -> "1.13.0"
+
+        info!(
+            "Core Update Check: Local={}, Remote={}",
+            current_version, remote_version
+        );
+
+        if remote_version != current_version {
+            // Simple string comparison for now. Ideally semver.
+            // If different, assume update. Lower version is also "update" (downgrade) or just mismatch.
+            // Generally we only care if remote != local.
+            return Ok(Some(release.tag_name));
+        }
+
+        Ok(None)
+    }
+
+    pub async fn update_core(&self) -> Result<(), String> {
+        let release = self.get_latest_release("SagerNet", "sing-box").await?;
+
+        // Determine arch/os
+        let os = "darwin";
+        let arch = if cfg!(target_arch = "aarch64") {
+            "arm64"
+        } else {
+            "amd64"
+        };
+
+        // Find asset
+        // Pattern: *darwin*arm64.tar.gz
+        let asset = release
+            .assets
+            .iter()
+            .find(|a| a.name.contains(os) && a.name.contains(arch) && a.name.ends_with(".tar.gz"))
+            .ok_or(format!("No compatible asset found for {}/{}", os, arch))?;
+
+        info!("Downloading core update: {}", asset.name);
+
+        // Reuse download_core logic but with specific URL
+        self.download_and_install_core(&asset.browser_download_url)
+            .await
+    }
+
+    async fn get_latest_release(&self, owner: &str, repo: &str) -> Result<GitHubRelease, String> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/releases/latest",
+            owner, repo
+        );
+        let client = Client::new();
+        let res = client
+            .get(&url)
+            .header("User-Agent", "Tunnet")
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !res.status().is_success() {
+            return Err(format!("GitHub API Error: {}", res.status()));
+        }
+
+        let release: GitHubRelease = res.json().await.map_err(|e| e.to_string())?;
+        Ok(release)
+    }
+
+    // Refactored from download_core to accept URL
+    async fn download_and_install_core(&self, url: &str) -> Result<(), String> {
+        let client = Client::new();
+        let res = client.get(url).send().await.map_err(|e| e.to_string())?;
+
+        if !res.status().is_success() {
+            return Err(format!("Download failed: {}", res.status()));
+        }
+
+        let mut stream = res.bytes_stream();
+
+        // Prepare temp file
+        let app_local_data = self
+            .app
+            .path()
+            .app_local_data_dir()
+            .map_err(|e| e.to_string())?;
+        let bin_dir = app_local_data.join("bin");
+        if !bin_dir.exists() {
+            fs::create_dir_all(&bin_dir).map_err(|e| e.to_string())?;
+        }
+
+        let temp_tar_path = bin_dir.join("update_sing-box.tar.gz");
+        let mut file = fs::File::create(&temp_tar_path).map_err(|e| e.to_string())?;
+
+        while let Some(item) = stream.next().await {
+            let chunk = item.map_err(|e| e.to_string())?;
+            file.write_all(&chunk).map_err(|e| e.to_string())?;
+        }
+
+        // Extract
+        self.extract_core(&temp_tar_path, &bin_dir)?;
+        let _ = fs::remove_file(temp_tar_path);
+
+        Ok(())
+    }
+}
+
+// Structs for GitHub API
+#[derive(serde::Deserialize, Debug)]
+struct GitHubRelease {
+    tag_name: String,
+    assets: Vec<GitHubAsset>,
+}
+
+#[derive(serde::Deserialize, Debug)]
+struct GitHubAsset {
+    name: String,
+    browser_download_url: String,
 }

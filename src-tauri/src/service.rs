@@ -70,7 +70,14 @@ impl<R: Runtime> ProxyService<R> {
 
         // 4. Generate & Write Config
         self.stage_databases()?;
-        self.write_config(node_opt, tun_mode, &routing_mode)?;
+        let settings = match self.manager.load_settings() {
+            Ok(s) => s,
+            Err(e) => {
+                error!("Failed to load settings: {}", e);
+                crate::settings::AppSettings::default()
+            }
+        };
+        self.write_config(node_opt, tun_mode, &routing_mode, &settings)?;
 
         let config_file_path = self
             .app
@@ -83,7 +90,7 @@ impl<R: Runtime> ProxyService<R> {
         if tun_mode {
             info!("Starting proxy in TUN mode via Helper...");
             let client = crate::helper_client::HelperClient::new();
-            return client
+            let result = client
                 .start_proxy(
                     std::fs::read_to_string(&config_file_path).map_err(|e| e.to_string())?,
                     core_path.to_string_lossy().to_string(),
@@ -95,6 +102,11 @@ impl<R: Runtime> ProxyService<R> {
                         .to_string(),
                 )
                 .map_err(|e| e.to_string());
+
+            if result.is_ok() && settings.system_proxy {
+                self.enable_system_proxy(settings.mixed_port);
+            }
+            return result;
         }
 
         // Local Process Mode
@@ -162,6 +174,10 @@ impl<R: Runtime> ProxyService<R> {
                     return Err(msg);
                 }
 
+                if settings.system_proxy {
+                    self.enable_system_proxy(settings.mixed_port);
+                }
+
                 info!("Proxy core started successfully");
                 *self.child_process.lock().unwrap() = Some(child);
                 Ok(())
@@ -178,14 +194,24 @@ impl<R: Runtime> ProxyService<R> {
         node_opt: Option<crate::profile::Node>,
         tun_mode: bool,
         _routing_mode: &str,
+        settings: &crate::settings::AppSettings,
     ) -> Result<(), String> {
         let app_local_data = self.app.path().app_local_data_dir().unwrap();
         let mut cfg = crate::config::SingBoxConfig::new();
 
         if tun_mode {
-            cfg = cfg.with_tun_inbound();
+            cfg = cfg.with_tun_inbound(settings.tun_mtu);
+        }
+
+        let listen = if settings.allow_lan {
+            "0.0.0.0"
         } else {
-            cfg = cfg.with_mixed_inbound(2080, "mixed-in"); // HTTP+SOCKS
+            "127.0.0.1"
+        };
+
+        cfg = cfg.with_mixed_inbound(settings.mixed_port, "mixed-in", false);
+        if let Some(inbound) = cfg.inbounds.last_mut() {
+            inbound.listen = Some(listen.to_string());
         }
 
         // 1. Add required system outbounds and database paths
@@ -499,12 +525,17 @@ impl<R: Runtime> ProxyService<R> {
         // 1. Stop Local Process
         let mut child_opt = self.child_process.lock().unwrap();
         if let Some(mut child) = child_opt.take() {
-            info!("Stopping proxy core...");
-            match child.kill() {
-                Ok(_) => info!("Proxy core killed"),
-                Err(e) => error!("Failed to kill proxy core: {}", e),
+            info!("Stopping proxy core (SIGTERM)...");
+            // Use 'kill' command to send SIGTERM to allow graceful shutdown (cleanup system proxy)
+            let _ = std::process::Command::new("kill")
+                .arg(child.id().to_string())
+                .output();
+
+            // Wait for it to exit
+            match child.wait() {
+                Ok(status) => info!("Proxy core exited with: {}", status),
+                Err(e) => error!("Failed to wait for proxy core: {}", e),
             }
-            let _ = child.wait(); // prevent zombie
         }
 
         // 2. Stop Helper Process (Blindly try to stop, in case it was running)
@@ -516,6 +547,166 @@ impl<R: Runtime> ProxyService<R> {
             info!("Helper stop request result: {:?}", e);
         } else {
             info!("Helper process stopped successfully");
+        }
+
+        // 3. Manual System Proxy Cleanup (Safety Net)
+        // Even with SIGTERM, sometimes core fails to clean up. We forcibly reset common services.
+        self.disable_system_proxy();
+    }
+
+    fn disable_system_proxy(&self) {
+        info!("Disabling system proxy...");
+        if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
+            .arg("-listallnetworkservices")
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for service in stdout.lines() {
+                if service.contains('*') {
+                    continue;
+                }
+                let s = service.trim();
+                if s.is_empty() {
+                    continue;
+                }
+
+                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setwebproxystate", s, "off"])
+                    .output()
+                {
+                    if !o.status.success() {
+                        error!(
+                            "Failed to unset web proxy: {}",
+                            String::from_utf8_lossy(&o.stderr)
+                        );
+                    }
+                }
+                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setsecurewebproxystate", s, "off"])
+                    .output()
+                {
+                    if !o.status.success() {
+                        error!(
+                            "Failed to unset secure web proxy: {}",
+                            String::from_utf8_lossy(&o.stderr)
+                        );
+                    }
+                }
+                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setsocksfirewallproxystate", s, "off"])
+                    .output()
+                {
+                    if !o.status.success() {
+                        error!(
+                            "Failed to unset socks proxy: {}",
+                            String::from_utf8_lossy(&o.stderr)
+                        );
+                    }
+                }
+            }
+        } else {
+            error!("Failed to list network services");
+            println!("DEBUG: Failed to list network services");
+        }
+    }
+
+    fn enable_system_proxy(&self, port: u16) {
+        info!("Enabling system proxy on port {}...", port);
+        if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
+            .arg("-listallnetworkservices")
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for service in stdout.lines() {
+                if service.contains('*') {
+                    continue;
+                }
+                let s = service.trim();
+                if s.is_empty() {
+                    continue;
+                }
+
+                // HTTP
+                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setwebproxy", s, "127.0.0.1", &port.to_string()])
+                    .output()
+                {
+                    if !o.status.success() {
+                        error!(
+                            "Failed to set web proxy for {}: {}",
+                            s,
+                            String::from_utf8_lossy(&o.stderr)
+                        );
+                    }
+                }
+                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setwebproxystate", s, "on"])
+                    .output()
+                {
+                    if !o.status.success() {
+                        error!(
+                            "Failed to enable web proxy for {}: {}",
+                            s,
+                            String::from_utf8_lossy(&o.stderr)
+                        );
+                    }
+                }
+
+                // HTTPS
+                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setsecurewebproxy", s, "127.0.0.1", &port.to_string()])
+                    .output()
+                {
+                    if !o.status.success() {
+                        error!(
+                            "Failed to set secure web proxy for {}: {}",
+                            s,
+                            String::from_utf8_lossy(&o.stderr)
+                        );
+                    }
+                }
+                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setsecurewebproxystate", s, "on"])
+                    .output()
+                {
+                    if !o.status.success() {
+                        error!(
+                            "Failed to enable secure web proxy for {}: {}",
+                            s,
+                            String::from_utf8_lossy(&o.stderr)
+                        );
+                    }
+                }
+
+                // SOCKS
+                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setsocksfirewallproxy", s, "127.0.0.1", &port.to_string()])
+                    .output()
+                {
+                    if !o.status.success() {
+                        error!(
+                            "Failed to set socks proxy for {}: {}",
+                            s,
+                            String::from_utf8_lossy(&o.stderr)
+                        );
+                    }
+                }
+                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setsocksfirewallproxystate", s, "on"])
+                    .output()
+                {
+                    if !o.status.success() {
+                        error!(
+                            "Failed to enable socks proxy for {}: {}",
+                            s,
+                            String::from_utf8_lossy(&o.stderr)
+                        );
+                    }
+                }
+            }
+        } else {
+            error!("Failed to list network services");
+            println!("DEBUG: Failed to list network services");
         }
     }
 
@@ -606,6 +797,67 @@ impl<R: Runtime> ProxyService<R> {
 
     pub fn get_rules(&self) -> Result<Vec<crate::profile::Rule>, String> {
         self.manager.load_rules()
+    }
+    pub fn get_app_settings(&self) -> Result<crate::settings::AppSettings, String> {
+        self.manager.load_settings()
+    }
+
+    pub async fn save_app_settings(
+        &self,
+        settings: crate::settings::AppSettings,
+    ) -> Result<(), String> {
+        // Load old settings to compare
+        let old_settings = self.manager.load_settings().unwrap_or_default();
+
+        self.manager.save_settings(&settings)?;
+
+        // Handle Launch at Login
+        if settings.launch_at_login != old_settings.launch_at_login {
+            use tauri_plugin_autostart::ManagerExt;
+            if settings.launch_at_login {
+                info!("Enabling launch at login...");
+                let _ = self.app.autolaunch().enable();
+            } else {
+                info!("Disabling launch at login...");
+                let _ = self.app.autolaunch().disable();
+            }
+        }
+
+        // Check if proxy is running (Local OR Helper)
+        let is_running = self.is_proxy_running();
+        if !is_running {
+            return Ok(());
+        }
+
+        // Check if we need a full restart
+        // A full restart is needed if any config affects the Core Config (mtu, mixed_port, dns, etc)
+        // EXCEPT: system_proxy (now handled manually) and UI-only settings (theme, etc - handled by frontend/manager)
+
+        let need_restart = settings.mixed_port != old_settings.mixed_port
+            || settings.tun_stack != old_settings.tun_stack
+            || settings.tun_mtu != old_settings.tun_mtu
+            || settings.strict_route != old_settings.strict_route
+            || settings.allow_lan != old_settings.allow_lan
+            || settings.dns_hijack != old_settings.dns_hijack
+            || settings.dns_strategy != old_settings.dns_strategy
+            || settings.dns_servers != old_settings.dns_servers
+            || settings.log_level != old_settings.log_level;
+
+        if need_restart {
+            info!("Core configuration changed, restarting proxy...");
+            let tun = *self.tun_mode.lock().unwrap();
+            self.restart_proxy_by_config(tun).await?;
+        } else {
+            // If only system_proxy changed (or nothing important changed), handle system proxy toggle
+            if settings.system_proxy != old_settings.system_proxy {
+                if settings.system_proxy {
+                    self.enable_system_proxy(settings.mixed_port);
+                } else {
+                    self.disable_system_proxy();
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn add_node(&self, node: crate::profile::Node) -> Result<(), String> {
@@ -714,7 +966,7 @@ impl<R: Runtime> ProxyService<R> {
             let inbound_tag = format!("in_{}", node.id);
             let outbound_tag = format!("out_{}", node.id);
 
-            cfg = cfg.with_mixed_inbound(*port, &inbound_tag);
+            cfg = cfg.with_mixed_inbound(*port, &inbound_tag, false);
 
             match node.protocol.as_str() {
                 "vmess" => {
@@ -996,7 +1248,7 @@ impl<R: Runtime> ProxyService<R> {
         let inbound_tag = "in_temp";
         let outbound_tag = "out_temp";
 
-        cfg = cfg.with_mixed_inbound(port, inbound_tag);
+        cfg = cfg.with_mixed_inbound(port, inbound_tag, false);
 
         match node.protocol.as_str() {
             "vmess" => {
@@ -1165,7 +1417,7 @@ impl<R: Runtime> ProxyService<R> {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
         if let Ok(Some(status)) = child.try_wait() {
-            let log_content = std::fs::read_to_string(&log_file_path).unwrap_or_default();
+            let _log_content = std::fs::read_to_string(&log_file_path).unwrap_or_default();
             let output_content = output_log.lock().unwrap().clone();
             return Err(format!(
                 "Test process exited early ({}). Path: {}. Output: {}. Config: {}",
@@ -1244,6 +1496,13 @@ impl<R: Runtime> ProxyService<R> {
                 ))
             }
         }
+    }
+    pub async fn check_core_update(&self) -> Result<Option<String>, String> {
+        self.manager.check_core_update().await
+    }
+
+    pub async fn update_core(&self) -> Result<(), String> {
+        self.manager.update_core().await
     }
 }
 

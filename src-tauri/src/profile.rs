@@ -78,7 +78,7 @@ pub struct SubscriptionInfo {
 pub mod parser {
     use super::*;
     use base64::{engine::general_purpose, Engine as _};
-    use log::{info, warn};
+    use log::warn;
     use uuid::Uuid;
 
     #[derive(Debug, Deserialize)]

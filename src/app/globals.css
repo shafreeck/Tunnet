@@ -181,6 +181,17 @@ body {
   background-color: var(--text-tertiary);
 }
 
+/* Global hide spinners for all number inputs */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 @layer base {
   * {
     border-color: var(--border-color);

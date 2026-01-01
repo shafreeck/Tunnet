@@ -4,6 +4,7 @@ mod installer;
 mod manager;
 mod profile;
 mod service;
+pub mod settings;
 
 use service::ProxyService;
 use tauri::{Manager, State};
@@ -197,10 +198,50 @@ async fn url_test(
     service.url_test(node_id).await
 }
 
+#[tauri::command]
+async fn get_app_settings(
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<crate::settings::AppSettings, String> {
+    service.get_app_settings()
+}
+
+#[tauri::command]
+async fn save_app_settings(
+    settings: crate::settings::AppSettings,
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<(), String> {
+    service.save_app_settings(settings).await
+}
+
+#[tauri::command]
+async fn check_singbox_update(
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<Option<String>, String> {
+    service.check_core_update().await
+}
+
+#[tauri::command]
+async fn update_singbox_core(service: State<'_, ProxyService<tauri::Wry>>) -> Result<(), String> {
+    let was_running = service.is_proxy_running();
+    if was_running {
+        service.stop_proxy();
+    }
+
+    let result = service.update_core().await;
+
+    // Users must restart manually or implementing restart logic is complex here
+    // But since we replaced binary, next start will pick it up.
+    result
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -212,6 +253,57 @@ pub fn run() {
 
             let proxy_service = ProxyService::new(app.handle().clone());
             app.manage(proxy_service);
+
+            // System Tray Setup
+            use tauri::menu::{Menu, MenuItem};
+            use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
+
+            let show_i =
+                MenuItem::with_id(app.handle(), "show", "Show Tunnet", true, None::<&str>).unwrap();
+            let quit_i =
+                MenuItem::with_id(app.handle(), "quit", "Quit", true, None::<&str>).unwrap();
+            let menu = Menu::with_items(app.handle(), &[&show_i, &quit_i]).unwrap();
+
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
+            // Handle Start Minimized
+            let service = app.state::<ProxyService<tauri::Wry>>();
+            if let Ok(settings) = service.get_app_settings() {
+                if settings.start_minimized {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.hide();
+                    }
+                }
+            }
 
             Ok(())
         })
@@ -237,7 +329,12 @@ pub fn run() {
             add_rule,
             update_rule,
             delete_rule,
-            url_test
+            delete_rule,
+            url_test,
+            get_app_settings,
+            save_app_settings,
+            check_singbox_update,
+            update_singbox_core
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
