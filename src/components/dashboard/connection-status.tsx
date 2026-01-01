@@ -111,10 +111,7 @@ export function Header({ isConnected, onToggle, isLoading }: HeaderProps) {
         <header className="flex items-center justify-between px-8 py-5 z-30">
             <div data-tauri-drag-region className="flex-1 h-full cursor-default"></div>
             <div className="flex items-center gap-4">
-                <button className="apple-button flex items-center gap-2 text-text-primary px-4 py-1.5 rounded-lg shadow-sm hover:bg-black/5 dark:hover:bg-white/10 active:bg-black/10 dark:active:bg-white/20 transition-all">
-                    <RefreshCw className="size-4" />
-                    <span className="text-xs font-medium">Update</span>
-                </button>
+
                 <button
                     onClick={onToggle}
                     disabled={isLoading}

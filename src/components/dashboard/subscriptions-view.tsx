@@ -21,10 +21,10 @@ interface SubscriptionsViewProps {
     onDelete: (id: string) => void
     onAdd?: () => void
     onSelect?: (id: string) => void
-    isImporting?: boolean
+    onUpdateAll?: () => void
 }
 
-export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelect, isImporting }: SubscriptionsViewProps) {
+export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelect, onUpdateAll, isImporting }: SubscriptionsViewProps) {
 
     // Helper formats
     const formatBytes = (bytes: number, decimals = 1) => {
@@ -49,15 +49,26 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                         <p className="text-sm text-text-secondary font-medium">查看并同步您的节点订阅信息</p>
                     </div>
 
-                    {onAdd && (
-                        <button
-                            onClick={onAdd}
-                            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary-hover transition-colors font-medium text-sm shadow-lg shadow-primary/20 hover:shadow-primary/30 active:scale-95"
-                        >
-                            <PlusCircle size={18} />
-                            <span>导入订阅</span>
-                        </button>
-                    )}
+                    <div className="flex items-center gap-3">
+                        {onUpdateAll && (
+                            <button
+                                onClick={onUpdateAll}
+                                className="flex items-center gap-2 px-4 py-2 bg-card-bg border border-border-color text-text-secondary rounded-xl hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-all font-medium text-sm"
+                            >
+                                <RefreshCw size={18} />
+                                <span>全部更新</span>
+                            </button>
+                        )}
+                        {onAdd && (
+                            <button
+                                onClick={onAdd}
+                                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary-hover transition-colors font-medium text-sm shadow-lg shadow-primary/20 hover:shadow-primary/30 active:scale-95"
+                            >
+                                <PlusCircle size={18} />
+                                <span>导入订阅</span>
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 

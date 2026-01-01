@@ -282,6 +282,26 @@ export default function Home() {
     }
   }
 
+  const handleUpdateAll = async () => {
+    if (isLoading) return
+    setIsLoading(true)
+    toast.info("Updating all subscriptions...")
+    try {
+      // Execute all updates
+      const promises = profiles.map(p => invoke("update_subscription_profile", { id: p.id }))
+      await Promise.allSettled(promises)
+
+      // Refresh list
+      fetchProfiles()
+      toast.success("Update completed")
+    } catch (e: any) {
+      console.error(e)
+      toast.error("Some updates might have failed")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleDeleteProfile = async (id: string) => {
     try {
       await invoke("delete_profile", { id })
@@ -525,6 +545,7 @@ export default function Home() {
             onDelete={handleDeleteProfile}
             onAdd={() => setShowAddModal(true)}
             onSelect={handleSubscriptionSelect}
+            onUpdateAll={handleUpdateAll}
             isImporting={isImporting}
           />
         )
