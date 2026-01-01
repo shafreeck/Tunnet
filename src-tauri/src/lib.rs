@@ -15,7 +15,7 @@ async fn start_proxy(
     node: Option<profile::Node>,
     tun: Option<bool>,
     routing: Option<String>,
-) -> Result<(), String> {
+) -> Result<service::ProxyStatus, String> {
     log::info!(
         "IPC: start_proxy received tun={:?}, routing={:?}",
         tun,
@@ -28,13 +28,17 @@ async fn start_proxy(
             tun.unwrap_or(false),
             routing.unwrap_or("rule".to_string()),
         )
-        .await
+        .await?;
+
+    Ok(state.get_status())
 }
 
 #[tauri::command]
-async fn stop_proxy(service: State<'_, ProxyService<tauri::Wry>>) -> Result<(), String> {
-    service.stop_proxy();
-    Ok(())
+async fn stop_proxy(
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<service::ProxyStatus, String> {
+    service.stop_proxy(true).await;
+    Ok(service.get_status())
 }
 
 #[tauri::command]
@@ -224,7 +228,7 @@ async fn check_singbox_update(
 async fn update_singbox_core(service: State<'_, ProxyService<tauri::Wry>>) -> Result<(), String> {
     let was_running = service.is_proxy_running();
     if was_running {
-        service.stop_proxy();
+        service.stop_proxy(true).await;
     }
 
     let result = service.update_core().await;
@@ -244,9 +248,16 @@ async fn open_main_window(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
+async fn quit_app(
+    app: tauri::AppHandle,
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<(), String> {
+    log::info!("Quitting application...");
+    service.stop_proxy(false).await;
     app.exit(0);
-    Ok(())
+    // Since we prevent exit in the run loop, we might need to force it if app.exit(0) isn't enough
+    // But usually app.exit(0) should be handled. If not, std::process::exit(0) works.
+    std::process::exit(0);
 }
 
 #[tauri::command]
@@ -263,6 +274,13 @@ async fn set_routing_mode_command(
     mode: String,
 ) -> Result<(), String> {
     service.set_routing_mode(&mode).await
+}
+
+#[tauri::command]
+async fn get_proxy_status(
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<service::ProxyStatus, String> {
+    Ok(service.get_status())
 }
 
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -399,7 +417,8 @@ pub fn run() {
             open_main_window,
             quit_app,
             hide_tray_window,
-            set_routing_mode_command
+            set_routing_mode_command,
+            get_proxy_status
         ]);
     builder
         .build(tauri::generate_context!())

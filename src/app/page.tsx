@@ -21,6 +21,8 @@ import { AddNodeModal } from "@/components/dashboard/add-node-modal"
 export default function Home() {
   const [isConnected, setIsConnected] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const isLoadingRef = useRef(false)
+  useEffect(() => { isLoadingRef.current = isLoading }, [isLoading])
 
   // Server Management Lifted State
   const [servers, setServers] = useState<any[]>([]) // Using any for now to match Server interface
@@ -100,15 +102,27 @@ export default function Home() {
     return () => clearInterval(pollTimer)
   }, [tunEnabled])
 
+  const lastPulseIdRef = useRef(0)
+
   // Reactive Proxy Controller (The single source of truth for execution)
   useEffect(() => {
+    const pulseId = ++lastPulseIdRef.current
     const syncProxy = async () => {
       // 1. If we are disconnected, ensure no proxy is running (if it was)
       if (!isConnected) {
         if (lastAppliedConfigRef.current) {
           console.log("Disconnecting proxy...")
-          await invoke("stop_proxy").catch(console.error)
-          lastAppliedConfigRef.current = null
+          setIsLoading(true)
+          try {
+            const result: any = await invoke("stop_proxy")
+            if (pulseId !== lastPulseIdRef.current) return
+            setIsConnected(result.is_running)
+            lastAppliedConfigRef.current = null
+          } catch (e) {
+            console.error("Failed to stop proxy", e)
+          } finally {
+            setIsLoading(false)
+          }
         }
         return
       }
@@ -139,13 +153,17 @@ export default function Home() {
       })
 
       try {
-        await promise
+        const result: any = await promise
+        if (pulseId !== lastPulseIdRef.current) return
+
         lastAppliedConfigRef.current = currentConfigKey
+        // Sync state from return value to be sure
+        setIsConnected(result.is_running)
+        setTunEnabled(result.tun_mode)
+        setProxyMode(result.routing_mode as any)
       } catch (e) {
         console.error("Failed to sync proxy", e)
-        // If it failed to start, we should probably set isConnected to false?
-        // But for hot-reload, we might want to stay "connected" but in previous state.
-        // For simplicity:
+        if (pulseId !== lastPulseIdRef.current) return
         if (!lastAppliedConfigRef.current) setIsConnected(false)
       } finally {
         setIsLoading(false)
@@ -154,6 +172,19 @@ export default function Home() {
 
     syncProxy()
   }, [isConnected, proxyMode, tunEnabled])
+
+  // Watch and persist active node ID
+  useEffect(() => {
+    if (activeServerId) {
+      invoke("get_app_settings").then((settings: any) => {
+        if (settings.active_node_id !== activeServerId) {
+          invoke("save_app_settings", {
+            settings: { ...settings, active_node_id: activeServerId }
+          }).catch(console.error)
+        }
+      }).catch(console.error)
+    }
+  }, [activeServerId])
 
   useEffect(() => {
     // Init: Load logs listener
@@ -178,7 +209,58 @@ export default function Home() {
     // Init: Load stored profiles and nodes
     fetchProfiles()
 
-    return () => { unlisten.then(f => f()) }
+    // Init: Load current proxy status from backend
+    invoke("get_proxy_status").then((status: any) => {
+      if (status.is_running) {
+        setIsConnected(true)
+        if (status.node) {
+          setActiveServerId(status.node.id)
+        }
+        if (status.routing_mode) {
+          setProxyMode(status.routing_mode)
+        }
+        setTunEnabled(status.tun_mode)
+
+        // Prevent immediate reload by setting lastAppliedConfigRef
+        const nodeId = status.node?.id
+        if (nodeId) {
+          lastAppliedConfigRef.current = `${nodeId}:${status.routing_mode}:${status.tun_mode}`
+        }
+      } else {
+        // If not running, load the persisted active node ID from settings
+        invoke("get_app_settings").then((settings: any) => {
+          if (settings.active_node_id) {
+            setActiveServerId(settings.active_node_id)
+          }
+        }).catch(console.error)
+      }
+    }).catch(console.error)
+
+    // Listen for proxy status change from other windows (e.g. tray)
+    const unlistenStatus = listen<any>("proxy-status-change", (event) => {
+      // If we are currently loading a local change, ignore background events
+      // to avoid race conditions with intermediate status changes (e.g. during restart)
+      if (isLoadingRef.current) return;
+
+      const status = event.payload
+      setIsConnected(status.is_running)
+      if (status.node) {
+        setActiveServerId(status.node.id)
+      }
+      if (status.routing_mode) {
+        setProxyMode(status.routing_mode)
+      }
+      setTunEnabled(status.tun_mode)
+      // Sync ref to avoid restart loop
+      if (status.node) {
+        lastAppliedConfigRef.current = `${status.node.id}:${status.routing_mode}:${status.tun_mode}`
+      }
+    })
+
+    return () => {
+      unlisten.then(f => f())
+      unlistenStatus.then(f => f())
+    }
   }, [])
 
   const fetchProfiles = () => {

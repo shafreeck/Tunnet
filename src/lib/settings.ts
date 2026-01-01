@@ -22,6 +22,7 @@ export interface AppSettings {
 
     // Advanced
     log_level: string
+    active_node_id?: string
 }
 
 export const defaultSettings: AppSettings = {
@@ -39,6 +40,7 @@ export const defaultSettings: AppSettings = {
     dns_strategy: "ipv4",
     dns_servers: "8.8.8.8\n1.1.1.1",
     log_level: "info",
+    active_node_id: undefined,
 }
 
 export async function getAppSettings(): Promise<AppSettings> {

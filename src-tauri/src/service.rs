@@ -2,7 +2,16 @@ use crate::manager::CoreManager;
 use log::{error, info, warn};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
+use sysinfo::System;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
+
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct ProxyStatus {
+    pub is_running: bool,
+    pub node: Option<crate::profile::Node>,
+    pub tun_mode: bool,
+    pub routing_mode: String,
+}
 
 pub struct ProxyService<R: Runtime> {
     app: AppHandle<R>,
@@ -59,7 +68,8 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         // Full restart required (e.g., switched TUN mode or not running)
-        self.stop_proxy();
+        self.stop_proxy_internal(false).await;
+
         // Give OS a small grace period to release TUN interface resources
         tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
@@ -70,6 +80,7 @@ impl<R: Runtime> ProxyService<R> {
 
         // 4. Generate & Write Config
         self.stage_databases()?;
+
         let settings = match self.manager.load_settings() {
             Ok(s) => s,
             Err(e) => {
@@ -77,6 +88,7 @@ impl<R: Runtime> ProxyService<R> {
                 crate::settings::AppSettings::default()
             }
         };
+
         self.write_config(node_opt, tun_mode, &routing_mode, &settings)?;
 
         let config_file_path = self
@@ -103,8 +115,11 @@ impl<R: Runtime> ProxyService<R> {
                 )
                 .map_err(|e| e.to_string());
 
-            if result.is_ok() && settings.system_proxy {
-                self.enable_system_proxy(settings.mixed_port);
+            if result.is_ok() {
+                if settings.system_proxy {
+                    self.enable_system_proxy(settings.mixed_port);
+                }
+                let _ = self.app.emit("proxy-status-change", self.get_status());
             }
             return result;
         }
@@ -180,6 +195,7 @@ impl<R: Runtime> ProxyService<R> {
 
                 info!("Proxy core started successfully");
                 *self.child_process.lock().unwrap() = Some(child);
+                let _ = self.app.emit("proxy-status-change", self.get_status());
                 Ok(())
             }
             Err(e) => {
@@ -304,21 +320,23 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         // Insert SNIFF rule at the top for TUN mode
-        final_rules.insert(
-            0,
-            crate::config::RouteRule {
-                inbound: Some(vec!["tun-in".to_string()]),
-                protocol: None,
-                domain: None,
-                domain_suffix: None,
-                domain_keyword: None,
-                ip_cidr: None,
-                port: None,
-                outbound: None,
-                rule_set: None,
-                action: Some("sniff".to_string()),
-            },
-        );
+        if tun_mode {
+            final_rules.insert(
+                0,
+                crate::config::RouteRule {
+                    inbound: Some(vec!["tun-in".to_string()]),
+                    protocol: None,
+                    domain: None,
+                    domain_suffix: None,
+                    domain_keyword: None,
+                    ip_cidr: None,
+                    port: None,
+                    outbound: None,
+                    rule_set: None,
+                    action: Some("sniff".to_string()),
+                },
+            );
+        }
 
         let mut default_policy = "proxy"; // Default fallback
 
@@ -504,10 +522,48 @@ impl<R: Runtime> ProxyService<R> {
         // 2. Check helper (if tun)
         let client = crate::helper_client::HelperClient::new();
         if let Ok(running) = client.check_status() {
-            return running;
+            if running {
+                return true;
+            }
+        }
+
+        // 3. Check for orphan processes (Support recovery after UI crash)
+        let core_path = self.manager.get_core_path();
+        let core_canon = std::fs::canonicalize(&core_path).unwrap_or(core_path);
+
+        let mut sys = System::new();
+        sys.refresh_processes();
+        for process in sys.processes().values() {
+            if let Some(exe) = process.exe() {
+                let exe_canon = std::fs::canonicalize(exe).unwrap_or(exe.to_path_buf());
+                if exe_canon == core_canon {
+                    return true;
+                }
+            }
         }
 
         false
+    }
+
+    pub fn get_status(&self) -> ProxyStatus {
+        let is_running = self.is_proxy_running();
+
+        // Infer TUN mode from reality if memory is empty
+        let helper_running = crate::helper_client::HelperClient::new()
+            .check_status()
+            .unwrap_or(false);
+        let current_tun = if is_running {
+            helper_running || *self.tun_mode.lock().unwrap()
+        } else {
+            *self.tun_mode.lock().unwrap()
+        };
+
+        ProxyStatus {
+            is_running,
+            node: self.latest_node.lock().unwrap().clone(),
+            tun_mode: current_tun,
+            routing_mode: self.latest_routing_mode.lock().unwrap().clone(),
+        }
     }
 
     /// Helper to restart the proxy with the current in-memory state.
@@ -521,93 +577,166 @@ impl<R: Runtime> ProxyService<R> {
         return Box::pin(self.start_proxy(node, tun_mode, routing_mode)).await;
     }
 
-    pub fn stop_proxy(&self) {
-        // 1. Stop Local Process
-        let mut child_opt = self.child_process.lock().unwrap();
-        if let Some(mut child) = child_opt.take() {
-            info!("Stopping proxy core (SIGTERM)...");
-            // Use 'kill' command to send SIGTERM to allow graceful shutdown (cleanup system proxy)
+    pub async fn stop_proxy(&self, broadcast: bool) {
+        let _lock = self.start_lock.lock().await;
+        self.stop_proxy_internal(broadcast).await;
+    }
+
+    async fn stop_proxy_internal(&self, broadcast: bool) {
+        let mut cleanup_performed = false;
+        let child_to_wait = { self.child_process.lock().unwrap().take() };
+
+        if let Some(mut child) = child_to_wait {
+            cleanup_performed = true;
+            let pid = child.id();
+            info!("Stopping local proxy core (pid: {})...", pid);
             let _ = std::process::Command::new("kill")
-                .arg(child.id().to_string())
+                .arg(pid.to_string())
                 .output();
 
-            // Wait for it to exit
-            match child.wait() {
-                Ok(status) => info!("Proxy core exited with: {}", status),
-                Err(e) => error!("Failed to wait for proxy core: {}", e),
+            // Wait a bit, if not dead, SIGKILL will be handled by the scan below
+            let _ = tokio::time::timeout(
+                tokio::time::Duration::from_millis(300),
+                tokio::task::spawn_blocking(move || child.wait()),
+            )
+            .await;
+        }
+
+        // 2. Stop Helper Process
+        let client = crate::helper_client::HelperClient::new();
+        if let Ok(_) = client.stop_proxy() {
+            cleanup_performed = true;
+        }
+
+        // 3. Exhaustive Kill by Executable Path AND Name
+        let core_path = self.manager.get_core_path();
+        let core_canon = std::fs::canonicalize(&core_path).unwrap_or(core_path.clone());
+        let core_name = core_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("sing-box");
+
+        let mut sys = System::new_all();
+        sys.refresh_all();
+
+        for process in sys.processes().values() {
+            let exe_matches = process
+                .exe()
+                .map(|e| std::fs::canonicalize(e).unwrap_or(e.to_path_buf()) == core_canon)
+                .unwrap_or(false);
+            let name_matches = process.name() == core_name;
+
+            if exe_matches || name_matches {
+                info!(
+                    "Killing remaining proxy process (pid: {}, name: {})",
+                    process.pid(),
+                    process.name()
+                );
+                process.kill_with(sysinfo::Signal::Kill);
+                cleanup_performed = true;
             }
         }
 
-        // 2. Stop Helper Process (Blindly try to stop, in case it was running)
-        let client = crate::helper_client::HelperClient::new();
-        // We ignore errors here because helper might not be running or installed
-        if let Err(e) = client.stop_proxy() {
-            // Only log if it's not a connection error (meaning helper is installed but failed)
-            // Actually, for now just debug log it.
-            info!("Helper stop request result: {:?}", e);
-        } else {
-            info!("Helper process stopped successfully");
+        // 4. Emergency Port Clearance (Optional but helpful for port 8804 squatters)
+        if let Ok(settings) = self.manager.load_settings() {
+            if self.kill_port_owner(settings.mixed_port) {
+                cleanup_performed = true;
+            }
         }
 
-        // 3. Manual System Proxy Cleanup (Safety Net)
-        // Even with SIGTERM, sometimes core fails to clean up. We forcibly reset common services.
+        if cleanup_performed {
+            // Mandatory OS port release delay
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        }
+
+        // 5. Cleanup system proxy
         self.disable_system_proxy();
+        if broadcast {
+            let _ = self.app.emit("proxy-status-change", self.get_status());
+        }
+    }
+
+    fn kill_port_owner(&self, port: u16) -> bool {
+        let mut killed = false;
+        // Search for process using this port (TCP/IPv4)
+        if let Ok(output) = std::process::Command::new("lsof")
+            .args(["-ti", &format!(":{}", port)])
+            .output()
+        {
+            let pids = String::from_utf8_lossy(&output.stdout);
+            for pid_str in pids.lines() {
+                if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                    info!("Force killing process {} squatting on port {}", pid, port);
+                    let _ = std::process::Command::new("kill")
+                        .args(["-9", &pid.to_string()])
+                        .output();
+                    killed = true;
+                }
+            }
+        }
+        killed
     }
 
     fn disable_system_proxy(&self) {
-        info!("Disabling system proxy...");
+        info!("Disabling system proxy (targeted)...");
+        // We only really care about Wi-Fi and Ethernet in most cases,
+        // but to be safe we list and check states first to avoid redundant 'off' commands.
         if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
             .arg("-listallnetworkservices")
             .output()
         {
             let stdout = String::from_utf8_lossy(&output.stdout);
             for service in stdout.lines() {
-                if service.contains('*') {
+                if service.contains('*') || service.is_empty() {
                     continue;
                 }
                 let s = service.trim();
-                if s.is_empty() {
-                    continue;
+
+                // Only try to disable if it's actually enabled to save time
+                // Check HTTP proxy status
+                if let Ok(out) = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-getwebproxy", s])
+                    .output()
+                {
+                    let res = String::from_utf8_lossy(&out.stdout);
+                    if res.contains("Enabled: Yes") {
+                        info!("Turning off Web Proxy for {}", s);
+                        let _ = std::process::Command::new("/usr/sbin/networksetup")
+                            .args(["-setwebproxystate", s, "off"])
+                            .output();
+                    }
                 }
 
-                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-setwebproxystate", s, "off"])
+                // Check HTTPS proxy status
+                if let Ok(out) = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-getsecurewebproxy", s])
                     .output()
                 {
-                    if !o.status.success() {
-                        error!(
-                            "Failed to unset web proxy: {}",
-                            String::from_utf8_lossy(&o.stderr)
-                        );
+                    let res = String::from_utf8_lossy(&out.stdout);
+                    if res.contains("Enabled: Yes") {
+                        info!("Turning off Secure Web Proxy for {}", s);
+                        let _ = std::process::Command::new("/usr/sbin/networksetup")
+                            .args(["-setsecurewebproxystate", s, "off"])
+                            .output();
                     }
                 }
-                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-setsecurewebproxystate", s, "off"])
+
+                // Check SOCKS status
+                if let Ok(out) = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-getsocksfirewallproxy", s])
                     .output()
                 {
-                    if !o.status.success() {
-                        error!(
-                            "Failed to unset secure web proxy: {}",
-                            String::from_utf8_lossy(&o.stderr)
-                        );
-                    }
-                }
-                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-setsocksfirewallproxystate", s, "off"])
-                    .output()
-                {
-                    if !o.status.success() {
-                        error!(
-                            "Failed to unset socks proxy: {}",
-                            String::from_utf8_lossy(&o.stderr)
-                        );
+                    let res = String::from_utf8_lossy(&out.stdout);
+                    if res.contains("Enabled: Yes") {
+                        info!("Turning off SOCKS Proxy for {}", s);
+                        let _ = std::process::Command::new("/usr/sbin/networksetup")
+                            .args(["-setsocksfirewallproxystate", s, "off"])
+                            .output();
                     }
                 }
             }
-        } else {
-            error!("Failed to list network services");
-            println!("DEBUG: Failed to list network services");
         }
+        info!("disable_system_proxy finished");
     }
 
     fn enable_system_proxy(&self, port: u16) {
@@ -857,6 +986,7 @@ impl<R: Runtime> ProxyService<R> {
                 }
             }
         }
+        let _ = self.app.emit("settings-update", &settings);
         Ok(())
     }
 
@@ -1559,10 +1689,31 @@ impl<R: Runtime> ProxyService<R> {
 
         Ok(())
     }
+    pub fn stop_proxy_sync(&self) {
+        // 1. Stop Local Process
+        {
+            let mut child_opt = self.child_process.lock().unwrap();
+            if let Some(mut child) = child_opt.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+
+        // 2. Stop Helper
+        let _ = crate::helper_client::HelperClient::new().stop_proxy();
+
+        // 3. Port Clearance (Quick)
+        if let Ok(settings) = self.manager.load_settings() {
+            let _ = self.kill_port_owner(settings.mixed_port);
+        }
+
+        // 4. Cleanup System Proxy
+        self.disable_system_proxy();
+    }
 }
 
 impl<R: Runtime> Drop for ProxyService<R> {
     fn drop(&mut self) {
-        self.stop_proxy();
+        self.stop_proxy_sync();
     }
 }
