@@ -77,6 +77,10 @@ export function RulesView() {
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingRule, setEditingRule] = useState<Rule | null>(null)
     const [currentlyApplying, setCurrentlyApplying] = useState(false)
+    const [loadingRuleId, setLoadingRuleId] = useState<string | null>(null)
+    const [loadingDefaultPolicy, setLoadingDefaultPolicy] = useState(false)
+    const [isSavingRule, setIsSavingRule] = useState(false)
+    const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null)
     const [dialogData, setDialogData] = useState<Partial<Rule>>({
         type: "DOMAIN",
         value: "",
@@ -197,6 +201,8 @@ export function RulesView() {
 
     const handleDeleteRule = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation()
+        if (deletingRuleId) return
+        setDeletingRuleId(id)
         try {
             const newRules = rules.filter(r => r.id !== id)
             await saveRulesToBackend(newRules, defaultPolicy)
@@ -207,6 +213,8 @@ export function RulesView() {
             toast.success(t('rules.toast.rule_deleted'))
         } catch (err) {
             toast.error(t('rules.toast.delete_failed'))
+        } finally {
+            setDeletingRuleId(null)
         }
     }
 
@@ -215,6 +223,8 @@ export function RulesView() {
             toast.error(t('rules.toast.value_required'))
             return
         }
+        if (isSavingRule) return
+        setIsSavingRule(true)
         try {
             let newRules: Rule[]
             if (editingRule) {
@@ -229,6 +239,8 @@ export function RulesView() {
             toast.success(editingRule ? t('rules.toast.rule_updated') : t('rules.toast.rule_added'))
         } catch (err) {
             toast.error(t('rules.toast.save_failed'))
+        } finally {
+            setIsSavingRule(false)
         }
     }
 
@@ -240,6 +252,8 @@ export function RulesView() {
 
     const handleCycleRulePolicy = async (rule: Rule, e: React.MouseEvent) => {
         e.stopPropagation()
+        if (loadingRuleId) return
+        setLoadingRuleId(rule.id)
         const nextPolicy = getNextPolicy(rule.policy)
         try {
             const newRules = rules.map(r => r.id === rule.id ? { ...r, policy: nextPolicy } as Rule : r)
@@ -250,19 +264,26 @@ export function RulesView() {
             // Revert on failure
             setRules(rules)
             toast.error(t('rules.toast.save_failed'))
+        } finally {
+            setLoadingRuleId(null)
         }
     }
 
     const handleCycleDefaultPolicy = async (e: React.MouseEvent) => {
         e.stopPropagation()
+        if (loadingDefaultPolicy) return
+        setLoadingDefaultPolicy(true)
         const nextPolicy = getNextPolicy(defaultPolicy)
         try {
             await saveRulesToBackend(rules, nextPolicy)
+            setDefaultPolicy(nextPolicy)
             switchToCustom(rules, nextPolicy)
             toast.success(t('rules.toast.rule_updated'))
         } catch (err) {
             setDefaultPolicy(defaultPolicy)
             toast.error(t('rules.toast.save_failed'))
+        } finally {
+            setLoadingDefaultPolicy(false)
         }
     }
 
@@ -399,15 +420,36 @@ export function RulesView() {
                                 <div className="flex items-center gap-8">
                                     <button
                                         onClick={(e) => handleCycleRulePolicy(rule, e)}
+                                        disabled={loadingRuleId === rule.id}
                                         className={cn(
-                                            "px-3 py-1 rounded-full text-[10px] font-bold border tracking-widest uppercase w-20 text-center cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md",
-                                            getPolicyColor(rule.policy)
+                                            "px-3 py-1 rounded-full text-[10px] font-bold border tracking-widest uppercase w-20 text-center cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center",
+                                            getPolicyColor(rule.policy),
+                                            loadingRuleId === rule.id ? "opacity-70 cursor-wait" : ""
                                         )}>
-                                        {t(`rules.policies.${rule.policy.toLowerCase()}` as any)}
+                                        {loadingRuleId === rule.id ? (
+                                            <Loader2 size={12} className="animate-spin" />
+                                        ) : (
+                                            t(`rules.policies.${rule.policy.toLowerCase()}` as any)
+                                        )}
                                     </button>
                                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
                                         <button onClick={(e) => { setEditingRule(rule); setDialogData({ ...rule }); setIsDialogOpen(true); }} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><Edit2 size={16} /></button>
-                                        <button onClick={(e) => handleDeleteRule(rule.id, e)} className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all"><Trash2 size={16} /></button>
+                                        <button
+                                            onClick={(e) => handleDeleteRule(rule.id, e)}
+                                            disabled={deletingRuleId === rule.id}
+                                            className={cn(
+                                                "p-2 rounded-xl transition-all",
+                                                deletingRuleId === rule.id
+                                                    ? "text-red-400 bg-red-400/10 cursor-wait"
+                                                    : "text-gray-400 hover:text-red-400 hover:bg-red-400/10"
+                                            )}
+                                        >
+                                            {deletingRuleId === rule.id ? (
+                                                <Loader2 size={16} className="animate-spin" />
+                                            ) : (
+                                                <Trash2 size={16} />
+                                            )}
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -432,11 +474,17 @@ export function RulesView() {
                     <div className="h-8 w-px bg-white/10 mx-2" />
                     <button
                         onClick={handleCycleDefaultPolicy}
+                        disabled={loadingDefaultPolicy}
                         className={cn(
-                            "px-4 py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase border cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md",
-                            getPolicyColor(defaultPolicy)
+                            "px-4 py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase border cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md min-w-[80px] flex items-center justify-center",
+                            getPolicyColor(defaultPolicy),
+                            loadingDefaultPolicy ? "opacity-70 cursor-wait" : ""
                         )}>
-                        {t(`rules.policies.${defaultPolicy.toLowerCase()}` as any)}
+                        {loadingDefaultPolicy ? (
+                            <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                            t(`rules.policies.${defaultPolicy.toLowerCase()}` as any)
+                        )}
                     </button>
                 </div>
             </div>
@@ -472,8 +520,18 @@ export function RulesView() {
                             </div>
                         </div>
                         <div className="px-10 py-8 border-t border-border-color bg-sidebar-bg flex justify-end gap-4">
-                            <button onClick={() => setIsDialogOpen(false)} className="px-6 py-3 rounded-2xl text-xs font-bold text-text-secondary hover:text-text-primary transition-all">{t('rules.dialog.cancel')}</button>
-                            <button onClick={handleSaveRule} className="px-8 py-3 rounded-2xl text-xs font-bold bg-primary hover:bg-primary-hover text-white transition-all shadow-xl shadow-primary/20 scale-100 active:scale-95">{t('rules.dialog.save')}</button>
+                            <button onClick={() => setIsDialogOpen(false)} disabled={isSavingRule} className="px-6 py-3 rounded-2xl text-xs font-bold text-text-secondary hover:text-text-primary transition-all">{t('rules.dialog.cancel')}</button>
+                            <button
+                                onClick={handleSaveRule}
+                                disabled={isSavingRule}
+                                className={cn(
+                                    "px-8 py-3 rounded-2xl text-xs font-bold bg-primary hover:bg-primary-hover text-white transition-all shadow-xl shadow-primary/20 scale-100 active:scale-95 flex items-center gap-2",
+                                    isSavingRule ? "opacity-70 cursor-wait active:scale-100" : ""
+                                )}
+                            >
+                                {isSavingRule && <Loader2 size={14} className="animate-spin" />}
+                                {t('rules.dialog.save')}
+                            </button>
                         </div>
                     </div>
                 </div>
