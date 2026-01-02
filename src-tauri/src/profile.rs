@@ -64,6 +64,8 @@ pub struct Node {
     pub down: Option<String>,
     pub obfs: Option<String>, // Obfs type
     pub obfs_password: Option<String>,
+    #[serde(default)]
+    pub ping: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -158,6 +160,7 @@ pub mod parser {
                         down: None,
                         obfs: None,
                         obfs_password: None,
+                        ping: None,
                     };
 
                     // Map specific fields
@@ -294,6 +297,7 @@ pub mod parser {
                         down: None,
                         obfs: None,
                         obfs_password: None,
+                        ping: None,
                     });
                 } else {
                     // Try legacy format: security:uuid@host:port
@@ -358,6 +362,7 @@ pub mod parser {
                                     down: None,
                                     obfs: None,
                                     obfs_password: None,
+                                    ping: None,
                                 });
                             }
                         }
@@ -408,6 +413,7 @@ pub mod parser {
                             down: None,
                             obfs: None,
                             obfs_password: None,
+                            ping: None,
                         };
 
                         if let Some(q) = query {
@@ -482,6 +488,7 @@ pub mod parser {
                             down: None,
                             obfs: None,
                             obfs_password: None,
+                            ping: None,
                         };
 
                         if let Some(q) = query {
@@ -551,6 +558,7 @@ pub mod parser {
                             down: None,
                             obfs: None,
                             obfs_password: None,
+                            ping: None,
                         };
 
                         if let Some(q) = query {
@@ -614,6 +622,7 @@ pub mod parser {
                             down: None,
                             obfs: None,
                             obfs_password: None,
+                            ping: None,
                         };
 
                         if let Some(q) = query {

@@ -887,6 +887,17 @@ impl<R: Runtime> ProxyService<R> {
     }
 
     // Refetch/Update a profile
+    pub fn rename_profile(&self, id: &str, new_name: &str) -> Result<(), String> {
+        let mut profiles = self.manager.load_profiles()?;
+        if let Some(profile) = profiles.iter_mut().find(|p| p.id == id) {
+            profile.name = new_name.to_string();
+            self.manager.save_profiles(&profiles)?;
+            Ok(())
+        } else {
+            Err(format!("Profile {} not found", id))
+        }
+    }
+
     pub async fn update_subscription_profile(&self, profile_id: &str) -> Result<(), String> {
         let mut profiles = self.manager.load_profiles().unwrap_or_default();
         if let Some(pos) = profiles.iter().position(|p| p.id == profile_id) {
@@ -1338,6 +1349,240 @@ impl<R: Runtime> ProxyService<R> {
         Ok(())
     }
 
+    pub async fn probe_nodes_latency(&self, node_ids: Vec<String>) -> Result<(), String> {
+        let mut profiles = self.manager.load_profiles()?;
+
+        // 2. Prepare probing plan: (Node, port)
+        let mut probe_plan = Vec::new();
+        for profile in &profiles {
+            for node in &profile.nodes {
+                if node_ids.contains(&node.id) {
+                    // Alloc port
+                    match std::net::TcpListener::bind("127.0.0.1:0") {
+                        Ok(l) => {
+                            if let Ok(addr) = l.local_addr() {
+                                probe_plan.push((node.clone(), addr.port()));
+                            }
+                        }
+                        Err(e) => warn!("Failed to bind ephemeral port: {}", e),
+                    }
+                }
+            }
+        }
+
+        if probe_plan.is_empty() {
+            return Ok(());
+        }
+
+        // 3. Gen Config
+        let mut cfg = crate::config::SingBoxConfig::new(None);
+        cfg.dns = None;
+
+        if let Some(route) = &mut cfg.route {
+            route.rules.clear();
+            route.default_domain_resolver = None;
+        }
+
+        // Disable cache file
+        if let Some(exp) = &mut cfg.experimental {
+            if let Some(cache) = &mut exp.cache_file {
+                cache.enabled = false;
+            }
+        }
+
+        for (node, port) in &probe_plan {
+            let inbound_tag = format!("in_{}", node.id);
+            let outbound_tag = format!("out_{}", node.id);
+
+            cfg = cfg.with_mixed_inbound(*port, &inbound_tag, false);
+
+            match node.protocol.as_str() {
+                "vmess" => {
+                    cfg = cfg.with_vmess_outbound(
+                        &outbound_tag,
+                        node.server.clone(),
+                        node.port,
+                        node.uuid.clone().unwrap(),
+                        node.cipher.clone().unwrap_or("auto".to_string()),
+                        0, // alter_id
+                        node.network.clone(),
+                        node.path.clone(),
+                        node.host.clone(),
+                        node.tls,
+                    );
+                }
+                "shadowsocks" | "ss" => {
+                    cfg = cfg.with_shadowsocks_outbound(
+                        &outbound_tag,
+                        node.server.clone(),
+                        node.port,
+                        node.cipher
+                            .clone()
+                            .unwrap_or("chacha20-ietf-poly1305".to_string()),
+                        node.password.clone().unwrap_or_default(),
+                    );
+                }
+                "trojan" => {
+                    cfg = cfg.with_trojan_outbound(
+                        &outbound_tag,
+                        node.server.clone(),
+                        node.port,
+                        node.password.clone().unwrap_or_default(),
+                        node.network.clone(),
+                        node.path.clone(),
+                        node.host.clone(),
+                        node.sni.clone(),
+                        node.insecure,
+                    );
+                }
+                "vless" => {
+                    cfg = cfg.with_vless_outbound(
+                        &outbound_tag,
+                        node.server.clone(),
+                        node.port,
+                        node.uuid.clone().unwrap_or_default(),
+                        node.flow.clone(),
+                        node.network.clone(),
+                        node.path.clone(),
+                        node.host.clone(),
+                        node.tls,
+                        node.insecure,
+                        node.sni.clone(),
+                        node.alpn.clone(),
+                    );
+                }
+                "hysteria2" | "hy2" => {
+                    let up_mbps = node.up.as_ref().and_then(|s| s.parse().ok());
+                    let down_mbps = node.down.as_ref().and_then(|s| s.parse().ok());
+                    cfg = cfg.with_hysteria2_outbound(
+                        &outbound_tag,
+                        node.server.clone(),
+                        node.port,
+                        node.password.clone().unwrap_or_default(),
+                        node.sni.clone(),
+                        node.insecure,
+                        node.alpn.clone(),
+                        up_mbps,
+                        down_mbps,
+                        node.obfs.clone(),
+                        node.obfs_password.clone(),
+                    );
+                }
+                "tuic" => {
+                    cfg = cfg.with_tuic_outbound(
+                        &outbound_tag,
+                        node.server.clone(),
+                        node.port,
+                        node.uuid.clone().unwrap_or_default(),
+                        node.password.clone(),
+                        node.sni.clone(),
+                        node.insecure,
+                        node.alpn.clone(),
+                        None,
+                        None,
+                    );
+                }
+                _ => {
+                    continue;
+                }
+            }
+
+            if let Some(route) = &mut cfg.route {
+                route.rules.push(crate::config::RouteRule {
+                    inbound: Some(vec![inbound_tag]),
+                    protocol: None,
+                    domain: None,
+                    domain_suffix: None,
+                    domain_keyword: None,
+                    ip_cidr: None,
+                    port: None,
+                    outbound: Some(outbound_tag.to_string()),
+                    rule_set: None,
+                    action: None,
+                });
+            }
+        }
+
+        let app_local_data = self.app.path().app_local_data_dir().unwrap();
+        let config_file_path = app_local_data.join("ping_config.json");
+        let json = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
+        std::fs::write(&config_file_path, &json).map_err(|e| e.to_string())?;
+
+        let core_path = self.manager.get_core_path();
+        let mut cmd = Command::new(core_path);
+        cmd.arg("run")
+            .arg("-c")
+            .arg(&config_file_path)
+            .arg("-D")
+            .arg(&app_local_data);
+
+        cmd.stdout(Stdio::null()).stderr(Stdio::null());
+
+        let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+
+        // Wait for startup
+        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+
+        let mut futures = Vec::new();
+
+        for (node, port) in probe_plan {
+            let url = "http://www.gstatic.com/generate_204";
+            let proxy_url = format!("http://127.0.0.1:{}", port);
+
+            futures.push(tokio::spawn(async move {
+                let proxy = match reqwest::Proxy::all(&proxy_url) {
+                    Ok(p) => p,
+                    Err(_) => return None,
+                };
+                let client = match reqwest::Client::builder()
+                    .proxy(proxy)
+                    .timeout(std::time::Duration::from_secs(5))
+                    .build()
+                {
+                    Ok(c) => c,
+                    Err(_) => return None,
+                };
+
+                let start_time = std::time::Instant::now();
+
+                match client.get(url).send().await {
+                    Ok(res) => {
+                        let duration = start_time.elapsed().as_millis() as u64;
+                        // Accept 204 or success (some captive portals return 200)
+                        if res.status().is_success() {
+                            Some((node.id, duration))
+                        } else {
+                            None
+                        }
+                    }
+                    Err(_) => None,
+                }
+            }));
+        }
+
+        let results = futures_util::future::join_all(futures).await;
+
+        let _ = child.kill();
+
+        let mut updates = std::collections::HashMap::new();
+        for res in results {
+            if let Ok(Some((id, latency))) = res {
+                updates.insert(id, latency);
+            }
+        }
+
+        for p in &mut profiles {
+            for n in &mut p.nodes {
+                if let Some(ping) = updates.get(&n.id) {
+                    n.ping = Some(*ping);
+                }
+            }
+        }
+        self.manager.save_profiles(&profiles)?;
+
+        Ok(())
+    }
+
     pub async fn url_test(&self, node_id: String) -> Result<u64, String> {
         let profiles = self.manager.load_profiles()?;
         let mut target_node: Option<crate::profile::Node> = None;
@@ -1583,7 +1828,7 @@ impl<R: Runtime> ProxyService<R> {
             ));
         }
 
-        let url = "http://ip-api.com/json";
+        let url = "http://www.gstatic.com/generate_204";
         let proxy_url = format!("http://127.0.0.1:{}", port);
 
         let client_builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(5));
@@ -1617,15 +1862,38 @@ impl<R: Runtime> ProxyService<R> {
             }
 
             result = client.get(url).send().await.map_err(|e| e.to_string());
-            if result.is_ok() {
-                break;
+            if result.is_ok()
+                || result
+                    .as_ref()
+                    .err()
+                    .map_or(false, |e| !e.contains("refused") && !e.contains("reset"))
+            {
+                // If we get a response (any response) or a non-connection error, we break
+                // But we need a success for ping
+                if let Ok(res) = &result {
+                    if res.status().is_success() {
+                        break;
+                    }
+                }
+                // If not success but connected?
+                // For now let's retry connection errors only.
+                // If response status is error, we might accept it as "connected"?
+                // generate_204 returns 204 success usually.
             }
+
             if let Err(ref e) = result {
                 // If refused, it might be that the process hasn't bound the port yet or just died
-                if e.contains("refused") || e.contains("reset") {
+                if e.contains("refused") || e.contains("reset") || e.contains("closed") {
                     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                     attempts += 1;
                     continue;
+                }
+            } else if let Ok(ref res) = result {
+                if !res.status().is_success() {
+                    // Connected but bad status?
+                    // Treat as success for timing?
+                    // No, let's treat as success.
+                    break;
                 }
             }
             break;
@@ -1634,11 +1902,17 @@ impl<R: Runtime> ProxyService<R> {
         let _ = child.kill();
 
         match result {
-            Ok(_) => {
+            Ok(res) => {
                 let _ = child.wait();
                 let _ = std::fs::remove_file(&config_file_path);
                 let _ = std::fs::remove_file(&log_file_path);
-                Ok(start.elapsed().as_millis() as u64)
+
+                if res.status().is_success() {
+                    Ok(start.elapsed().as_millis() as u64)
+                } else {
+                    // Check status
+                    Ok(start.elapsed().as_millis() as u64)
+                }
             }
             Err(e) => {
                 let output_content = output_log.lock().unwrap().clone();

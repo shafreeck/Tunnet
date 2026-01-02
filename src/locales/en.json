@@ -184,6 +184,7 @@
     "toast": {
         "import_success": "Import completed, updating nodes in background...",
         "sub_updated": "Subscription updated",
+        "updating_sub": "Updating subscription...",
         "updating_all": "Updating all subscriptions...",
         "update_completed": "Update completed",
         "update_failed": "Some updates might have failed",
@@ -256,7 +257,10 @@
         "delete_tooltip": "Delete Subscription",
         "no_subs": "No subscriptions found, please import a configuration.",
         "new_subscription": "New Subscription",
-        "local_import": "Local Import"
+        "local_import": "Local Import",
+        "rename": "Rename",
+        "rename_subscription": "Rename Subscription",
+        "enter_new_name": "Enter new name"
     },
     "rules": {
         "title": "Routing Rules",

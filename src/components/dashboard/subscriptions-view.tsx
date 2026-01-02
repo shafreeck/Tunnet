@@ -1,9 +1,12 @@
 "use client"
 
-import React from "react"
-import { RefreshCw, Trash2, Globe, Server, MoreHorizontal, Database, Zap, PlusCircle } from "lucide-react"
+import React, { useState } from "react"
+import { RefreshCw, Trash2, Globe, Server, MoreHorizontal, Database, Zap, PlusCircle, Edit2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
+import { InputModal } from "@/components/ui/input-modal"
+import { invoke } from "@tauri-apps/api/core"
+import { toast } from "sonner"
 
 interface Subscription {
     id: string
@@ -41,6 +44,28 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
     }
 
     const itemsValid = (n?: number) => n !== undefined && n !== null && !isNaN(n)
+
+    const [renamingId, setRenamingId] = useState<string | null>(null)
+    const [renamingName, setRenamingName] = useState("")
+
+    const handleRenameClick = (id: string, currentName: string, e: React.MouseEvent) => {
+        e.stopPropagation()
+        setRenamingId(id)
+        setRenamingName(currentName)
+    }
+
+    const handleRenameConfirm = async (newName: string) => {
+        if (!renamingId) return
+        try {
+            await invoke("rename_profile", { id: renamingId, newName })
+            toast.success(t('subscriptions.rename_success', { defaultValue: 'Renamed successfully' }))
+            onUpdateAll?.() // Refresh list
+        } catch (error) {
+            toast.error(String(error))
+        } finally {
+            setRenamingId(null)
+        }
+    }
 
     const getDisplayName = (name: string) => {
         const lower = name.toLowerCase()
@@ -193,6 +218,13 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                                     </button>
                                                 )}
                                                 <button
+                                                    onClick={(e) => handleRenameClick(profile.id, profile.name, e)}
+                                                    className="p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-90"
+                                                    title={t('subscriptions.rename')}
+                                                >
+                                                    <Edit2 size={16} />
+                                                </button>
+                                                <button
                                                     onClick={(e) => { e.stopPropagation(); onDelete(profile.id); }}
                                                     className="p-2 text-text-secondary hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all active:scale-90"
                                                     title={t('subscriptions.delete_tooltip')}
@@ -208,6 +240,17 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                 </div>
                             )
                         })}
+
+                        <InputModal
+                            isOpen={!!renamingId}
+                            title={t('subscriptions.rename_subscription')}
+                            message={t('subscriptions.enter_new_name')}
+                            defaultValue={renamingName}
+                            confirmText={t('common.confirm', { defaultValue: 'Confirm' })}
+                            cancelText={t('common.cancel', { defaultValue: 'Cancel' })}
+                            onConfirm={handleRenameConfirm}
+                            onCancel={() => setRenamingId(null)}
+                        />
 
                         {profiles.length === 0 && (
                             <div className="col-span-full py-20 flex flex-col items-center justify-center text-gray-600 gap-4">

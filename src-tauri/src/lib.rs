@@ -431,7 +431,9 @@ pub fn run() {
             quit_app,
             hide_tray_window,
             set_routing_mode_command,
-            get_proxy_status
+            get_proxy_status,
+            rename_profile,
+            check_node_pings
         ]);
     builder
         .build(tauri::generate_context!())
@@ -459,10 +461,28 @@ async fn delete_profile(
 }
 
 #[tauri::command]
+async fn rename_profile(
+    service: State<'_, ProxyService<tauri::Wry>>,
+    id: String,
+    new_name: String,
+) -> Result<(), String> {
+    service.rename_profile(&id, &new_name)
+}
+
+#[tauri::command]
 async fn update_subscription_profile(
     service: State<'_, ProxyService<tauri::Wry>>,
     id: String,
 ) -> Result<(), String> {
     service.update_subscription_profile(&id).await
 }
+
+#[tauri::command]
+async fn check_node_pings(
+    service: State<'_, ProxyService<tauri::Wry>>,
+    node_ids: Vec<String>,
+) -> Result<(), String> {
+    service.probe_nodes_latency(node_ids).await
+}
+
 pub mod parsing_test_mod;

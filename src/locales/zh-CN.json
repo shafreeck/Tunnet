@@ -184,6 +184,7 @@
     "toast": {
         "import_success": "导入完成，后台正在更新节点...",
         "sub_updated": "订阅已更新",
+        "updating_sub": "正在更新订阅...",
         "updating_all": "正在更新所有订阅...",
         "update_completed": "更新完成",
         "update_failed": "部分更新可能失败",
@@ -255,7 +256,10 @@
         "delete_tooltip": "删除订阅",
         "no_subs": "暂无订阅信息，请导入配置包",
         "new_subscription": "新订阅",
-        "local_import": "本地导入"
+        "local_import": "本地导入",
+        "rename": "重命名",
+        "rename_subscription": "重命名订阅",
+        "enter_new_name": "请输入新名称"
     },
     "rules": {
         "title": "路由规则",

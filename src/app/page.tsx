@@ -264,7 +264,7 @@ export default function Home() {
     })
 
     // Init: Load stored profiles and nodes
-    fetchProfiles()
+    fetchProfiles(true)
 
     // Init: Load current proxy status from backend
     invoke("get_proxy_status").then((status: any) => {
@@ -357,7 +357,7 @@ export default function Home() {
   const connectionDetailsRef = useRef(connectionDetails)
   useEffect(() => { connectionDetailsRef.current = connectionDetails }, [connectionDetails])
 
-  const fetchProfiles = () => {
+  const fetchProfiles = (checkPing = false) => {
     invoke("get_profiles").then((profiles: any) => {
       setProfiles(profiles.reverse()) // Show newest first
 
@@ -370,6 +370,18 @@ export default function Home() {
       if (lastId && allNodes.find((n: any) => n.id === lastId)) {
         setActiveServerId(lastId)
       }
+
+      if (checkPing && allNodes.length > 0) {
+        checkLatency(allNodes)
+      }
+    }).catch(console.error)
+  }
+
+  const checkLatency = (nodes: any[]) => {
+    const ids = nodes.map((n: any) => n.id)
+    invoke("check_node_pings", { nodeIds: ids }).then(() => {
+      // Reload to reflect pings
+      fetchProfiles(false)
     }).catch(console.error)
   }
 
@@ -383,7 +395,7 @@ export default function Home() {
       countryCode: getCountryCode(node.location?.country || node.name || ""),
       country: getCountryName(node.location?.country || node.name || ""),
       status: "idle",
-      ping: node.location?.latency || 0
+      ping: node.ping ?? node.location?.latency ?? 0
     }))
     setServers(mapped)
   }
@@ -449,13 +461,16 @@ export default function Home() {
   }
 
   const handleUpdateProfile = async (id: string) => {
-    try {
+    const promise = async () => {
       await invoke("update_subscription_profile", { id })
       fetchProfiles()
-      toast.success(t('toast.sub_updated'))
-    } catch (e: any) {
-      toast.error(t('toast.action_failed', { error: e }))
     }
+
+    toast.promise(promise(), {
+      loading: t('toast.updating_sub'),
+      success: t('toast.sub_updated'),
+      error: (e) => t('toast.action_failed', { error: e })
+    })
   }
 
   const handleUpdateAll = async () => {
@@ -713,7 +728,7 @@ export default function Home() {
               }
             }}
             onDelete={handleDeleteNode}
-            onRefresh={fetchProfiles}
+            onRefresh={() => fetchProfiles(true)}
           />
         )
       case "proxies": // Mapped to Subscriptions
