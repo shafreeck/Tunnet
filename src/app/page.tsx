@@ -683,7 +683,7 @@ export default function Home() {
   const [profiles, setProfiles] = useState<any[]>([])
 
   // Derive active subscription stats
-  const activeSubscription = profiles.find(p => p.nodes.some((n: any) => n.id === activeServerId))
+  const activeSubscription = profiles.find(p => p.nodes.some((n: any) => String(n.id) === String(activeServerId))) || profiles[0]
 
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<string | null>(null)
 

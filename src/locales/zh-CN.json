@@ -12,7 +12,9 @@
         "settings": "设置",
         "subscription": "订阅",
         "active": "已激活",
-        "no_active_plan": "无有效订阅"
+        "no_active_plan": "无有效订阅",
+        "expired": "已过期",
+        "unlimited": "不限流量"
     },
     "dashboard": {
         "node_info": "节点信息",

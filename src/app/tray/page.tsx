@@ -363,7 +363,7 @@ export default function TrayPage() {
 
                     {status.is_running && !isTransitioning && (
                         <div className="absolute right-6 top-1/2 -translate-y-1/2">
-                            <div className="size-2.5 bg-white rounded-full animate-pulse shadow-[0_0_10px_white]" />
+                            <div className="size-2.5 bg-primary rounded-full animate-pulse shadow-[0_0_10px_rgba(0,122,255,0.8)]" />
                         </div>
                     )}
                 </button>

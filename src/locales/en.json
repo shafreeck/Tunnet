@@ -12,7 +12,9 @@
         "settings": "Settings",
         "subscription": "Subscription",
         "active": "Active",
-        "no_active_plan": "No active plan"
+        "no_active_plan": "No active plan",
+        "expired": "Expired",
+        "unlimited": "Unlimited"
     },
     "dashboard": {
         "node_info": "Node Info",

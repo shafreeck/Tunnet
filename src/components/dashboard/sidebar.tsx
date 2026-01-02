@@ -92,25 +92,41 @@ export function Sidebar({ currentView, onViewChange, subscription }: SidebarProp
                         "hover:bg-black/5 dark:hover:bg-white/10 active:scale-95"
                     )}
                 >
-                    {total > 0 ? (
+                    {subscription ? (
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-secondary group-hover:text-primary transition-colors">{t('sidebar.subscription')}</span>
-                                <span className="text-[10px] font-medium text-accent-green bg-accent-green/10 px-1.5 py-0.5 rounded">{t('sidebar.active')}</span>
+                                <span className="text-sm font-medium text-secondary group-hover:text-primary transition-colors truncate max-w-[120px]" title={subscription.name || t('sidebar.subscription')}>{subscription.name || t('sidebar.subscription')}</span>
+                                {subscription.expire && subscription.expire * 1000 < Date.now() ? (
+                                    <span className="text-[10px] font-medium text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded">{t('sidebar.expired')}</span>
+                                ) : (
+                                    <span className="text-[10px] font-medium text-accent-green bg-accent-green/10 px-1.5 py-0.5 rounded">{total > 0 ? t('sidebar.active') : t('sidebar.unlimited')}</span>
+                                )}
                             </div>
 
-                            <div className="space-y-1.5">
-                                <div className="h-1 w-full bg-black/5 dark:bg-white/10 rounded-full overflow-hidden">
-                                    <div
-                                        className="h-full bg-primary transition-all duration-500"
-                                        style={{ width: `${percent}%` }}
-                                    />
+                            {total > 0 ? (
+                                <div className="space-y-1.5">
+                                    <div className="h-1 w-full bg-black/5 dark:bg-white/10 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-primary transition-all duration-500"
+                                            style={{ width: `${percent}%` }}
+                                        />
+                                    </div>
+                                    <div className="flex justify-between text-[10px] text-tertiary font-medium">
+                                        <span>{formatBytes(used)}</span>
+                                        <span>{formatBytes(total)}</span>
+                                    </div>
                                 </div>
-                                <div className="flex justify-between text-[10px] text-tertiary font-medium">
-                                    <span>{formatBytes(used)}</span>
-                                    <span>{formatBytes(total)}</span>
+                            ) : (
+                                <div className="space-y-1.5">
+                                    <div className="h-1 w-full bg-black/5 dark:bg-white/10 rounded-full overflow-hidden">
+                                        <div className="h-full bg-accent-green w-full opacity-50" />
+                                    </div>
+                                    <div className="flex justify-between text-[10px] text-tertiary font-medium">
+                                        <span>{formatBytes(used)}</span>
+                                        <span>∞</span>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     ) : (
                         <div className="flex items-center gap-3">
