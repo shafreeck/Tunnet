@@ -172,7 +172,7 @@ impl<R: Runtime> ProxyService<R> {
                     for line in reader.lines() {
                         if let Ok(l) = line {
                             info!("[Core] {}", l);
-                            let _ = app_handle.emit("proxy-log", format!("[INFO] {}", l));
+                            let _ = app_handle.emit("proxy-log", l);
                         }
                     }
                 });
@@ -183,7 +183,7 @@ impl<R: Runtime> ProxyService<R> {
                     for line in reader.lines() {
                         if let Ok(l) = line {
                             error!("[Core] {}", l);
-                            let _ = app_handle_err.emit("proxy-log", format!("[ERR] {}", l));
+                            let _ = app_handle_err.emit("proxy-log", l.clone());
                             // Capture first 10 lines
                             let mut cap = stderr_capture.lock().unwrap();
                             if cap.len() < 10 {

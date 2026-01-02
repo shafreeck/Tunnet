@@ -48,26 +48,98 @@ export function LogViewer({ logs, onClear, filter = "", autoScroll = true, class
 }
 
 function LogLine({ content }: { content: string }) {
-    // Simple colorization logic
-    const lower = content.toLowerCase()
-    let typeClass = "text-text-secondary"
-
-    if (lower.includes("error") || lower.includes("fatal") || lower.includes("panic") || lower.includes("[err]")) {
-        typeClass = "text-red-600 dark:text-red-400"
-    } else if (lower.includes("warn")) {
-        typeClass = "text-amber-600 dark:text-yellow-400"
-    } else if (lower.includes("info")) {
-        typeClass = "text-blue-600 dark:text-blue-300" // Soft blue for info
-    } else if (lower.includes("debug")) {
-        typeClass = "text-gray-500 dark:text-gray-500"
-    }
-
-    // Highlight specific keywords (optional enhancement)
-    // For now, render whole line with type color
+    // Basic ANSI parser
+    const segments = parseAnsi(content)
 
     return (
-        <div className={cn("whitespace-pre-wrap break-all hover:bg-black/5 dark:hover:bg-white/5 px-1 rounded", typeClass)}>
-            {content}
+        <div className="whitespace-pre-wrap break-all hover:bg-black/5 dark:hover:bg-white/5 px-1 rounded text-text-secondary">
+            {segments.map((seg, i) => (
+                <span key={i} className={seg.className}>
+                    {seg.text}
+                </span>
+            ))}
         </div>
     )
 }
+
+interface TextSegment {
+    text: string
+    className?: string
+}
+
+function parseAnsi(text: string): TextSegment[] {
+    const segments: TextSegment[] = []
+    // Regex to match ANSI escape codes: \u001b\[[parameters]m
+    const ansiRegex = /\u001b\[([0-9;]*)m/g
+
+    let lastIndex = 0
+    let match
+    let currentColorClass = ""
+
+    while ((match = ansiRegex.exec(text)) !== null) {
+        // Push text before the code
+        if (match.index > lastIndex) {
+            segments.push({
+                text: text.substring(lastIndex, match.index),
+                className: currentColorClass
+            })
+        }
+
+        // Parse code
+        const codes = match[1].split(';').map(Number)
+
+        for (const code of codes) {
+            if (code === 0) {
+                currentColorClass = "" // Reset
+            } else if (code >= 30 && code <= 37) {
+                // Standard Foreground
+                currentColorClass = getAnsiColorClass(code)
+            } else if (code >= 90 && code <= 97) {
+                // Bright Foreground (Mapping to same or lighter)
+                currentColorClass = getAnsiColorClass(code)
+            } else if (code === 39) {
+                currentColorClass = "" // Default foreground
+            }
+            // Ignore background codes (40-47, 100-107) and styles like bold (1) for now to keep it clean, 
+            // or we could map bold to font-bold.
+        }
+
+        lastIndex = ansiRegex.lastIndex
+    }
+
+    // Push remaining text
+    if (lastIndex < text.length) {
+        segments.push({
+            text: text.substring(lastIndex),
+            className: currentColorClass
+        })
+    }
+
+    return segments
+}
+
+function getAnsiColorClass(code: number): string {
+    switch (code) {
+        case 30: return "text-gray-500" // Black
+        case 31: return "text-red-500" // Red
+        case 32: return "text-green-500" // Green
+        case 33: return "text-yellow-500" // Yellow
+        case 34: return "text-blue-500" // Blue
+        case 35: return "text-purple-500" // Magenta
+        case 36: return "text-cyan-500" // Cyan
+        case 37: return "text-gray-300" // White
+
+        // Bright variants (simplified mapping)
+        case 90: return "text-gray-400"
+        case 91: return "text-red-400"
+        case 92: return "text-green-400"
+        case 93: return "text-yellow-400"
+        case 94: return "text-blue-400"
+        case 95: return "text-purple-400"
+        case 96: return "text-cyan-400"
+        case 97: return "text-white"
+
+        default: return ""
+    }
+}
+
