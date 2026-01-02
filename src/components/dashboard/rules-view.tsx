@@ -5,6 +5,7 @@ import { Plus, Search, Trash2, Edit2, Shield, Globe, Monitor, AlertCircle, Chevr
 import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
+import { useTranslation } from "react-i18next"
 
 interface Rule {
     id: string
@@ -45,7 +46,18 @@ const PRESETS = {
     }
 }
 
+const getPresetName = (name: string, t: any) => {
+    switch (name) {
+        case "Smart Connect": return t('rules.preset.smart')
+        case "Global Proxy": return t('rules.preset.global_proxy')
+        case "Global Direct": return t('rules.preset.global_direct')
+        case "Bypass LAN & CN": return t('rules.preset.bypass_lan_cn')
+        default: return name
+    }
+}
+
 export function RulesView() {
+    const { t } = useTranslation()
     const [rules, setRules] = useState<Rule[]>([])
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedPolicy, setSelectedPolicy] = useState<"ALL" | "PROXY" | "DIRECT" | "REJECT">("ALL")
@@ -106,9 +118,11 @@ export function RulesView() {
                 setCurrentPreset(name)
                 localStorage.setItem("tunnet_rules_preset", name)
                 setIsPresetOpen(false)
-                toast.success(`Applied preset: ${name}`)
+                localStorage.setItem("tunnet_rules_preset", name)
+                setIsPresetOpen(false)
+                toast.success(t('rules.toast.applied_preset', { name: getPresetName(name, t) }))
             } catch (err) {
-                toast.error("Failed to apply preset")
+                toast.error(t('rules.toast.failed_preset'))
             }
         }
     }
@@ -118,16 +132,17 @@ export function RulesView() {
         try {
             const newRules = rules.filter(r => r.id !== id)
             await saveRulesToBackend(newRules, defaultPolicy)
+            await saveRulesToBackend(newRules, defaultPolicy)
             setRules(newRules)
-            toast.success("Rule deleted")
+            toast.success(t('rules.toast.rule_deleted'))
         } catch (err) {
-            toast.error("Failed to delete rule")
+            toast.error(t('rules.toast.delete_failed'))
         }
     }
 
     const handleSaveRule = async () => {
         if (!dialogData.value) {
-            toast.error("Value is required")
+            toast.error(t('rules.toast.value_required'))
             return
         }
         try {
@@ -140,9 +155,9 @@ export function RulesView() {
             await saveRulesToBackend(newRules, defaultPolicy)
             setRules(newRules)
             setIsDialogOpen(false)
-            toast.success(editingRule ? "Rule updated" : "Rule added")
+            toast.success(editingRule ? t('rules.toast.rule_updated') : t('rules.toast.rule_added'))
         } catch (err) {
-            toast.error("Failed to save rule")
+            toast.error(t('rules.toast.save_failed'))
         }
     }
 
@@ -170,8 +185,8 @@ export function RulesView() {
                 <div className="max-w-5xl mx-auto w-full relative z-10 pointer-events-none">
                     <div className="flex items-start justify-between mb-8">
                         <div>
-                            <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">路由规则</h2>
-                            <p className="text-sm text-text-secondary font-medium">配置流量如何通过域名、IP 等特征进行分流</p>
+                            <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">{t('rules.title')}</h2>
+                            <p className="text-sm text-text-secondary font-medium">{t('rules.subtitle')}</p>
                         </div>
                         <div className="flex gap-4 pointer-events-auto">
                             <div className="relative">
@@ -179,8 +194,8 @@ export function RulesView() {
                                     onClick={() => setIsPresetOpen(!isPresetOpen)}
                                     className="flex items-center gap-2 px-4 py-2 bg-card-bg hover:bg-black/5 dark:hover:bg-white/10 rounded-xl text-xs font-bold transition-all border border-border-color"
                                 >
-                                    <span className="opacity-50">预设方案:</span>
-                                    <span>{currentPreset}</span>
+                                    <span className="opacity-50">{t('rules.preset.label')}</span>
+                                    <span>{getPresetName(currentPreset, t)}</span>
                                     <ChevronDown size={14} className="opacity-50" />
                                 </button>
                                 {isPresetOpen && (
@@ -196,7 +211,7 @@ export function RulesView() {
                                                         currentPreset === name ? "text-primary bg-primary/5" : "text-text-secondary"
                                                     )}
                                                 >
-                                                    {name}
+                                                    {getPresetName(name, t)}
                                                     {currentPreset === name && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
                                                 </button>
                                             ))}
@@ -209,7 +224,7 @@ export function RulesView() {
                                 className="flex items-center gap-2 px-6 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-primary/20 scale-100 active:scale-95"
                             >
                                 <Plus size={16} />
-                                新增规则
+                                {t('rules.add_rule')}
                             </button>
                         </div>
                     </div>
@@ -218,7 +233,7 @@ export function RulesView() {
                         <div className="relative flex-1 group">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-text-primary transition-colors" size={16} />
                             <input
-                                placeholder="搜索规则..."
+                                placeholder={t('rules.search_placeholder')}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/20 rounded-xl py-2.5 pl-10 pr-4 text-sm text-text-primary focus:outline-none transition-all font-medium placeholder:text-text-tertiary"
@@ -248,7 +263,7 @@ export function RulesView() {
                     {filteredRules.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-gray-600">
                             <AlertCircle size={40} className="mb-4 opacity-20" />
-                            <p className="text-sm font-medium">未找到相关规则</p>
+                            <p className="text-sm font-medium">{t('rules.no_rules_found')}</p>
                         </div>
                     ) : (
                         filteredRules.map((rule) => (
@@ -293,9 +308,9 @@ export function RulesView() {
                     className="pointer-events-auto glass-card flex items-center gap-4 px-6 py-3 rounded-2xl border-border-color shadow-2xl hover:bg-black/5 dark:hover:bg-white/10 transition-all active:scale-95 group"
                 >
                     <div className="flex flex-col items-start">
-                        <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest leading-none mb-1">默认分流策略</span>
+                        <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest leading-none mb-1">{t('rules.default_policy')}</span>
                         <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-text-primary">所有其它流量</span>
+                            <span className="text-sm font-bold text-text-primary">{t('rules.all_other_traffic')}</span>
                             <div className={cn("size-1.5 rounded-full animate-pulse bg-primary")} />
                         </div>
                     </div>
@@ -315,11 +330,11 @@ export function RulesView() {
                     <div className="fixed inset-0" onClick={() => setIsDialogOpen(false)} />
                     <div className="relative w-full max-w-lg glass-card border border-border-color rounded-[2.5rem] shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300">
                         <div className="px-10 py-8 border-b border-border-color bg-sidebar-bg">
-                            <h3 className="text-xl font-bold text-text-primary tracking-tight">{editingRule ? "编辑路由规则" : "新增路由规则"}</h3>
+                            <h3 className="text-xl font-bold text-text-primary tracking-tight">{editingRule ? t('rules.dialog.edit_title') : t('rules.dialog.add_title')}</h3>
                         </div>
                         <div className="p-10 flex flex-col gap-6">
                             <div className="space-y-3">
-                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-1">规则类型</label>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-1">{t('rules.dialog.type')}</label>
                                 <div className="grid grid-cols-3 gap-2">
                                     {(["DOMAIN", "DOMAIN_SUFFIX", "DOMAIN_KEYWORD", "IP_CIDR", "GEOIP"] as const).map(type => (
                                         <button key={type} onClick={() => setDialogData({ ...dialogData, type })} className={cn("px-2 py-2.5 rounded-xl text-[10px] font-bold border transition-all truncate uppercase tracking-tighter", dialogData.type === type ? "bg-primary border-primary text-white shadow-lg shadow-primary/20" : "bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10")}>{type.replace('_', ' ')}</button>
@@ -327,11 +342,11 @@ export function RulesView() {
                                 </div>
                             </div>
                             <div className="space-y-3">
-                                <label className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest pl-1">特征值</label>
+                                <label className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest pl-1">{t('rules.dialog.value')}</label>
                                 <input value={dialogData.value} onChange={(e) => setDialogData({ ...dialogData, value: e.target.value })} className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/20 rounded-2xl py-3.5 px-5 text-sm text-text-primary focus:outline-none transition-all font-mono" />
                             </div>
                             <div className="space-y-3">
-                                <label className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest pl-1">出口动作</label>
+                                <label className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest pl-1">{t('rules.dialog.policy')}</label>
                                 <div className="flex bg-card-bg p-1.5 rounded-[1.25rem] border border-border-color">
                                     {(["PROXY", "DIRECT", "REJECT"] as const).map(policy => (
                                         <button key={policy} onClick={() => setDialogData({ ...dialogData, policy })} className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-bold transition-all uppercase tracking-widest", dialogData.policy === policy ? (policy === "PROXY" ? "bg-purple-500 text-white shadow-lg" : policy === "DIRECT" ? "bg-emerald-500 text-white shadow-lg" : "bg-red-500 text-white shadow-lg") : "text-text-secondary hover:text-text-primary")}>{policy}</button>
@@ -340,8 +355,8 @@ export function RulesView() {
                             </div>
                         </div>
                         <div className="px-10 py-8 border-t border-border-color bg-sidebar-bg flex justify-end gap-4">
-                            <button onClick={() => setIsDialogOpen(false)} className="px-6 py-3 rounded-2xl text-xs font-bold text-text-secondary hover:text-text-primary transition-all">取消</button>
-                            <button onClick={handleSaveRule} className="px-8 py-3 rounded-2xl text-xs font-bold bg-primary hover:bg-primary-hover text-white transition-all shadow-xl shadow-primary/20 scale-100 active:scale-95">确定保存</button>
+                            <button onClick={() => setIsDialogOpen(false)} className="px-6 py-3 rounded-2xl text-xs font-bold text-text-secondary hover:text-text-primary transition-all">{t('rules.dialog.cancel')}</button>
+                            <button onClick={handleSaveRule} className="px-8 py-3 rounded-2xl text-xs font-bold bg-primary hover:bg-primary-hover text-white transition-all shadow-xl shadow-primary/20 scale-100 active:scale-95">{t('rules.dialog.save')}</button>
                         </div>
                     </div>
                 </div>

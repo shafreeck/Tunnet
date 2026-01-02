@@ -226,5 +226,40 @@
         "refresh_tooltip": "Refresh Subscription",
         "delete_tooltip": "Delete Subscription",
         "no_subs": "No subscriptions found, please import a configuration."
+    },
+    "rules": {
+        "title": "Routing Rules",
+        "subtitle": "Configure how traffic is routed based on domain, IP, and other criteria",
+        "preset": {
+            "label": "Preset:",
+            "smart": "Smart Connect",
+            "global_proxy": "Global Proxy",
+            "global_direct": "Global Direct",
+            "bypass_lan_cn": "Bypass LAN & CN"
+        },
+        "add_rule": "Add Rule",
+        "search_placeholder": "Search rules...",
+        "default_policy": "Default Policy",
+        "all_other_traffic": "All Other Traffic",
+        "no_rules_found": "No rules found",
+        "dialog": {
+            "add_title": "Add Routing Rule",
+            "edit_title": "Edit Routing Rule",
+            "type": "Rule Type",
+            "value": "Value",
+            "policy": "Policy",
+            "cancel": "Cancel",
+            "save": "Save"
+        },
+        "toast": {
+            "applied_preset": "Applied preset: {{name}}",
+            "failed_preset": "Failed to apply preset",
+            "rule_deleted": "Rule deleted",
+            "delete_failed": "Failed to delete rule",
+            "value_required": "Value is required",
+            "rule_updated": "Rule updated",
+            "rule_added": "Rule added",
+            "save_failed": "Failed to save rule"
+        }
     }
 }
