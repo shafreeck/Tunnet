@@ -42,6 +42,13 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
 
     const itemsValid = (n?: number) => n !== undefined && n !== null && !isNaN(n)
 
+    const getDisplayName = (name: string) => {
+        const lower = name.toLowerCase()
+        if (lower === "new subscription" || lower === "新订阅") return t('subscriptions.new_subscription')
+        if (lower === "local import" || lower === "本地导入") return t('subscriptions.local_import')
+        return name
+    }
+
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* Unified Header */}
@@ -125,7 +132,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                                 <Globe size={28} />
                                             </div>
                                             <div className="flex flex-col gap-1 min-w-0">
-                                                <h3 className="font-bold text-text-primary text-lg group-hover:text-primary transition-colors uppercase tracking-tight truncate">{profile.name}</h3>
+                                                <h3 className="font-bold text-text-primary text-lg group-hover:text-primary transition-colors uppercase tracking-tight truncate">{getDisplayName(profile.name)}</h3>
                                                 <span className="text-[10px] font-mono text-text-tertiary truncate" title={profile.url}>
                                                     {profile.url ? profile.url.replace(/^https?:\/\//, '') : t('subscriptions.local_profile')}
                                                 </span>

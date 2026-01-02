@@ -21,6 +21,13 @@ interface SidebarProps {
 export function Sidebar({ currentView, onViewChange, subscription }: SidebarProps) {
     const { t } = useTranslation()
 
+    const getDisplayName = (name: string) => {
+        const lower = name.toLowerCase()
+        if (lower === "new subscription" || lower === "新订阅") return t('subscriptions.new_subscription')
+        if (lower === "local import" || lower === "本地导入") return t('subscriptions.local_import')
+        return name
+    }
+
     // Formatting helper
     const formatBytes = (bytes: number, decimals = 1) => {
         if (!+bytes) return '0 B'
@@ -95,7 +102,7 @@ export function Sidebar({ currentView, onViewChange, subscription }: SidebarProp
                     {subscription ? (
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-secondary group-hover:text-primary transition-colors truncate max-w-[120px]" title={subscription.name || t('sidebar.subscription')}>{subscription.name || t('sidebar.subscription')}</span>
+                                <span className="text-sm font-medium text-secondary group-hover:text-primary transition-colors truncate max-w-[120px]" title={getDisplayName(subscription.name) || t('sidebar.subscription')}>{getDisplayName(subscription.name) || t('sidebar.subscription')}</span>
                                 {subscription.expire && subscription.expire * 1000 < Date.now() ? (
                                     <span className="text-[10px] font-medium text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded">{t('sidebar.expired')}</span>
                                 ) : (

@@ -254,7 +254,9 @@
         "expire_time": "Expire Date",
         "refresh_tooltip": "Refresh Subscription",
         "delete_tooltip": "Delete Subscription",
-        "no_subs": "No subscriptions found, please import a configuration."
+        "no_subs": "No subscriptions found, please import a configuration.",
+        "new_subscription": "New Subscription",
+        "local_import": "Local Import"
     },
     "rules": {
         "title": "Routing Rules",

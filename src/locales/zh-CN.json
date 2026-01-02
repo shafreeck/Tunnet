@@ -253,7 +253,9 @@
         "expire_time": "到期时间",
         "refresh_tooltip": "刷新订阅",
         "delete_tooltip": "删除订阅",
-        "no_subs": "暂无订阅信息，请导入配置包"
+        "no_subs": "暂无订阅信息，请导入配置包",
+        "new_subscription": "新订阅",
+        "local_import": "本地导入"
     },
     "rules": {
         "title": "路由规则",
