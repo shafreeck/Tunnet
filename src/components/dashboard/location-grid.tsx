@@ -1,4 +1,5 @@
 import React, { useMemo } from "react"
+import { useTranslation } from "react-i18next"
 import { ServerCard } from "./server-card"
 import { getRegionForCountry } from "@/lib/regions"
 import { cn } from "@/lib/utils"
@@ -11,6 +12,7 @@ interface LocationGridProps {
 }
 
 export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCountry }: LocationGridProps) {
+    const { t } = useTranslation()
 
     // 1. Group servers by Country first (aggregated view)
     const countries = useMemo(() => {
@@ -25,7 +27,7 @@ export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCou
 
         servers.forEach(s => {
             // Normalize country name
-            const country = s.country || "Unknown"
+            const country = s.country || t('locations.unknown', { defaultValue: 'Unknown' })
             const region = getRegionForCountry(s.countryCode || country)
 
             if (!map.has(country)) {
@@ -35,7 +37,7 @@ export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCou
                     count: 0,
                     avgPing: 0,
                     region,
-                    provider: s.provider || "Unknown"
+                    provider: s.provider || t('locations.unknown', { defaultValue: 'Unknown' })
                 })
             }
 
@@ -91,7 +93,7 @@ export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCou
     if (filteredCountries.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
-                <p>No locations found matching your criteria.</p>
+                <p>{t('locations.no_locations', { defaultValue: "No locations found matching your criteria." })}</p>
             </div>
         )
     }
@@ -103,7 +105,7 @@ export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCou
                     <div className="flex items-center gap-2">
                         <div className="size-2 rounded-full bg-accent-blue" />
                         <h2 className="text-xs font-bold text-text-tertiary uppercase tracking-widest">
-                            {group.name}
+                            {t(`locations.regions.${group.name.toLowerCase().replace(/ /g, '_')}`, { defaultValue: group.name })}
                         </h2>
                     </div>
 

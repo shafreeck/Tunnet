@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { listen, emit } from "@tauri-apps/api/event"
+import { useTranslation } from "react-i18next"
 import { Sidebar } from "@/components/dashboard/sidebar"
 import { LocationsView } from "@/components/dashboard/locations-view"
 import { SubscriptionsView } from "@/components/dashboard/subscriptions-view"
@@ -19,11 +20,19 @@ import { ConfirmationModal } from "@/components/ui/confirmation-modal"
 import { AddNodeModal } from "@/components/dashboard/add-node-modal"
 
 export default function Home() {
+  const { t } = useTranslation()
+  // Hydration fix
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   const [isConnected, setIsConnected] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const isLoadingRef = useRef(false)
   useEffect(() => { isLoadingRef.current = isLoading }, [isLoading])
 
+  /* Removed early return to fix hook order */
   // Server Management Lifted State
   const [servers, setServers] = useState<any[]>([]) // Using any for now to match Server interface
   const [activeServerId, setActiveServerId] = useState<string | null>(null)
@@ -154,9 +163,9 @@ export default function Home() {
       })
 
       toast.promise(promise, {
-        loading: lastAppliedConfigRef.current ? `Updating to ${proxyMode}...` : `Connecting to ${node.name}...`,
-        success: lastAppliedConfigRef.current ? `Updated to ${proxyMode}` : `Connected to ${node.name}`,
-        error: (err: any) => `Failed: ${err}`
+        loading: lastAppliedConfigRef.current ? t('toast.updating_to', { mode: proxyMode }) : t('toast.connecting_to', { server: node.name }),
+        success: lastAppliedConfigRef.current ? t('toast.updated_to', { mode: proxyMode }) : t('toast.connected_to', { server: node.name }),
+        error: (err: any) => t('toast.action_failed', { error: err })
       })
 
       try {
@@ -366,7 +375,7 @@ export default function Home() {
       const allNodes = postProfiles.flatMap((p: any) => p.nodes)
       updateServersState(allNodes)
 
-      toast.success(`导入完成，后台正在更新节点...`)
+      toast.success(t('toast.import_success'))
       setIsImporting(false) // Stop loading animation immediately
 
       // 4. Find the NEW profile(s) and probe in background
@@ -382,7 +391,7 @@ export default function Home() {
         }).catch(e => console.error("Background probe failed:", e))
       }
     } catch (e: any) {
-      toast.error(`Import failed: ${e}`)
+      toast.error(t('toast.action_failed', { error: e }))
       setIsImporting(false)
     }
   }
@@ -391,16 +400,16 @@ export default function Home() {
     try {
       await invoke("update_subscription_profile", { id })
       fetchProfiles()
-      toast.success("Subscription updated")
+      toast.success(t('toast.sub_updated'))
     } catch (e: any) {
-      toast.error(`Update failed: ${e}`)
+      toast.error(t('toast.action_failed', { error: e }))
     }
   }
 
   const handleUpdateAll = async () => {
     if (isLoading) return
     setIsLoading(true)
-    toast.info("Updating all subscriptions...")
+    toast.info(t('toast.updating_all'))
     try {
       // Execute all updates
       const promises = profiles.map(p => invoke("update_subscription_profile", { id: p.id }))
@@ -408,10 +417,10 @@ export default function Home() {
 
       // Refresh list
       fetchProfiles()
-      toast.success("Update completed")
+      toast.success(t('toast.update_completed'))
     } catch (e: any) {
       console.error(e)
-      toast.error("Some updates might have failed")
+      toast.error(t('toast.update_failed'))
     } finally {
       setIsLoading(false)
     }
@@ -421,9 +430,9 @@ export default function Home() {
     try {
       await invoke("delete_profile", { id })
       fetchProfiles()
-      toast.success("Subscription deleted")
+      toast.success(t('toast.sub_deleted'))
     } catch (e: any) {
-      toast.error(`Delete failed: ${e}`)
+      toast.error(t('toast.delete_failed', { error: e }))
     }
   }
 
@@ -432,7 +441,7 @@ export default function Home() {
       if (node.id) {
         // Edit
         await invoke("update_node", { id: node.id, node })
-        toast.success("Node updated")
+        toast.success(t('toast.node_updated'))
       } else {
         // Add
         // We need the ID of the new node to check location. 
@@ -449,7 +458,7 @@ export default function Home() {
         // that we will just re-fetch.
         // For now, let's just add it.
         await invoke("add_node", { node })
-        toast.success("Node added")
+        toast.success(t('toast.node_added'))
 
         // Trigger check for all nodes to be safe, or if we can know the ID.
         // Let's just fetch profiles and check untagged ones?
@@ -466,7 +475,7 @@ export default function Home() {
       fetchProfiles()
       setEditorOpen(false)
     } catch (e: any) {
-      toast.error(`Save failed: ${e}`)
+      toast.error(t('toast.save_failed', { error: e }))
     }
   }
 
@@ -483,13 +492,13 @@ export default function Home() {
     try {
       await invoke("delete_node", { id })
       fetchProfiles()
-      toast.success("Node deleted")
+      toast.success(t('toast.node_deleted'))
       if (activeServerId === id) {
         setActiveServerId(null)
         if (isConnected) toggleProxy() // Stop if deleted active
       }
     } catch (e: any) {
-      toast.error(`Delete failed: ${e}`)
+      toast.error(t('toast.delete_failed', { error: e }))
       console.error(e)
     } finally {
       setNodeToDelete(null)
@@ -504,14 +513,14 @@ export default function Home() {
       try {
         const installed = await invoke("check_helper")
         if (!installed) {
-          toast.info("Installing helper for TUN Mode...", { id: "helper-install" })
+          toast.info(t('toast.helper_installing'), { id: "helper-install" })
           // This might throw if user cancels auth, so we catch it
           await invoke("install_helper")
-          toast.success("Helper installed", { id: "helper-install" })
+          toast.success(t('toast.helper_installed'), { id: "helper-install" })
         }
       } catch (e: any) {
         console.error(e)
-        toast.error("Failed to install helper: " + e.message || e)
+        toast.error(t('toast.helper_failed', { error: e.message || e }))
         return; // Don't proceed if helper check/install failed
       }
     }
@@ -519,7 +528,7 @@ export default function Home() {
     // Just update the preference state. The reactive useEffect will handle the rest.
     setTunEnabled(nextState)
     if (isConnected) {
-      toast.success(`Tun Mode ${nextState ? 'Enabled' : 'Disabled'}`)
+      toast.success(t(nextState ? 'toast.tun_mode_enabled' : 'toast.tun_mode_disabled'))
     }
   }
 
@@ -535,7 +544,7 @@ export default function Home() {
         const node = servers.find(s => s.id === activeServerId)
         if (!node && servers.length > 0) {
           if (!activeServerId) {
-            toast.warning("Please select a server first")
+            toast.warning(t('toast.select_server'))
             setIsLoading(false)
             return
           }
@@ -545,7 +554,7 @@ export default function Home() {
         if (tunEnabled) {
           const installed = await invoke("check_helper")
           if (!installed) {
-            toast.info("Installing network helper...")
+            toast.info(t('toast.helper_installing'))
             await invoke("install_helper")
           }
         }
@@ -554,7 +563,7 @@ export default function Home() {
       }
     } catch (error: any) {
       console.error(error)
-      toast.error(error.message || "Failed to toggle proxy")
+      toast.error(t('toast.action_failed', { error: error.message || "Failed to toggle proxy" }))
     } finally {
       setIsLoading(false)
     }
@@ -566,7 +575,7 @@ export default function Home() {
       setServers(prev => prev.map(s => s.id === id ? { ...s, ping } : s))
     } catch (e) {
       console.error("Ping failed:", e)
-      toast.error("Latency test failed")
+      toast.error(t('toast.action_failed', { error: "Latency test failed" }))
     }
   }
 
@@ -591,13 +600,13 @@ export default function Home() {
           try {
             const installed = await invoke("check_helper")
             if (!installed) {
-              toast.info("Installing helper for TUN Mode...")
+              toast.info(t('toast.helper_installing'))
               await invoke("install_helper")
-              toast.success("Helper installed")
+              toast.success(t('toast.helper_installed'))
             }
           } catch (e: any) {
             console.error("Helper check/install failed:", e)
-            toast.error("TUN mode requires helper: " + e)
+            toast.error(t('toast.helper_failed', { error: e }))
             setIsLoading(false)
             return
           }
@@ -607,7 +616,7 @@ export default function Home() {
         setIsConnected(true)
       }
     } catch (e: any) {
-      toast.error(`Connection failed: ${e}`)
+      toast.error(t('toast.connection_failed', { error: e }))
       // If failed and we were switching, maybe revert activeId? For now keep it simple.
     } finally {
       setIsLoading(false)
@@ -774,6 +783,8 @@ export default function Home() {
         )
     }
   }
+
+  if (!mounted) return null
 
   return (
     <div className="h-screen flex gap-2 p-2 overflow-hidden" data-tauri-drag-region>

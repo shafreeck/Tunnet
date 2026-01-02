@@ -2,6 +2,7 @@
 
 import React from "react"
 import { RefreshCw, Trash2, Globe, Server, MoreHorizontal, Database, Zap, PlusCircle } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 
 interface Subscription {
@@ -26,6 +27,7 @@ interface SubscriptionsViewProps {
 }
 
 export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelect, onUpdateAll, isImporting }: SubscriptionsViewProps) {
+    const { t } = useTranslation()
 
     // Helper formats
     const formatBytes = (bytes: number, decimals = 1) => {
@@ -47,8 +49,8 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
                 <div className="max-w-5xl mx-auto w-full flex items-center justify-between relative z-10 pointer-events-none">
                     <div>
-                        <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">订阅管理</h2>
-                        <p className="text-sm text-text-secondary font-medium">查看并同步您的节点订阅信息</p>
+                        <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">{t('subscriptions.title')}</h2>
+                        <p className="text-sm text-text-secondary font-medium">{t('subscriptions.subtitle')}</p>
                     </div>
 
                     <div className="flex items-center gap-3 pointer-events-auto">
@@ -58,7 +60,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                 className="flex items-center gap-2 px-4 py-2 bg-card-bg border border-border-color text-text-secondary rounded-xl hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-all font-medium text-sm"
                             >
                                 <RefreshCw size={18} />
-                                <span>全部更新</span>
+                                <span>{t('subscriptions.update_all')}</span>
                             </button>
                         )}
                         {onAdd && (
@@ -67,7 +69,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                 className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary-hover transition-colors font-medium text-sm shadow-lg shadow-primary/20 hover:shadow-primary/30 active:scale-95"
                             >
                                 <PlusCircle size={18} />
-                                <span>导入订阅</span>
+                                <span>{t('subscriptions.import')}</span>
                             </button>
                         )}
                     </div>
@@ -125,7 +127,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                             <div className="flex flex-col gap-1 min-w-0">
                                                 <h3 className="font-bold text-text-primary text-lg group-hover:text-primary transition-colors uppercase tracking-tight truncate">{profile.name}</h3>
                                                 <span className="text-[10px] font-mono text-text-tertiary truncate" title={profile.url}>
-                                                    {profile.url ? profile.url.replace(/^https?:\/\//, '') : "Local Profile"}
+                                                    {profile.url ? profile.url.replace(/^https?:\/\//, '') : t('subscriptions.local_profile')}
                                                 </span>
                                             </div>
                                         </div>
@@ -136,7 +138,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                         <div className="space-y-2">
                                             <div className="flex justify-between items-end">
                                                 <div className="flex flex-col">
-                                                    <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest mb-1">流量使用情况</span>
+                                                    <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest mb-1">{t('subscriptions.traffic_usage')}</span>
                                                     <span className="text-sm font-black text-text-primary">{formatBytes(used)} / {total > 0 ? formatBytes(total) : '--'}</span>
                                                 </div>
                                                 <span className="text-sm font-black text-primary">{percent.toFixed(1)}%</span>
@@ -156,8 +158,8 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                                         <Database size={14} />
                                                     </div>
                                                     <div className="flex flex-col">
-                                                        <span className="text-[9px] font-bold text-text-tertiary uppercase">节点数量</span>
-                                                        <span className="text-xs font-bold text-text-secondary">{profile.nodes.length} Nodes</span>
+                                                        <span className="text-[9px] font-bold text-text-tertiary uppercase">{t('subscriptions.node_count')}</span>
+                                                        <span className="text-xs font-bold text-text-secondary">{t('subscriptions.nodes', { count: profile.nodes.length })}</span>
                                                     </div>
                                                 </div>
                                                 {profile.expire && (
@@ -166,7 +168,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                                             <Zap size={14} />
                                                         </div>
                                                         <div className="flex flex-col">
-                                                            <span className="text-[9px] font-bold text-text-tertiary uppercase">到期时间</span>
+                                                            <span className="text-[9px] font-bold text-text-tertiary uppercase">{t('subscriptions.expire_time')}</span>
                                                             <span className="text-xs font-bold text-text-secondary">{new Date(profile.expire * 1000).toLocaleDateString()}</span>
                                                         </div>
                                                     </div>
@@ -178,7 +180,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); onUpdate(profile.id); }}
                                                         className="p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-90"
-                                                        title="刷新订阅"
+                                                        title={t('subscriptions.refresh_tooltip')}
                                                     >
                                                         <RefreshCw size={16} />
                                                     </button>
@@ -186,7 +188,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); onDelete(profile.id); }}
                                                     className="p-2 text-text-secondary hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all active:scale-90"
-                                                    title="删除订阅"
+                                                    title={t('subscriptions.delete_tooltip')}
                                                 >
                                                     <Trash2 size={16} />
                                                 </button>
@@ -203,7 +205,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                         {profiles.length === 0 && (
                             <div className="col-span-full py-20 flex flex-col items-center justify-center text-gray-600 gap-4">
                                 <Database size={48} className="opacity-10" />
-                                <p className="text-sm font-medium">暂无订阅信息，请导入配置包</p>
+                                <p className="text-sm font-medium">{t('subscriptions.no_subs')}</p>
                             </div>
                         )}
                     </div>

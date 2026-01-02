@@ -1,0 +1,230 @@
+{
+    "server_list": "节点列表",
+    "logs": "日志",
+    "logs_copied": "日志已复制到剪贴板",
+    "loading": "加载中...",
+    "sidebar": {
+        "network": "网络",
+        "dashboard": "仪表板",
+        "locations": "节点列表",
+        "rules": "分流规则",
+        "system": "系统",
+        "settings": "设置",
+        "subscription": "订阅",
+        "active": "已激活",
+        "no_active_plan": "无有效订阅"
+    },
+    "settings": {
+        "loading": "加载设置中...",
+        "nav": {
+            "general": "常规",
+            "connection": "连接",
+            "dns": "DNS",
+            "advanced": "高级",
+            "about": "关于"
+        },
+        "general": {
+            "appearance": "外观",
+            "mode": {
+                "light": "亮色",
+                "dark": "暗色",
+                "system": "跟随系统"
+            },
+            "launch_behavior": "启动行为",
+            "launch_at_login": {
+                "title": "开机自启动",
+                "desc": "当计算机启动时自动运行 Tunnet。"
+            },
+            "start_minimized": {
+                "title": "启动时最小化",
+                "desc": "应用启动后自动隐藏到系统托盘。"
+            },
+            "app_update": "应用更新",
+            "auto_check_update": {
+                "title": "自动检查更新",
+                "desc": "应用启动时自动检查最新版本。"
+            }
+        },
+        "connection": {
+            "basic_proxy": "基础代理",
+            "system_proxy": {
+                "title": "设置系统代理",
+                "desc": "自动更新系统 HTTP/HTTPS 代理设置。"
+            },
+            "allow_lan": {
+                "title": "允许局域网连接",
+                "desc": "允许局域网内的其他设备通过本机的代理端口上网。"
+            },
+            "mixed_port": {
+                "title": "混合代理端口",
+                "desc": "HTTP/SOCKS 协议共用端口。默认推荐 2080。"
+            },
+            "tun_mode": "TUN 模式增强",
+            "stack": {
+                "title": "网络堆栈类型",
+                "desc": "gVisor 提供最佳的安全性和兼容性。"
+            },
+            "mtu": {
+                "title": "MTU",
+                "desc": "最大传输单元。默认 9000。"
+            },
+            "strict_route": {
+                "title": "严格路由控制",
+                "desc": "自动将所有系统流量路由到 TUN 接口，防止流量泄漏。"
+            }
+        },
+        "dns": {
+            "resolution_core": "解析核心",
+            "dns_hijack": {
+                "title": "启用 DNS 劫持",
+                "desc": "拦截并在本地解析所有发往标准 DNS 端口 (53) 的请求。"
+            },
+            "strategy": {
+                "title": "解析优先策略",
+                "desc": "选择优先使用 IPv4 还是 IPv6 进行域名解析。"
+            },
+            "upstream": "上游服务器配置",
+            "server_list": "DNS 服务器列表",
+            "one_per_line": "每行一个地址"
+        },
+        "advanced": {
+            "debug_log": "调试日志",
+            "log_level": {
+                "title": "日志详细级别",
+                "desc": "确定核心引擎输出的信息详细程度。"
+            },
+            "persistence": "数据持久化",
+            "cache_dir": {
+                "title": "核心缓存目录",
+                "desc": "存放所有运行时动态数据。"
+            },
+            "component": "组件管理",
+            "core": {
+                "title": "Sing-box Core",
+                "desc": "管理底层代理核心组件。",
+                "check_update": "检查更新",
+                "updating": "更新中...",
+                "checking": "检查中...",
+                "latest": "最新版本",
+                "error": "错误",
+                "update": "更新",
+                "new": "新版本"
+            }
+        },
+        "language": {
+            "title": "语言",
+            "desc": "更改应用程序的显示语言。"
+        }
+    },
+    "tray": {
+        "processing": "处理中...",
+        "on": "TUNNET 运行中",
+        "off": "TUNNET 未运行",
+        "dashboard": "仪表板",
+        "stopping": "停止中...",
+        "connecting": "连接中...",
+        "mode": {
+            "tun": "TUN 代理",
+            "system": "系统代理",
+            "port": "端口代理"
+        },
+        "wait": "请稍候...",
+        "desc": {
+            "global": "接管所有流量",
+            "system": "接管系统流量",
+            "port": "监听端口 :{{port}}"
+        },
+        "click_to_connect": "点击连接",
+        "routing": {
+            "global": "全局",
+            "rule": "规则",
+            "direct": "直连"
+        },
+        "system_proxy": "系统代理",
+        "tun_mode": "TUN 模式",
+        "id_active": {
+            "check_ip": "正在检查 IP...",
+            "waiting": "等待连接..."
+        },
+        "exit": "退出"
+    },
+    "status": {
+        "unknown_server": "未知服务器",
+        "disconnected": "未连接",
+        "active": "活跃",
+        "stopped": "已停止",
+        "connected": "已连接",
+        "offline": "离线",
+        "checking_ip": "检查 IP...",
+        "tun_on": "Tun 开启",
+        "tun_off": "Tun 关闭",
+        "wait": "请稍候...",
+        "disconnect": "断开连接",
+        "connect": "连接",
+        "mode": {
+            "global": "全局",
+            "rule": "规则",
+            "direct": "直连"
+        }
+    },
+    "toast": {
+        "import_success": "导入完成，后台正在更新节点...",
+        "sub_updated": "订阅已更新",
+        "updating_all": "正在更新所有订阅...",
+        "update_completed": "更新完成",
+        "update_failed": "部分更新可能失败",
+        "sub_deleted": "订阅已删除",
+        "node_updated": "节点已更新",
+        "node_added": "节点已添加",
+        "node_deleted": "节点已删除",
+        "helper_installing": "正在安装 TUN 模式助手...",
+        "helper_installed": "助手安装成功",
+        "helper_failed": "安装助手失败: {{error}}",
+        "tun_mode_enabled": "TUN 模式已启用",
+        "tun_mode_disabled": "TUN 模式已禁用",
+        "select_server": "请先选择一个服务器",
+        "save_failed": "保存失败: {{error}}",
+        "delete_failed": "删除失败: {{error}}",
+        "connection_failed": "连接失败: {{error}}",
+        "connecting_to": "正在连接到 {{server}}...",
+        "updating_to": "正在更新为 {{mode}}...",
+        "connected_to": "已连接到 {{server}}",
+        "updated_to": "已更新为 {{mode}}",
+        "action_failed": "失败: {{error}}"
+    },
+    "locations": {
+        "title": "节点地区",
+        "subtitle": "在 {{countries}} 个国家/地区拥有 {{servers}} 个可用节点",
+        "view": {
+            "map": "地图",
+            "grid": "网格"
+        },
+        "search_placeholder": "搜索地区或节点...",
+        "regions": {
+            "all": "所有地区",
+            "asia_pacific": "亚太",
+            "europe": "欧洲",
+            "americas": "美洲",
+            "favorites": "收藏"
+        },
+        "drawer": {
+            "region_nodes": "地区节点",
+            "nodes_ready": "{{count}} 个节点就绪",
+            "search_placeholder": "搜索当前区域节点..."
+        }
+    },
+    "subscriptions": {
+        "title": "订阅管理",
+        "subtitle": "查看并同步您的节点订阅信息",
+        "update_all": "全部更新",
+        "import": "导入订阅",
+        "local_profile": "本地配置",
+        "traffic_usage": "流量使用情况",
+        "node_count": "节点数量",
+        "nodes": "{{count}} 节点",
+        "expire_time": "到期时间",
+        "refresh_tooltip": "刷新订阅",
+        "delete_tooltip": "删除订阅",
+        "no_subs": "暂无订阅信息，请导入配置包"
+    }
+}

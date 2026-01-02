@@ -8,6 +8,7 @@ import { Power, Settings, Globe, Shield, Zap, LayoutDashboard, Server } from "lu
 import { cn } from "@/lib/utils"
 import { useTheme } from "next-themes"
 import { useCallback } from "react"
+import { useTranslation } from "react-i18next"
 
 const formatSpeed = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B/s`
@@ -16,6 +17,7 @@ const formatSpeed = (bytes: number) => {
 }
 
 export default function TrayPage() {
+    const { t } = useTranslation()
     const { resolvedTheme } = useTheme()
     const [settings, setSettings] = useState<AppSettings>(defaultSettings)
     const [status, setStatus] = useState<any>({ is_running: false, tun_mode: false, routing_mode: "rule" })
@@ -44,6 +46,11 @@ export default function TrayPage() {
         // Listen for settings update
         const unlistenSettings = listen<AppSettings>("settings-update", (event) => {
             setSettings(event.payload)
+            // Refresh profiles when settings change (e.g. active node might be new)
+            invoke("get_profiles").then((profiles: any) => {
+                const allNodes = profiles.flatMap((p: any) => p.nodes)
+                setNodes(allNodes)
+            })
         })
 
         // Listen for proxy status update
@@ -51,6 +58,11 @@ export default function TrayPage() {
             console.log("Tray: Proxy status updated", event.payload)
             setStatus(event.payload)
             setIsTransitioning(false) // Stop loading when status confirmed
+            // Also refresh profiles on status change to be safe
+            invoke("get_profiles").then((profiles: any) => {
+                const allNodes = profiles.flatMap((p: any) => p.nodes)
+                setNodes(allNodes)
+            })
         })
 
         // Listen for IP updates from other windows (e.g. Dashboard)
@@ -250,7 +262,11 @@ export default function TrayPage() {
         }
     }
 
-    const activeNode = nodes.find(n => n.id === settings.active_node_id) || nodes[0]
+    // Determine active node:
+    // 1. Try finding by ID from full list (Best for display details if list is fresh)
+    // 2. Fallback to status.node (Reliable if running/last used, but might be missing if cold start)
+    // 3. Fallback to first node
+    const activeNode = nodes.find(n => n.id === settings.active_node_id) || status.node || nodes[0]
 
     const isDark = mounted && resolvedTheme === "dark"
 
@@ -266,7 +282,7 @@ export default function TrayPage() {
                         isTransitioning ? "bg-blue-400 animate-pulse" : (status.is_running ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-yellow-500")
                     )} />
                     <span className="text-xs font-bold tracking-wider opacity-80 uppercase">
-                        {isTransitioning ? "Processing..." : (status.is_running ? `TUNNET ON (${status.tun_mode ? 'TUN' : (settings.system_proxy ? 'SYSTEM' : 'PORT')})` : "TUNNET OFF")}
+                        {isTransitioning ? t('tray.processing') : (status.is_running ? `${t('tray.on')} (${status.tun_mode ? 'TUN' : (settings.system_proxy ? 'SYSTEM' : 'PORT')})` : t('tray.off'))}
                     </span>
                 </div>
                 <button
@@ -274,7 +290,7 @@ export default function TrayPage() {
                     className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition-all hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary hover:text-text-primary active:scale-95"
                 >
                     <LayoutDashboard size={14} />
-                    <span className="text-[11px] font-medium">Dashboard</span>
+                    <span className="text-[11px] font-medium">{t('tray.dashboard')}</span>
                 </button>
             </div>
 
@@ -309,20 +325,20 @@ export default function TrayPage() {
                             (status.is_running && !isTransitioning) ? "text-text-primary" : "text-text-secondary"
                         )}>
                             {isTransitioning
-                                ? (status.is_running ? "Stopping..." : "Connecting...")
+                                ? (status.is_running ? t('tray.stopping') : t('tray.connecting'))
                                 : (status.tun_mode
-                                    ? "TUN Proxy"
-                                    : (settings.system_proxy ? "System Proxy" : "Port Proxy"))}
+                                    ? t('tray.mode.tun')
+                                    : (settings.system_proxy ? t('tray.mode.system') : t('tray.mode.port')))}
                         </span>
                         <span className={cn(
                             "text-xs transition-colors duration-500",
                             (status.is_running && !isTransitioning) ? "text-primary/80 font-medium" : "text-text-tertiary"
                         )}>
                             {isTransitioning
-                                ? "Please wait a moment"
+                                ? t('tray.wait')
                                 : (status.is_running
-                                    ? (status.tun_mode ? "Global Traffic Routed" : (settings.system_proxy ? "System Traffic Routed" : `Listening on :${settings.mixed_port}`))
-                                    : "Click to connect")}
+                                    ? (status.tun_mode ? t('tray.desc.global') : (settings.system_proxy ? t('tray.desc.system') : t('tray.desc.port', { port: settings.mixed_port })))
+                                    : t('tray.click_to_connect'))}
                         </span>
                     </div>
 
@@ -341,9 +357,9 @@ export default function TrayPage() {
                         isTransitioning && "opacity-50 pointer-events-none"
                     )}>
                         {[
-                            { id: "global", label: "Global", icon: Globe },
-                            { id: "rule", label: "Rule", icon: Shield },
-                            { id: "direct", label: "Direct", icon: Zap }
+                            { id: "global", label: t('tray.routing.global'), icon: Globe },
+                            { id: "rule", label: t('tray.routing.rule'), icon: Shield },
+                            { id: "direct", label: t('tray.routing.direct'), icon: Zap }
                         ].map((mode) => (
                             <button
                                 key={mode.id}
@@ -382,7 +398,7 @@ export default function TrayPage() {
                         >
                             <div className="flex items-center gap-2">
                                 <Server size={12} className={settings.system_proxy ? "text-primary" : "text-text-secondary"} />
-                                <span className="text-[10px] font-bold">System Proxy</span>
+                                <span className="text-[10px] font-bold">{t('tray.system_proxy')}</span>
                             </div>
                             <div className={cn(
                                 "size-1.5 rounded-full transition-all",
@@ -401,7 +417,7 @@ export default function TrayPage() {
                         >
                             <div className="flex items-center gap-2">
                                 <Zap size={12} className={status.tun_mode ? "text-primary" : "text-text-secondary"} />
-                                <span className="text-[10px] font-bold">TUN Mode</span>
+                                <span className="text-[10px] font-bold">{t('tray.tun_mode')}</span>
                             </div>
                             <div className={cn(
                                 "size-1.5 rounded-full transition-all",
@@ -442,7 +458,7 @@ export default function TrayPage() {
                             {(status.is_running) && (
                                 <div className="flex items-center gap-2 pl-[34px] text-[11px] text-text-secondary">
                                     {checkingIp ? (
-                                        <span className="animate-pulse opacity-70">Checking IP...</span>
+                                        <span className="animate-pulse opacity-70">{t('tray.id_active.check_ip')}</span>
                                     ) : ipInfo ? (
                                         <div className="flex items-center gap-2 overflow-hidden">
                                             <span className="font-mono">{ipInfo.ip}</span>
@@ -456,7 +472,7 @@ export default function TrayPage() {
                                             )}
                                         </div>
                                     ) : (
-                                        <span className="opacity-50">Waiting for connection...</span>
+                                        <span className="opacity-50">{t('tray.id_active.waiting')}</span>
                                     )}
                                 </div>
                             )}
@@ -510,7 +526,7 @@ export default function TrayPage() {
                     onClick={() => invoke("quit_app")}
                     className="text-[10px] font-bold tracking-widest px-3 py-1 rounded-lg transition-all text-text-secondary hover:text-red-500 hover:bg-red-500/10 active:scale-95"
                 >
-                    QUIT
+                    {t('tray.exit')}
                 </button>
             </div>
         </div >

@@ -338,6 +338,11 @@ impl<R: Runtime> CoreManager<R> {
 
     pub fn save_profiles(&self, profiles: &[crate::profile::Profile]) -> Result<(), String> {
         let path = self.get_profiles_path();
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+        }
         let json = serde_json::to_string_pretty(profiles).map_err(|e| e.to_string())?;
         fs::write(&path, json).map_err(|e| e.to_string())?;
         Ok(())
@@ -364,6 +369,11 @@ impl<R: Runtime> CoreManager<R> {
 
     pub fn save_rules(&self, rules: &[crate::profile::Rule]) -> Result<(), String> {
         let path = self.get_rules_path();
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+        }
         let json = serde_json::to_string_pretty(rules).map_err(|e| e.to_string())?;
         fs::write(&path, json).map_err(|e| e.to_string())?;
         Ok(())
@@ -390,6 +400,11 @@ impl<R: Runtime> CoreManager<R> {
 
     pub fn save_settings(&self, settings: &crate::settings::AppSettings) -> Result<(), String> {
         let path = self.get_settings_path();
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+        }
         let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
         fs::write(&path, json).map_err(|e| e.to_string())?;
         Ok(())

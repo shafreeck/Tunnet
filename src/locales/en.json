@@ -1,0 +1,230 @@
+{
+    "server_list": "Server List",
+    "logs": "Logs",
+    "logs_copied": "Logs copied to clipboard",
+    "loading": "Loading...",
+    "sidebar": {
+        "network": "NETWORK",
+        "dashboard": "Dashboard",
+        "locations": "Locations",
+        "rules": "Rules",
+        "system": "SYSTEM",
+        "settings": "Settings",
+        "subscription": "Subscription",
+        "active": "Active",
+        "no_active_plan": "No active plan"
+    },
+    "settings": {
+        "loading": "Loading settings...",
+        "nav": {
+            "general": "General",
+            "connection": "Connection",
+            "dns": "DNS",
+            "advanced": "Advanced",
+            "about": "About"
+        },
+        "general": {
+            "appearance": "Appearance",
+            "mode": {
+                "light": "Light",
+                "dark": "Dark",
+                "system": "System"
+            },
+            "launch_behavior": "Launch Behavior",
+            "launch_at_login": {
+                "title": "Launch at Login",
+                "desc": "Automatically run Tunnet when the computer starts."
+            },
+            "start_minimized": {
+                "title": "Start Minimized",
+                "desc": "Hide to tray automatically after startup."
+            },
+            "app_update": "App Update",
+            "auto_check_update": {
+                "title": "Auto Check Update",
+                "desc": "Automatically check for the latest version on startup."
+            }
+        },
+        "connection": {
+            "basic_proxy": "Basic Proxy",
+            "system_proxy": {
+                "title": "Set System Proxy",
+                "desc": "Automatically update system HTTP/HTTPS proxy settings."
+            },
+            "allow_lan": {
+                "title": "Allow LAN Connection",
+                "desc": "Allow other devices in the LAN to access the internet through the local proxy port."
+            },
+            "mixed_port": {
+                "title": "Mixed Port",
+                "desc": "HTTP/SOCKS protocol shared port. Recommended 2080 by default."
+            },
+            "tun_mode": "TUN Mode Enhancement",
+            "stack": {
+                "title": "Network Stack",
+                "desc": "gVisor offers best security and compatibility."
+            },
+            "mtu": {
+                "title": "MTU",
+                "desc": "Maximum Transmission Unit. Default 9000."
+            },
+            "strict_route": {
+                "title": "Strict Route",
+                "desc": "Automatically route all system traffic to TUN interface to prevent leakage."
+            }
+        },
+        "dns": {
+            "resolution_core": "Resolution Core",
+            "dns_hijack": {
+                "title": "Enable DNS Hijacking",
+                "desc": "Intercept and resolve all requests to standard DNS port (53) locally."
+            },
+            "strategy": {
+                "title": "Resolution Strategy",
+                "desc": "Choose whether to prefer IPv4 or IPv6 for domain resolution."
+            },
+            "upstream": "Upstream Configuration",
+            "server_list": "DNS Server List",
+            "one_per_line": "One address per line"
+        },
+        "advanced": {
+            "debug_log": "Debug Log",
+            "log_level": {
+                "title": "Log Level",
+                "desc": "Determine details exported by the core engine."
+            },
+            "persistence": "Data Persistence",
+            "cache_dir": {
+                "title": "Core Cache Directory",
+                "desc": "Stores all runtime dynamic data."
+            },
+            "component": "Component Management",
+            "core": {
+                "title": "Sing-box Core",
+                "desc": "Manage underlying proxy core component.",
+                "check_update": "Check Update",
+                "updating": "Updating...",
+                "checking": "Checking...",
+                "latest": "Latest Version",
+                "error": "Error",
+                "update": "Update",
+                "new": "New"
+            }
+        },
+        "language": {
+            "title": "Language",
+            "desc": "Change the display language of the application."
+        }
+    },
+    "tray": {
+        "processing": "Processing...",
+        "on": "TUNNET ON",
+        "off": "TUNNET OFF",
+        "dashboard": "Dashboard",
+        "stopping": "Stopping...",
+        "connecting": "Connecting...",
+        "mode": {
+            "tun": "TUN Proxy",
+            "system": "System Proxy",
+            "port": "Port Proxy"
+        },
+        "wait": "Please wait a moment",
+        "desc": {
+            "global": "Global Traffic Routed",
+            "system": "System Traffic Routed",
+            "port": "Listening on :{{port}}"
+        },
+        "click_to_connect": "Click to connect",
+        "routing": {
+            "global": "Global",
+            "rule": "Rule",
+            "direct": "Direct"
+        },
+        "system_proxy": "System Proxy",
+        "tun_mode": "TUN Mode",
+        "id_active": {
+            "check_ip": "Checking IP...",
+            "waiting": "Waiting for connection..."
+        },
+        "exit": "QUIT"
+    },
+    "status": {
+        "unknown_server": "Unknown Server",
+        "disconnected": "Disconnected",
+        "active": "Active",
+        "stopped": "Stopped",
+        "connected": "Connected",
+        "offline": "Offline",
+        "checking_ip": "Checking IP...",
+        "tun_on": "Tun On",
+        "tun_off": "Tun Off",
+        "wait": "WAIT...",
+        "disconnect": "DISCONNECT",
+        "connect": "CONNECT",
+        "mode": {
+            "global": "Global",
+            "rule": "Rule",
+            "direct": "Direct"
+        }
+    },
+    "toast": {
+        "import_success": "Import completed, updating nodes in background...",
+        "sub_updated": "Subscription updated",
+        "updating_all": "Updating all subscriptions...",
+        "update_completed": "Update completed",
+        "update_failed": "Some updates might have failed",
+        "sub_deleted": "Subscription deleted",
+        "node_updated": "Node updated",
+        "node_added": "Node added",
+        "node_deleted": "Node deleted",
+        "helper_installing": "Installing helper for TUN Mode...",
+        "helper_installed": "Helper installed",
+        "helper_failed": "Failed to install helper: {{error}}",
+        "tun_mode_enabled": "Tun Mode Enabled",
+        "tun_mode_disabled": "Tun Mode Disabled",
+        "select_server": "Please select a server first",
+        "save_failed": "Save failed: {{error}}",
+        "delete_failed": "Delete failed: {{error}}",
+        "connection_failed": "Connection failed: {{error}}",
+        "connecting_to": "Connecting to {{server}}...",
+        "updating_to": "Updating to {{mode}}...",
+        "connected_to": "Connected to {{server}}",
+        "updated_to": "Updated to {{mode}}",
+        "action_failed": "Failed: {{error}}"
+    },
+    "locations": {
+        "title": "Node Locations",
+        "subtitle": "{{servers}} nodes available in {{countries}} countries/regions",
+        "view": {
+            "map": "Map",
+            "grid": "Grid"
+        },
+        "search_placeholder": "Search regions or nodes...",
+        "regions": {
+            "all": "All Regions",
+            "asia_pacific": "Asia Pacific",
+            "europe": "Europe",
+            "americas": "Americas",
+            "favorites": "Favorites"
+        },
+        "drawer": {
+            "region_nodes": "Region Nodes",
+            "nodes_ready": "{{count}} nodes ready",
+            "search_placeholder": "Search nodes in this region..."
+        }
+    },
+    "subscriptions": {
+        "title": "Subscription Management",
+        "subtitle": "View and synchronize your node subscriptions",
+        "update_all": "Update All",
+        "import": "Import Subscription",
+        "local_profile": "Local Profile",
+        "traffic_usage": "Traffic Usage",
+        "node_count": "Node Count",
+        "nodes": "{{count}} Nodes",
+        "expire_time": "Expire Date",
+        "refresh_tooltip": "Refresh Subscription",
+        "delete_tooltip": "Delete Subscription",
+        "no_subs": "No subscriptions found, please import a configuration."
+    }
+}

@@ -2,6 +2,7 @@
 
 import React from "react"
 import { Search, Rocket, Globe, Settings, Sliders, Info, Server, Zap } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 
 export type ViewType = "dashboard" | "locations" | "rules" | "settings" | "proxies"
@@ -18,6 +19,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ currentView, onViewChange, subscription }: SidebarProps) {
+    const { t } = useTranslation()
 
     // Formatting helper
     const formatBytes = (bytes: number, decimals = 1) => {
@@ -50,33 +52,33 @@ export function Sidebar({ currentView, onViewChange, subscription }: SidebarProp
             </div>
 
             <nav className="flex flex-col gap-1 w-full px-3 flex-1 overflow-y-auto sidebar-scroll">
-                <div className="text-[10px] font-bold text-tertiary px-3 mb-2 mt-2 tracking-wider">NETWORK</div>
+                <div className="text-[10px] font-bold text-tertiary px-3 mb-2 mt-2 tracking-wider">{t('sidebar.network')}</div>
 
                 <NavItem
                     icon={<Rocket size={20} />}
-                    label="Dashboard"
+                    label={t('sidebar.dashboard')}
                     active={currentView === "dashboard"}
                     onClick={() => onViewChange("dashboard")}
                 />
                 <NavItem
                     icon={<Globe size={20} />}
-                    label="Locations"
+                    label={t('sidebar.locations')}
                     active={currentView === "locations"}
                     onClick={() => onViewChange("locations")}
                 />
 
                 <NavItem
                     icon={<Sliders size={20} />}
-                    label="Rules"
+                    label={t('sidebar.rules')}
                     active={currentView === "rules"}
                     onClick={() => onViewChange("rules")}
                 />
 
-                <div className="text-[10px] font-bold text-tertiary px-3 mb-2 mt-6 tracking-wider">SYSTEM</div>
+                <div className="text-[10px] font-bold text-tertiary px-3 mb-2 mt-6 tracking-wider">{t('sidebar.system')}</div>
 
                 <NavItem
                     icon={<Settings size={20} />}
-                    label="Settings"
+                    label={t('sidebar.settings')}
                     active={currentView === "settings"}
                     onClick={() => onViewChange("settings")}
                 />
@@ -93,8 +95,8 @@ export function Sidebar({ currentView, onViewChange, subscription }: SidebarProp
                     {total > 0 ? (
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-secondary group-hover:text-primary transition-colors">Subscription</span>
-                                <span className="text-[10px] font-medium text-accent-green bg-accent-green/10 px-1.5 py-0.5 rounded">Active</span>
+                                <span className="text-sm font-medium text-secondary group-hover:text-primary transition-colors">{t('sidebar.subscription')}</span>
+                                <span className="text-[10px] font-medium text-accent-green bg-accent-green/10 px-1.5 py-0.5 rounded">{t('sidebar.active')}</span>
                             </div>
 
                             <div className="space-y-1.5">
@@ -116,8 +118,8 @@ export function Sidebar({ currentView, onViewChange, subscription }: SidebarProp
                                 <Zap size={16} />
                             </div>
                             <div className="flex flex-col">
-                                <span className="text-xs font-medium text-secondary group-hover:text-primary transition-colors">Subscription</span>
-                                <span className="text-[10px] text-tertiary">No active plan</span>
+                                <span className="text-xs font-medium text-secondary group-hover:text-primary transition-colors">{t('sidebar.subscription')}</span>
+                                <span className="text-[10px] text-tertiary">{t('sidebar.no_active_plan')}</span>
                             </div>
                         </div>
                     )}

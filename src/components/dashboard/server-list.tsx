@@ -4,6 +4,7 @@ import React, { useState } from "react"
 import { ArrowUpDown, Filter, Play, Square, Plus, Pencil, Trash2, Globe, RotateCw, Search, Scroll, Pause, Copy } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 
 interface Server {
@@ -67,6 +68,7 @@ export function ServerList({
     onPing,
     hideHeader = false
 }: ServerListProps) {
+    const { t } = useTranslation()
     const [loading, setLoading] = useState(false)
     const [logFilter, setLogFilter] = useState("")
     const [autoScroll, setAutoScroll] = useState(true)
@@ -74,7 +76,7 @@ export function ServerList({
     const handleCopyLogs = () => {
         const text = logs.join("\n")
         navigator.clipboard.writeText(text)
-        toast.success("Logs copied to clipboard")
+        toast.success(t('logs_copied', { defaultValue: "Logs copied to clipboard" }))
     }
 
     return (
@@ -89,7 +91,7 @@ export function ServerList({
                                 !showLogs ? "text-text-primary" : "text-text-tertiary hover:text-text-primary"
                             )}
                         >
-                            Server List {loading && "(Loading...)"}
+                            {t('server_list', { defaultValue: 'Server List' })} {loading && `(${t('loading', { defaultValue: 'Loading...' })})`}
                         </button>
                         <button
                             onClick={() => setShowLogs(true)}
@@ -98,7 +100,7 @@ export function ServerList({
                                 showLogs ? "text-text-primary" : "text-text-tertiary hover:text-text-primary"
                             )}
                         >
-                            Logs
+                            {t('logs', { defaultValue: 'Logs' })}
                             <div className={cn("size-1.5 rounded-full transition-colors", showLogs ? "bg-accent-green" : "bg-text-tertiary/20")} />
                         </button>
                     </div>
@@ -181,6 +183,7 @@ export function ServerList({
                                     onEdit={onEdit}
                                     onDelete={onDelete}
                                     onPing={onPing}
+                                    t={t}
                                 />
                             )
                         })}
@@ -200,9 +203,10 @@ interface ServerItemProps {
     onEdit: (node: Server) => void
     onDelete: (id: string) => void
     onPing?: (id: string) => void
+    t: any // Using specific type TFunction is better but 'any' works for quick fix to match immediate error context, or import TFunction. Let's use 'any' to avoid import hassle or `ReturnType<typeof useTranslation>['t']`.
 }
 
-function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, onDelete, onPing }: ServerItemProps) {
+function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, onDelete, onPing, t }: ServerItemProps) {
     return (
         <div
             onClick={onClick}
@@ -237,7 +241,7 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
                     {/* Show "Connected" tag if running, otherwise show Type or nothing */}
                     {isRunning ? (
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold border bg-accent-green/20 text-accent-green border-accent-green/20 animate-pulse">
-                            Connected
+                            {t('status.connected')}
                         </span>
                     ) : (server.type && (
                         <span className={cn(

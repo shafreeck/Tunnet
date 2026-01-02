@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/utils"
 import { AppSettings, defaultSettings, getAppSettings, saveAppSettings } from "@/lib/settings"
 import { invoke } from "@tauri-apps/api/core"
+import { useTranslation } from "react-i18next"
 import { toast } from "sonner" // Assuming you have sonner or some toast, if not I should remove it or check. 
 // Note: I don't see sonner in imports but it's common. I'll stick to console if not standard.
 
@@ -35,6 +36,7 @@ interface SettingsViewProps {
 }
 
 export function SettingsView({ initialCategory = "general" }: SettingsViewProps) {
+    const { t } = useTranslation()
     const [activeCategory, setActiveCategory] = useState<SettingCategory>(initialCategory)
     const [settings, setSettings] = useState<AppSettings>(defaultSettings)
     const [loading, setLoading] = useState(true)
@@ -91,11 +93,11 @@ export function SettingsView({ initialCategory = "general" }: SettingsViewProps)
     }
 
     const categories = [
-        { id: "general", label: "常规", icon: <Monitor size={16} /> },
-        { id: "connection", label: "连接", icon: <Zap size={16} /> },
-        { id: "dns", label: "DNS", icon: <Globe size={16} /> },
-        { id: "advanced", label: "高级", icon: <Shield size={16} /> },
-        { id: "about", label: "关于", icon: <Info size={16} /> },
+        { id: "general", label: t('settings.nav.general'), icon: <Monitor size={16} /> },
+        { id: "connection", label: t('settings.nav.connection'), icon: <Zap size={16} /> },
+        { id: "dns", label: t('settings.nav.dns'), icon: <Globe size={16} /> },
+        { id: "advanced", label: t('settings.nav.advanced'), icon: <Shield size={16} /> },
+        { id: "about", label: t('settings.nav.about'), icon: <Info size={16} /> },
     ]
 
     return (
@@ -127,7 +129,7 @@ export function SettingsView({ initialCategory = "general" }: SettingsViewProps)
                 <div className="max-w-3xl mx-auto pb-10">
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
                         {loading ? (
-                            <div className="flex items-center justify-center p-20 text-secondary">Loading settings...</div>
+                            <div className="flex items-center justify-center p-20 text-secondary">{t('settings.loading')}</div>
                         ) : (
                             <>
                                 {activeCategory === "general" && <GeneralSettings settings={settings} update={updateSetting} save={handleSave} />}
@@ -216,6 +218,7 @@ interface CommonProps {
 }
 
 function GeneralSettings({ settings, update }: CommonProps) {
+    const { t, i18n } = useTranslation()
     const { theme, setTheme } = useTheme()
 
     // Sync theme with settings
@@ -224,14 +227,18 @@ function GeneralSettings({ settings, update }: CommonProps) {
         update("theme", mode)
     }
 
+    const changeLanguage = (lang: string) => {
+        i18n.changeLanguage(lang)
+    }
+
     return (
         <div className="py-2">
-            <Section title="外观" icon={<Monitor size={14} />}>
+            <Section title={t('settings.general.appearance')} icon={<Monitor size={14} />}>
                 <div className="glass-card p-1.5 rounded-2xl flex border border-border-color">
                     {[
-                        { id: "light", label: "亮色", icon: <Sun size={16} /> },
-                        { id: "dark", label: "暗色", icon: <Moon size={16} /> },
-                        { id: "system", label: "跟随系统", icon: <Laptop size={16} /> }
+                        { id: "light", label: t('settings.general.mode.light'), icon: <Sun size={16} /> },
+                        { id: "dark", label: t('settings.general.mode.dark'), icon: <Moon size={16} /> },
+                        { id: "system", label: t('settings.general.mode.system'), icon: <Laptop size={16} /> }
                     ].map((mode) => (
                         <button
                             key={mode.id}
@@ -250,27 +257,49 @@ function GeneralSettings({ settings, update }: CommonProps) {
                 </div>
             </Section>
 
-            <Section title="启动行为" icon={<Power size={14} />}>
+            <Section title={t('settings.language.title')} icon={<Globe size={14} />}>
+                <div className="glass-card p-1.5 rounded-2xl flex border border-border-color">
+                    {[
+                        { id: "en", label: "English" },
+                        { id: "zh-CN", label: "简体中文" }
+                    ].map((lang) => (
+                        <button
+                            key={lang.id}
+                            onClick={() => changeLanguage(lang.id)}
+                            className={cn(
+                                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all",
+                                i18n.language === lang.id
+                                    ? "bg-white dark:bg-white/10 text-black dark:text-white shadow-sm"
+                                    : "text-secondary hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"
+                            )}
+                        >
+                            {lang.label}
+                        </button>
+                    ))}
+                </div>
+            </Section>
+
+            <Section title={t('settings.general.launch_behavior')} icon={<Power size={14} />}>
                 <SettingItem
-                    title="开机自启动"
-                    description="当计算机启动时自动运行 Tunnet。(开发中)"
+                    title={t('settings.general.launch_at_login.title')}
+                    description={t('settings.general.launch_at_login.desc')}
                     icon={<Power size={20} />}
                 >
                     <CustomSwitch checked={settings.launch_at_login} onChange={(v) => update("launch_at_login", v)} />
                 </SettingItem>
                 <SettingItem
-                    title="启动时最小化"
-                    description="应用启动后自动隐藏到系统托盘。"
+                    title={t('settings.general.start_minimized.title')}
+                    description={t('settings.general.start_minimized.desc')}
                     icon={<Monitor size={20} />}
                 >
                     <CustomSwitch checked={settings.start_minimized} onChange={(v) => update("start_minimized", v)} />
                 </SettingItem>
             </Section>
 
-            <Section title="应用更新" icon={<RefreshCw size={14} />}>
+            <Section title={t('settings.general.app_update')} icon={<RefreshCw size={14} />}>
                 <SettingItem
-                    title="自动检查更新"
-                    description="应用启动时自动检查最新版本。(开发中)"
+                    title={t('settings.general.auto_check_update.title')}
+                    description={t('settings.general.auto_check_update.desc')}
                     icon={<RefreshCw size={20} />}
                 >
                     <CustomSwitch checked={settings.auto_update} onChange={(v) => update("auto_update", v)} />
@@ -281,29 +310,30 @@ function GeneralSettings({ settings, update }: CommonProps) {
 }
 
 function ConnectionSettings({ settings, update, save }: CommonProps) {
+    const { t } = useTranslation()
     const [port, setPort] = useState(settings.mixed_port.toString())
     const [mtu, setMtu] = useState(settings.tun_mtu.toString())
 
     return (
         <div className="py-2">
-            <Section title="基础代理" icon={<Server size={14} />}>
+            <Section title={t('settings.connection.basic_proxy')} icon={<Server size={14} />}>
                 <SettingItem
-                    title="设置系统代理"
-                    description="自动更新系统 HTTP/HTTPS 代理设置。"
+                    title={t('settings.connection.system_proxy.title')}
+                    description={t('settings.connection.system_proxy.desc')}
                     icon={<Server size={20} />}
                 >
                     <CustomSwitch checked={settings.system_proxy} onChange={(v) => update("system_proxy", v)} />
                 </SettingItem>
                 <SettingItem
-                    title="允许局域网连接"
-                    description="允许局域网内的其他设备通过本机的代理端口上网。"
+                    title={t('settings.connection.allow_lan.title')}
+                    description={t('settings.connection.allow_lan.desc')}
                     icon={<Globe size={20} />}
                 >
                     <CustomSwitch checked={settings.allow_lan} onChange={(v) => update("allow_lan", v)} />
                 </SettingItem>
                 <SettingItem
-                    title="混合代理端口"
-                    description="HTTP/SOCKS 协议共用端口。默认推荐 2080。"
+                    title={t('settings.connection.mixed_port.title')}
+                    description={t('settings.connection.mixed_port.desc')}
                     icon={<Database size={20} />}
                 >
                     <div className="flex items-center gap-1 bg-card-bg border border-border-color rounded-xl p-1">
@@ -341,10 +371,10 @@ function ConnectionSettings({ settings, update, save }: CommonProps) {
                 </SettingItem>
             </Section>
 
-            <Section title="TUN 模式增强" icon={<Zap size={14} />}>
+            <Section title={t('settings.connection.tun_mode')} icon={<Zap size={14} />}>
                 <SettingItem
-                    title="网络堆栈类型"
-                    description="gVisor 提供最佳的安全性和兼容性。"
+                    title={t('settings.connection.stack.title')}
+                    description={t('settings.connection.stack.desc')}
                     icon={<Shield size={20} />}
                 >
                     <select
@@ -358,8 +388,8 @@ function ConnectionSettings({ settings, update, save }: CommonProps) {
                     </select>
                 </SettingItem>
                 <SettingItem
-                    title="MTU"
-                    description="最大传输单元。默认 9000。"
+                    title={t('settings.connection.mtu.title')}
+                    description={t('settings.connection.mtu.desc')}
                     icon={<RefreshCw size={20} />}
                 >
                     <div className="flex items-center gap-1 bg-card-bg border border-border-color rounded-xl p-1">
@@ -396,8 +426,8 @@ function ConnectionSettings({ settings, update, save }: CommonProps) {
                     </div>
                 </SettingItem>
                 <SettingItem
-                    title="严格路由控制"
-                    description="自动将所有系统流量路由到 TUN 接口，防止流量泄漏。"
+                    title={t('settings.connection.strict_route.title')}
+                    description={t('settings.connection.strict_route.desc')}
                     icon={<RefreshCw size={20} />}
                 >
                     <CustomSwitch checked={settings.strict_route} onChange={(v) => update("strict_route", v)} />
@@ -408,21 +438,22 @@ function ConnectionSettings({ settings, update, save }: CommonProps) {
 }
 
 function DnsSettings({ settings, update, save }: CommonProps) {
+    const { t } = useTranslation()
     const [servers, setServers] = useState(settings.dns_servers)
 
     return (
         <div className="py-2">
-            <Section title="解析核心" icon={<Database size={14} />}>
+            <Section title={t('settings.dns.resolution_core')} icon={<Database size={14} />}>
                 <SettingItem
-                    title="启用 DNS 劫持"
-                    description="拦截并在本地解析所有发往标准 DNS 端口 (53) 的请求。"
+                    title={t('settings.dns.dns_hijack.title')}
+                    description={t('settings.dns.dns_hijack.desc')}
                     icon={<Shield size={20} />}
                 >
                     <CustomSwitch checked={settings.dns_hijack} onChange={(v) => update("dns_hijack", v)} />
                 </SettingItem>
                 <SettingItem
-                    title="解析优先策略"
-                    description="选择优先使用 IPv4 还是 IPv6 进行域名解析。"
+                    title={t('settings.dns.strategy.title')}
+                    description={t('settings.dns.strategy.desc')}
                     icon={<Globe size={20} />}
                 >
                     <select
@@ -437,11 +468,11 @@ function DnsSettings({ settings, update, save }: CommonProps) {
                 </SettingItem>
             </Section>
 
-            <Section title="上游服务器配置">
+            <Section title={t('settings.dns.upstream')}>
                 <div className="glass-card p-6 rounded-3xl border border-border-color">
                     <div className="flex items-center justify-between mb-4">
-                        <span className="text-xs font-bold text-secondary uppercase tracking-wider">DNS 服务器列表</span>
-                        <span className="text-[10px] text-primary bg-primary/10 px-2 py-0.5 rounded-full font-bold">每行一个地址</span>
+                        <span className="text-xs font-bold text-secondary uppercase tracking-wider">{t('settings.dns.server_list')}</span>
+                        <span className="text-[10px] text-primary bg-primary/10 px-2 py-0.5 rounded-full font-bold">{t('settings.dns.one_per_line')}</span>
                     </div>
                     <textarea
                         value={servers}
@@ -456,12 +487,13 @@ function DnsSettings({ settings, update, save }: CommonProps) {
 }
 
 function AdvancedSettings({ settings, update }: CommonProps) {
+    const { t } = useTranslation()
     return (
         <div className="py-2">
-            <Section title="调试日志" icon={<Bug size={14} />}>
+            <Section title={t('settings.advanced.debug_log')} icon={<Bug size={14} />}>
                 <SettingItem
-                    title="日志详细级别"
-                    description="确定核心引擎输出的信息详细程度。"
+                    title={t('settings.advanced.log_level.title')}
+                    description={t('settings.advanced.log_level.desc')}
                     icon={<Bug size={20} />}
                 >
                     <select
@@ -478,10 +510,10 @@ function AdvancedSettings({ settings, update }: CommonProps) {
                 </SettingItem>
             </Section>
 
-            <Section title="数据持久化">
+            <Section title={t('settings.advanced.persistence')}>
                 <SettingItem
-                    title="核心缓存目录"
-                    description="存放所有运行时动态数据。"
+                    title={t('settings.advanced.cache_dir.title')}
+                    description={t('settings.advanced.cache_dir.desc')}
                     icon={<Database size={20} />}
                 >
                     <div className="flex items-center gap-3">
@@ -491,10 +523,10 @@ function AdvancedSettings({ settings, update }: CommonProps) {
                 </SettingItem>
             </Section>
 
-            <Section title="组件管理" icon={<Server size={14} />}>
+            <Section title={t('settings.advanced.component')} icon={<Server size={14} />}>
                 <SettingItem
-                    title="Sing-box 内核"
-                    description="管理底层代理核心组件。"
+                    title={t('settings.advanced.core.title')}
+                    description={t('settings.advanced.core.desc')}
                     icon={<Server size={20} />}
                 >
                     <CoreUpdateControl />
@@ -505,6 +537,7 @@ function AdvancedSettings({ settings, update }: CommonProps) {
 }
 
 function CoreUpdateControl() {
+    const { t } = useTranslation()
     const [status, setStatus] = useState<"idle" | "checking" | "available" | "updating" | "uptodate" | "error">("idle")
     const [newVersion, setNewVersion] = useState<string>("")
 
@@ -543,28 +576,28 @@ function CoreUpdateControl() {
     if (status === "available") {
         return (
             <div className="flex items-center gap-2">
-                <span className="text-xs text-primary font-bold">New: {newVersion}</span>
+                <span className="text-xs text-primary font-bold">{t('settings.advanced.core.new')}: {newVersion}</span>
                 <button
                     onClick={update}
                     className="bg-primary text-white text-xs px-3 py-1.5 rounded-lg font-bold shadow-md shadow-primary/20 hover:bg-primary-hover transition-all"
                 >
-                    Update
+                    {t('settings.advanced.core.update')}
                 </button>
             </div>
         )
     }
 
-    if (status === "updating") return <span className="text-xs text-secondary animate-pulse font-mono">Updating...</span>
-    if (status === "checking") return <span className="text-xs text-secondary animate-pulse font-mono">Checking...</span>
-    if (status === "uptodate") return <span className="text-xs text-green-500 font-bold">Latest Version</span>
-    if (status === "error") return <span className="text-xs text-red-500 font-bold">Error</span>
+    if (status === "updating") return <span className="text-xs text-secondary animate-pulse font-mono">{t('settings.advanced.core.updating')}</span>
+    if (status === "checking") return <span className="text-xs text-secondary animate-pulse font-mono">{t('settings.advanced.core.checking')}</span>
+    if (status === "uptodate") return <span className="text-xs text-green-500 font-bold">{t('settings.advanced.core.latest')}</span>
+    if (status === "error") return <span className="text-xs text-red-500 font-bold">{t('settings.advanced.core.error')}</span>
 
     return (
         <button
             onClick={check}
             className="text-xs bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors font-semibold text-secondary"
         >
-            Check Update
+            {t('settings.advanced.core.check_update')}
         </button>
     )
 }

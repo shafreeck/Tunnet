@@ -2,6 +2,7 @@
 
 import React from "react"
 import { RefreshCw, Power, Wifi, Bolt, CheckCircle2, XCircle, Globe } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 interface ConnectionStatusProps {
     isConnected: boolean;
@@ -15,8 +16,9 @@ interface ConnectionStatusProps {
 }
 
 export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mode, onModeChange, tunEnabled, onTunToggle }: ConnectionStatusProps) {
+    const { t } = useTranslation()
     const displayFlag = flagUrl // If empty string, it's falsey
-    const displayName = isConnected ? (serverName || "Unknown Server") : "Disconnected"
+    const displayName = isConnected ? (serverName || t('status.unknown_server')) : t('status.disconnected')
 
     return (
         <div className="flex flex-col items-center justify-center py-10 relative">
@@ -42,7 +44,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mod
                 <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-card-bg backdrop-blur-md border border-border-color pl-1 pr-2 py-0.5 rounded-full shadow-lg flex items-center gap-1">
                     <span className={`size-2 rounded-full ${isConnected ? 'bg-accent-green' : 'bg-red-500'} animate-pulse`}></span>
                     <span className={`${isConnected ? 'text-accent-green' : 'text-red-500'} text-[10px] font-bold tracking-wider uppercase`}>
-                        {isConnected ? 'Active' : 'Stopped'}
+                        {isConnected ? t('status.active') : t('status.stopped')}
                     </span>
                 </div>
             </div >
@@ -54,12 +56,12 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mod
             <div className="flex items-center gap-3 text-text-secondary text-xs font-medium mb-8 bg-card-bg backdrop-blur-md px-4 py-1.5 rounded-full border border-border-color shadow-sm">
                 <span className="flex items-center gap-1.5 text-text-primary">
                     <Wifi className={`size-3.5 ${isConnected ? 'text-accent-green' : 'text-text-tertiary'}`} />
-                    {isConnected ? 'Connected' : 'Offline'}
+                    {isConnected ? t('status.connected') : t('status.offline')}
                 </span>
                 <span className="w-px h-3 bg-border-color"></span>
                 <span className="flex items-center gap-1.5 font-mono text-text-secondary">
                     <Bolt className="size-3.5" />
-                    {isConnected ? (realIp || 'Checking IP...') : '--'}
+                    {isConnected ? (realIp || t('status.checking_ip')) : '--'}
                 </span>
                 <span className="w-px h-3 bg-border-color"></span>
                 <button
@@ -71,7 +73,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mod
                         <div className={`size-2 rounded-full ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-in fade-in zoom-in duration-300' : 'bg-gray-500 animate-in fade-in zoom-in duration-300'}`} />
                     )}
                     <span className="text-xs font-semibold tracking-wide">
-                        Tun {tunEnabled ? 'On' : 'Off'}
+                        {tunEnabled ? t('status.tun_on') : t('status.tun_off')}
                     </span>
                 </button>
             </div>
@@ -81,19 +83,19 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mod
                     onClick={() => onModeChange('global')}
                     className={`px-6 py-1.5 rounded-md text-xs font-medium transition-all ${mode === 'global' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5'}`}
                 >
-                    Global
+                    {t('status.mode.global')}
                 </button>
                 <button
                     onClick={() => onModeChange('rule')}
                     className={`px-6 py-1.5 rounded-md text-xs font-medium transition-all ${mode === 'rule' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5'}`}
                 >
-                    Rule
+                    {t('status.mode.rule')}
                 </button>
                 <button
                     onClick={() => onModeChange('direct')}
                     className={`px-6 py-1.5 rounded-md text-xs font-medium transition-all ${mode === 'direct' ? 'bg-primary text-white shadow-sm' : 'text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5'}`}
                 >
-                    Direct
+                    {t('status.mode.direct')}
                 </button>
             </div>
         </div >
@@ -107,6 +109,7 @@ interface HeaderProps {
 }
 
 export function Header({ isConnected, onToggle, isLoading }: HeaderProps) {
+    const { t } = useTranslation()
     return (
         <header className="flex items-center justify-between px-8 py-5 z-30">
             <div data-tauri-drag-region className="flex-1 h-full cursor-default"></div>
@@ -119,7 +122,7 @@ export function Header({ isConnected, onToggle, isLoading }: HeaderProps) {
                 >
                     <Power className={`size-4 ${isConnected ? 'text-red-200' : 'text-emerald-200'} group-hover:scale-110 transition-transform`} />
                     <span className="font-semibold text-xs tracking-wide">
-                        {isLoading ? "WAIT..." : (isConnected ? "DISCONNECT" : "CONNECT")}
+                        {isLoading ? t('status.wait') : (isConnected ? t('status.disconnect') : t('status.connect'))}
                     </span>
                 </button>
             </div>

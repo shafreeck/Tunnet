@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react"
 // @ts-ignore
 import { invoke } from "@tauri-apps/api/core"
 import { Search, RotateCcw, Map as MapIcon, LayoutGrid, Star, Globe as GlobeIcon } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 
 import { LocationsMap } from "./locations-map"
@@ -33,6 +34,7 @@ export function LocationsView({
     onImport,
     onRefresh
 }: LocationsViewProps) {
+    const { t } = useTranslation()
     const [viewMode, setViewMode] = useState<"grid" | "map">("map")
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedRegion, setSelectedRegion] = useState("All Regions")
@@ -81,9 +83,9 @@ export function LocationsView({
                 <div className="max-w-5xl mx-auto w-full relative z-10 pointer-events-none">
                     <div className="flex items-start justify-between mb-4">
                         <div>
-                            <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">节点地区</h2>
+                            <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">{t('locations.title')}</h2>
                             <p className="text-sm text-text-secondary font-medium">
-                                在 {totalCountries} 个国家/地区拥有 {servers.length} 个可用节点
+                                {t('locations.subtitle', { countries: totalCountries, servers: servers.length })}
                             </p>
                         </div>
 
@@ -98,7 +100,7 @@ export function LocationsView({
                                     )}
                                 >
                                     <MapIcon size={14} />
-                                    Map
+                                    {t('locations.view.map')}
                                 </button>
                                 <button
                                     onClick={() => setViewMode("grid")}
@@ -108,7 +110,7 @@ export function LocationsView({
                                     )}
                                 >
                                     <LayoutGrid size={14} />
-                                    Grid
+                                    {t('locations.view.grid')}
                                 </button>
                             </div>
 
@@ -130,7 +132,7 @@ export function LocationsView({
                             <div className="relative flex-1 group">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-text-primary transition-colors" size={16} />
                                 <input
-                                    placeholder="搜索地区或节点..."
+                                    placeholder={t('locations.search_placeholder')}
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/20 rounded-xl py-2.5 pl-10 pr-4 text-sm text-text-primary focus:outline-none transition-all font-medium placeholder:text-text-tertiary"
@@ -148,7 +150,7 @@ export function LocationsView({
                                                 : "text-text-secondary hover:text-text-primary"
                                         )}
                                     >
-                                        {region}
+                                        {t(`locations.regions.${region.toLowerCase().replace(/ /g, '_')}`, { defaultValue: region })}
                                     </button>
                                 ))}
                             </div>
@@ -199,10 +201,10 @@ export function LocationsView({
                             </div>
                             <div className="flex flex-col">
                                 <span className="text-sm font-black text-text-primary uppercase tracking-tight">
-                                    {selectedCountry || "地区节点"}
+                                    {selectedCountry || t('locations.drawer.region_nodes')}
                                 </span>
                                 <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest">
-                                    {filteredServersForList.length} 个节点就绪
+                                    {t('locations.drawer.nodes_ready', { count: filteredServersForList.length })}
                                 </span>
                             </div>
                         </div>
@@ -219,7 +221,7 @@ export function LocationsView({
                         <div className="relative group">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-text-primary transition-colors" size={14} />
                             <input
-                                placeholder="搜索当前区域节点..."
+                                placeholder={t('locations.drawer.search_placeholder')}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/20 rounded-xl py-2 pl-9 pr-4 text-xs text-text-primary focus:outline-none transition-all placeholder:text-text-tertiary"
