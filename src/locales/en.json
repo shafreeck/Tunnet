@@ -128,6 +128,11 @@
             "system": "System Proxy",
             "port": "Port Proxy"
         },
+        "mode_short": {
+            "tun": "TUN",
+            "system": "SYSTEM",
+            "port": "PORT"
+        },
         "wait": "Please wait a moment",
         "desc": {
             "global": "Global Traffic Routed",

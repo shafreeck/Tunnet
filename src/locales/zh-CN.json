@@ -128,6 +128,11 @@
             "system": "系统代理",
             "port": "端口代理"
         },
+        "mode_short": {
+            "tun": "TUN",
+            "system": "系统",
+            "port": "端口"
+        },
         "wait": "请稍候...",
         "desc": {
             "global": "接管所有流量",

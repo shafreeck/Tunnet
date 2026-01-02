@@ -229,6 +229,9 @@ function GeneralSettings({ settings, update }: CommonProps) {
 
     const changeLanguage = (lang: string) => {
         i18n.changeLanguage(lang)
+        import("@tauri-apps/api/event").then(({ emit }) => {
+            emit("language-changed", lang)
+        })
     }
 
     return (

@@ -17,7 +17,7 @@ const formatSpeed = (bytes: number) => {
 }
 
 export default function TrayPage() {
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation()
     const { resolvedTheme } = useTheme()
     const [settings, setSettings] = useState<AppSettings>(defaultSettings)
     const [status, setStatus] = useState<any>({ is_running: false, tun_mode: false, routing_mode: "rule" })
@@ -73,10 +73,16 @@ export default function TrayPage() {
         // Request current connection details from other windows (e.g. Dashboard)
         emit("request-connection-details")
 
+        // Listen for language changes from main window
+        const unlistenLang = listen<string>("language-changed", (event) => {
+            i18n.changeLanguage(event.payload)
+        })
+
         return () => {
             unlistenSettings.then(f => f())
             unlistenStatus.then(f => f())
             unlistenIp.then(f => f())
+            unlistenLang.then(f => f())
         }
     }, [])
 
@@ -282,7 +288,7 @@ export default function TrayPage() {
                         isTransitioning ? "bg-blue-400 animate-pulse" : (status.is_running ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-yellow-500")
                     )} />
                     <span className="text-xs font-bold tracking-wider opacity-80 uppercase">
-                        {isTransitioning ? t('tray.processing') : (status.is_running ? `${t('tray.on')} (${status.tun_mode ? 'TUN' : (settings.system_proxy ? 'SYSTEM' : 'PORT')})` : t('tray.off'))}
+                        {isTransitioning ? t('tray.processing') : (status.is_running ? `${t('tray.on')} (${status.tun_mode ? t('tray.mode_short.tun') : (settings.system_proxy ? t('tray.mode_short.system') : t('tray.mode_short.port'))})` : t('tray.off'))}
                     </span>
                 </div>
                 <button
@@ -524,7 +530,7 @@ export default function TrayPage() {
                 <span className="text-[10px] font-mono opacity-20 whitespace-nowrap overflow-hidden max-w-[80px]">V0.1.0</span>
                 <button
                     onClick={() => invoke("quit_app")}
-                    className="text-[10px] font-bold tracking-widest px-3 py-1 rounded-lg transition-all text-text-secondary hover:text-red-500 hover:bg-red-500/10 active:scale-95"
+                    className="text-[10px] font-bold tracking-widest px-4 py-1.5 rounded-xl transition-all bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white active:scale-95 shadow-lg shadow-red-500/20 border border-red-500/20 hover:border-red-500"
                 >
                     {t('tray.exit')}
                 </button>
