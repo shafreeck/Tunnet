@@ -170,6 +170,7 @@
         "tun_mode_switch": "TUN 模式",
         "system_proxy_switch": "系统代理",
         "wait": "请稍候...",
+        "switching": "切换中...",
         "disconnect": "断开连接",
         "connect": "连接",
         "mode": {
@@ -246,7 +247,8 @@
             "smart": "智能连接",
             "global_proxy": "全局代理",
             "global_direct": "全局直连",
-            "bypass_lan_cn": "绕过局域网和大陆"
+            "bypass_lan_cn": "绕过局域网和大陆",
+            "custom": "自定义配置"
         },
         "add_rule": "新增规则",
         "search_placeholder": "搜索规则...",

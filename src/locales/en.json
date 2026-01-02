@@ -170,6 +170,7 @@
         "tun_mode_switch": "TUN Mode",
         "system_proxy_switch": "System Proxy",
         "wait": "WAIT...",
+        "switching": "SWITCHING...",
         "disconnect": "DISCONNECT",
         "connect": "CONNECT",
         "mode": {
@@ -246,7 +247,8 @@
             "smart": "Smart Connect",
             "global_proxy": "Global Proxy",
             "global_direct": "Global Direct",
-            "bypass_lan_cn": "Bypass LAN & CN"
+            "bypass_lan_cn": "Bypass LAN & CN",
+            "custom": "Custom Configuration"
         },
         "add_rule": "Add Rule",
         "search_placeholder": "Search rules...",

@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { Plus, Search, Trash2, Edit2, Shield, Globe, Monitor, AlertCircle, ChevronUp, ChevronDown } from "lucide-react"
+import { Plus, Search, Trash2, Edit2, Shield, Globe, Monitor, AlertCircle, ChevronUp, ChevronDown, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
@@ -60,6 +60,7 @@ const getPresetName = (name: string, t: any) => {
         case "Global Proxy": return t('rules.preset.global_proxy')
         case "Global Direct": return t('rules.preset.global_direct')
         case "Bypass LAN & CN": return t('rules.preset.bypass_lan_cn')
+        case "Custom": return t('rules.preset.custom')
         default: return name
     }
 }
@@ -75,6 +76,7 @@ export function RulesView() {
     const [currentPreset, setCurrentPreset] = useState("Custom")
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingRule, setEditingRule] = useState<Rule | null>(null)
+    const [currentlyApplying, setCurrentlyApplying] = useState(false)
     const [dialogData, setDialogData] = useState<Partial<Rule>>({
         type: "DOMAIN",
         value: "",
@@ -134,10 +136,40 @@ export function RulesView() {
     }
 
     const handleApplyPreset = async (name: string) => {
-        const preset = PRESETS[name as keyof typeof PRESETS]
+        let preset: { rules: Rule[], defaultPolicy: string } | undefined
+        if (name === "Custom") {
+            const saved = localStorage.getItem("tunnet_rules_custom")
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved)
+                    preset = parsed
+                } catch (e) {
+                    console.error("Failed to parse custom rules", e)
+                }
+            }
+            if (!preset) {
+                // If no saved custom rules, use current as custom or defaults?
+                // For now, if empty, maybe just apply nothing or error?
+                // Better: if empty, init with current rules as custom?
+                // Let's assume if it's select from dropdown, it should exist roughly.
+                // But if not, just use empty or current rules is safer.
+                // Actually if I click Custom from dropdown and I have no saved custom rules, I probably expect nothing or previous state.
+                // Let's show error if not found? Or just initialize it.
+                // Let's initialize with empty rules but Proxy default.
+                preset = { rules: [], defaultPolicy: "PROXY" }
+            }
+        } else {
+            preset = PRESETS[name as keyof typeof PRESETS]
+        }
+
         if (preset) {
+            setCurrentlyApplying(true)
             try {
-                const newRules = preset.rules.map(r => ({ ...r, id: crypto.randomUUID() }))
+                // For Custom, we rely on the saved IDs ideally, but generating new ones is fine too to ensure uniqueness if needed.
+                // Actually for Custom we should probably keep IDs if possible?
+                // But `save_rules` doesn't care much about IDs except for identifying.
+                // If we restore custom, we probably want the exact same state.
+                const newRules = preset.rules // Keep original IDs if possible
                 const newPolicy = preset.defaultPolicy as "PROXY" | "DIRECT" | "REJECT"
                 await saveRulesToBackend(newRules, newPolicy)
                 setRules(newRules)
@@ -145,13 +177,22 @@ export function RulesView() {
                 setCurrentPreset(name)
                 localStorage.setItem("tunnet_rules_preset", name)
                 setIsPresetOpen(false)
-                localStorage.setItem("tunnet_rules_preset", name)
-                setIsPresetOpen(false)
                 toast.success(t('rules.toast.applied_preset', { name: getPresetName(name, t) }))
             } catch (err) {
                 toast.error(t('rules.toast.failed_preset'))
+            } finally {
+                setCurrentlyApplying(false)
             }
         }
+    }
+
+    const switchToCustom = (updatedRules: Rule[], updatedPolicy: "PROXY" | "DIRECT" | "REJECT") => {
+        setCurrentPreset("Custom")
+        localStorage.setItem("tunnet_rules_preset", "Custom")
+        localStorage.setItem("tunnet_rules_custom", JSON.stringify({
+            rules: updatedRules,
+            defaultPolicy: updatedPolicy
+        }))
     }
 
     const handleDeleteRule = async (id: string, e: React.MouseEvent) => {
@@ -160,7 +201,9 @@ export function RulesView() {
             const newRules = rules.filter(r => r.id !== id)
             await saveRulesToBackend(newRules, defaultPolicy)
             await saveRulesToBackend(newRules, defaultPolicy)
+            await saveRulesToBackend(newRules, defaultPolicy)
             setRules(newRules)
+            switchToCustom(newRules, defaultPolicy)
             toast.success(t('rules.toast.rule_deleted'))
         } catch (err) {
             toast.error(t('rules.toast.delete_failed'))
@@ -182,6 +225,7 @@ export function RulesView() {
             await saveRulesToBackend(newRules, defaultPolicy)
             setRules(newRules)
             setIsDialogOpen(false)
+            switchToCustom(newRules, defaultPolicy)
             toast.success(editingRule ? t('rules.toast.rule_updated') : t('rules.toast.rule_added'))
         } catch (err) {
             toast.error(t('rules.toast.save_failed'))
@@ -199,9 +243,8 @@ export function RulesView() {
         const nextPolicy = getNextPolicy(rule.policy)
         try {
             const newRules = rules.map(r => r.id === rule.id ? { ...r, policy: nextPolicy } as Rule : r)
-            // Optimistic update
-            setRules(newRules)
             await saveRulesToBackend(newRules, defaultPolicy)
+            switchToCustom(newRules, defaultPolicy)
             toast.success(t('rules.toast.rule_updated'))
         } catch (err) {
             // Revert on failure
@@ -214,8 +257,8 @@ export function RulesView() {
         e.stopPropagation()
         const nextPolicy = getNextPolicy(defaultPolicy)
         try {
-            setDefaultPolicy(nextPolicy)
             await saveRulesToBackend(rules, nextPolicy)
+            switchToCustom(rules, nextPolicy)
             toast.success(t('rules.toast.rule_updated'))
         } catch (err) {
             setDefaultPolicy(defaultPolicy)
@@ -253,18 +296,26 @@ export function RulesView() {
                         <div className="flex gap-4 pointer-events-auto shrink-0">
                             <div className="relative">
                                 <button
-                                    onClick={() => setIsPresetOpen(!isPresetOpen)}
-                                    className="flex items-center gap-2 px-4 py-2 bg-card-bg hover:bg-black/5 dark:hover:bg-white/10 rounded-xl text-xs font-bold transition-all border border-border-color"
+                                    onClick={() => !currentlyApplying && setIsPresetOpen(!isPresetOpen)}
+                                    disabled={currentlyApplying}
+                                    className={cn(
+                                        "flex items-center gap-2 px-4 py-2 bg-card-bg hover:bg-black/5 dark:hover:bg-white/10 rounded-xl text-xs font-bold transition-all border border-border-color",
+                                        currentlyApplying ? "opacity-70 cursor-wait" : ""
+                                    )}
                                 >
                                     <span className="opacity-50">{t('rules.preset.label')}</span>
                                     <span>{getPresetName(currentPreset, t)}</span>
-                                    <ChevronDown size={14} className="opacity-50" />
+                                    {currentlyApplying ? (
+                                        <Loader2 size={14} className="opacity-50 animate-spin" />
+                                    ) : (
+                                        <ChevronDown size={14} className="opacity-50" />
+                                    )}
                                 </button>
                                 {isPresetOpen && (
                                     <>
                                         <div className="fixed inset-0 z-10" onClick={() => setIsPresetOpen(false)} />
                                         <div className="absolute right-0 top-full mt-2 w-52 bg-white/90 dark:bg-black/80 backdrop-blur-xl border border-border-color rounded-2xl shadow-2xl z-20 py-1 overflow-hidden animate-in zoom-in-95 duration-200">
-                                            {Object.keys(PRESETS).map((name) => (
+                                            {[...Object.keys(PRESETS), "Custom"].map((name) => (
                                                 <button
                                                     key={name}
                                                     onClick={() => handleApplyPreset(name)}

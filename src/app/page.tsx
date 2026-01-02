@@ -821,6 +821,7 @@ export default function Home() {
                 onTunToggle={handleTunToggle}
                 systemProxyEnabled={systemProxyEnabled}
                 onSystemProxyToggle={toggleSystemProxy}
+                isLoading={isLoading}
               />
 
 
