@@ -16,16 +16,24 @@ interface Rule {
     description?: string
 }
 
+const LEGACY_DESCRIPTION_MAP: Record<string, string> = {
+    "Direct connection for Mainland China IPs": "rules.description.geoip_cn",
+    "Direct connection for Mainland China Domains": "rules.description.geosite_cn",
+    "Force Google via Proxy": "rules.description.google",
+    "Local Network": "rules.description.local_network",
+    "Block Ads": "rules.description.ads"
+}
+
 // Presets Configuration
 const PRESETS = {
     "Smart Connect": {
         defaultPolicy: "PROXY",
         rules: [
-            { id: "1", type: "GEOIP", value: "geoip-cn", policy: "DIRECT", enabled: true, description: "Direct connection for Mainland China IPs" },
-            { id: "2", type: "DOMAIN", value: "geosite:geosite-cn", policy: "DIRECT", enabled: true, description: "Direct connection for Mainland China Domains" },
-            { id: "3", type: "DOMAIN_SUFFIX", value: "google.com", policy: "PROXY", enabled: true, description: "Force Google via Proxy" },
-            { id: "4", type: "IP_CIDR", value: "192.168.0.0/16", policy: "DIRECT", enabled: true, description: "Local Network" },
-            { id: "5", type: "DOMAIN_KEYWORD", value: "ads", policy: "REJECT", enabled: true, description: "Block Ads" },
+            { id: "1", type: "GEOIP", value: "geoip-cn", policy: "DIRECT", enabled: true, description: "rules.description.geoip_cn" },
+            { id: "2", type: "DOMAIN", value: "geosite:geosite-cn", policy: "DIRECT", enabled: true, description: "rules.description.geosite_cn" },
+            { id: "3", type: "DOMAIN_SUFFIX", value: "google.com", policy: "PROXY", enabled: true, description: "rules.description.google" },
+            { id: "4", type: "IP_CIDR", value: "192.168.0.0/16", policy: "DIRECT", enabled: true, description: "rules.description.local_network" },
+            { id: "5", type: "DOMAIN_KEYWORD", value: "ads", policy: "REJECT", enabled: true, description: "rules.description.ads" },
         ] as Rule[]
     },
     "Global Proxy": {
@@ -39,9 +47,9 @@ const PRESETS = {
     "Bypass LAN & CN": {
         defaultPolicy: "PROXY",
         rules: [
-            { id: "1", type: "GEOIP", value: "geoip-cn", policy: "DIRECT", enabled: true, description: "Direct connection for Mainland China IPs" },
-            { id: "2", type: "DOMAIN", value: "geosite:geosite-cn", policy: "DIRECT", enabled: true, description: "Direct connection for Mainland China Domains" },
-            { id: "4", type: "IP_CIDR", value: "192.168.0.0/16", policy: "DIRECT", enabled: true, description: "Local Network" },
+            { id: "1", type: "GEOIP", value: "geoip-cn", policy: "DIRECT", enabled: true, description: "rules.description.geoip_cn" },
+            { id: "2", type: "DOMAIN", value: "geosite:geosite-cn", policy: "DIRECT", enabled: true, description: "rules.description.geosite_cn" },
+            { id: "4", type: "IP_CIDR", value: "192.168.0.0/16", policy: "DIRECT", enabled: true, description: "rules.description.local_network" },
         ] as Rule[]
     }
 }
@@ -61,7 +69,7 @@ export function RulesView() {
     const [rules, setRules] = useState<Rule[]>([])
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedPolicy, setSelectedPolicy] = useState<"ALL" | "PROXY" | "DIRECT" | "REJECT">("ALL")
-    const [defaultPolicy, setDefaultPolicy] = useState<"PROXY" | "DIRECT">("PROXY")
+    const [defaultPolicy, setDefaultPolicy] = useState<"PROXY" | "DIRECT" | "REJECT">("PROXY")
     const [isFallbackOpen, setIsFallbackOpen] = useState(false)
     const [isPresetOpen, setIsPresetOpen] = useState(false)
     const [currentPreset, setCurrentPreset] = useState("Custom")
@@ -85,15 +93,34 @@ export function RulesView() {
         try {
             const allRules = await invoke<Rule[]>("get_rules")
             const finalRule = allRules.find(r => r.type === "FINAL")
-            const normalRules = allRules.filter(r => r.type !== "FINAL")
+            let normalRules = allRules.filter(r => r.type !== "FINAL")
+
+            // Auto-migrate legacy descriptions
+            let hasChanges = false
+            normalRules = normalRules.map(r => {
+                if (r.description && LEGACY_DESCRIPTION_MAP[r.description]) {
+                    hasChanges = true
+                    return { ...r, description: LEGACY_DESCRIPTION_MAP[r.description] }
+                }
+                return r
+            })
+
+            if (hasChanges) {
+                const finalPolicy = finalRule ? finalRule.policy as "PROXY" | "DIRECT" | "REJECT" : "PROXY"
+                const payload = [...normalRules]
+                if (finalRule) payload.push(finalRule)
+                await invoke("save_rules", { rules: payload })
+                // No need to refetch, we have the updated rules
+            }
+
             setRules(normalRules)
-            if (finalRule) setDefaultPolicy(finalRule.policy as "PROXY" | "DIRECT")
+            if (finalRule) setDefaultPolicy(finalRule.policy as "PROXY" | "DIRECT" | "REJECT")
         } catch (error) {
             console.error("Failed to fetch rules:", error)
         }
     }
 
-    const saveRulesToBackend = async (rulesToSave: Rule[], policy: "PROXY" | "DIRECT") => {
+    const saveRulesToBackend = async (rulesToSave: Rule[], policy: "PROXY" | "DIRECT" | "REJECT") => {
         const finalRule: Rule = {
             id: "final-policy",
             type: "FINAL",
@@ -111,7 +138,7 @@ export function RulesView() {
         if (preset) {
             try {
                 const newRules = preset.rules.map(r => ({ ...r, id: crypto.randomUUID() }))
-                const newPolicy = preset.defaultPolicy as "PROXY" | "DIRECT"
+                const newPolicy = preset.defaultPolicy as "PROXY" | "DIRECT" | "REJECT"
                 await saveRulesToBackend(newRules, newPolicy)
                 setRules(newRules)
                 setDefaultPolicy(newPolicy)
@@ -161,6 +188,41 @@ export function RulesView() {
         }
     }
 
+    const getNextPolicy = (current: "PROXY" | "DIRECT" | "REJECT") => {
+        const sequence: ("PROXY" | "DIRECT" | "REJECT")[] = ["PROXY", "DIRECT", "REJECT"]
+        const nextIndex = (sequence.indexOf(current) + 1) % sequence.length
+        return sequence[nextIndex]
+    }
+
+    const handleCycleRulePolicy = async (rule: Rule, e: React.MouseEvent) => {
+        e.stopPropagation()
+        const nextPolicy = getNextPolicy(rule.policy)
+        try {
+            const newRules = rules.map(r => r.id === rule.id ? { ...r, policy: nextPolicy } as Rule : r)
+            // Optimistic update
+            setRules(newRules)
+            await saveRulesToBackend(newRules, defaultPolicy)
+            toast.success(t('rules.toast.rule_updated'))
+        } catch (err) {
+            // Revert on failure
+            setRules(rules)
+            toast.error(t('rules.toast.save_failed'))
+        }
+    }
+
+    const handleCycleDefaultPolicy = async (e: React.MouseEvent) => {
+        e.stopPropagation()
+        const nextPolicy = getNextPolicy(defaultPolicy)
+        try {
+            setDefaultPolicy(nextPolicy)
+            await saveRulesToBackend(rules, nextPolicy)
+            toast.success(t('rules.toast.rule_updated'))
+        } catch (err) {
+            setDefaultPolicy(defaultPolicy)
+            toast.error(t('rules.toast.save_failed'))
+        }
+    }
+
     const filteredRules = rules.filter(r => {
         const matchesSearch = r.value.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (r.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
@@ -183,12 +245,12 @@ export function RulesView() {
             <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-8 pb-6 shrink-0 relative z-20">
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
                 <div className="max-w-5xl mx-auto w-full relative z-10 pointer-events-none">
-                    <div className="flex items-start justify-between mb-8">
-                        <div>
+                    <div className="flex items-start justify-between mb-8 gap-12">
+                        <div className="max-w-lg">
                             <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">{t('rules.title')}</h2>
                             <p className="text-sm text-text-secondary font-medium">{t('rules.subtitle')}</p>
                         </div>
-                        <div className="flex gap-4 pointer-events-auto">
+                        <div className="flex gap-4 pointer-events-auto shrink-0">
                             <div className="relative">
                                 <button
                                     onClick={() => setIsPresetOpen(!isPresetOpen)}
@@ -201,7 +263,7 @@ export function RulesView() {
                                 {isPresetOpen && (
                                     <>
                                         <div className="fixed inset-0 z-10" onClick={() => setIsPresetOpen(false)} />
-                                        <div className="absolute right-0 top-full mt-2 w-52 bg-card-bg backdrop-blur-xl border border-border-color rounded-2xl shadow-2xl z-20 py-1 overflow-hidden animate-in zoom-in-95 duration-200">
+                                        <div className="absolute right-0 top-full mt-2 w-52 bg-white/90 dark:bg-black/80 backdrop-blur-xl border border-border-color rounded-2xl shadow-2xl z-20 py-1 overflow-hidden animate-in zoom-in-95 duration-200">
                                             {Object.keys(PRESETS).map((name) => (
                                                 <button
                                                     key={name}
@@ -249,7 +311,7 @@ export function RulesView() {
                                         selectedPolicy === policy ? "bg-primary text-white shadow-sm" : "text-text-secondary hover:text-text-primary"
                                     )}
                                 >
-                                    {policy}
+                                    {t(`rules.policies.${policy.toLowerCase()}` as any)}
                                 </button>
                             ))}
                         </div>
@@ -280,16 +342,18 @@ export function RulesView() {
                                     </div>
                                     <div className="flex flex-col flex-1 min-w-0">
                                         <span className="text-sm font-semibold text-text-primary font-mono truncate">{rule.value}</span>
-                                        {rule.description && <span className="text-xs text-text-secondary truncate mt-0.5">{rule.description}</span>}
+                                        {rule.description && <span className="text-xs text-text-secondary truncate mt-0.5">{t(rule.description)}</span>}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-8">
-                                    <div className={cn(
-                                        "px-3 py-1 rounded-full text-[10px] font-bold border tracking-widest uppercase w-20 text-center",
-                                        getPolicyColor(rule.policy)
-                                    )}>
-                                        {rule.policy}
-                                    </div>
+                                    <button
+                                        onClick={(e) => handleCycleRulePolicy(rule, e)}
+                                        className={cn(
+                                            "px-3 py-1 rounded-full text-[10px] font-bold border tracking-widest uppercase w-20 text-center cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md",
+                                            getPolicyColor(rule.policy)
+                                        )}>
+                                        {t(`rules.policies.${rule.policy.toLowerCase()}` as any)}
+                                    </button>
                                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
                                         <button onClick={(e) => { setEditingRule(rule); setDialogData({ ...rule }); setIsDialogOpen(true); }} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><Edit2 size={16} /></button>
                                         <button onClick={(e) => handleDeleteRule(rule.id, e)} className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all"><Trash2 size={16} /></button>
@@ -303,9 +367,9 @@ export function RulesView() {
 
             {/* Bottom Default Status */}
             <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-                <button
+                <div
                     onClick={() => setIsFallbackOpen(!isFallbackOpen)}
-                    className="pointer-events-auto glass-card flex items-center gap-4 px-6 py-3 rounded-2xl border-border-color shadow-2xl hover:bg-black/5 dark:hover:bg-white/10 transition-all active:scale-95 group"
+                    className="pointer-events-auto glass-card flex items-center gap-4 px-6 py-3 rounded-2xl border-border-color shadow-2xl hover:bg-black/5 dark:hover:bg-white/10 transition-all active:scale-95 group cursor-pointer"
                 >
                     <div className="flex flex-col items-start">
                         <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest leading-none mb-1">{t('rules.default_policy')}</span>
@@ -315,13 +379,15 @@ export function RulesView() {
                         </div>
                     </div>
                     <div className="h-8 w-px bg-white/10 mx-2" />
-                    <div className={cn(
-                        "px-4 py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase border",
-                        getPolicyColor(defaultPolicy)
-                    )}>
-                        {defaultPolicy}
-                    </div>
-                </button>
+                    <button
+                        onClick={handleCycleDefaultPolicy}
+                        className={cn(
+                            "px-4 py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase border cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md",
+                            getPolicyColor(defaultPolicy)
+                        )}>
+                        {t(`rules.policies.${defaultPolicy.toLowerCase()}` as any)}
+                    </button>
+                </div>
             </div>
 
             {/* Modal - Simplified Integration */}
@@ -349,7 +415,7 @@ export function RulesView() {
                                 <label className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest pl-1">{t('rules.dialog.policy')}</label>
                                 <div className="flex bg-card-bg p-1.5 rounded-[1.25rem] border border-border-color">
                                     {(["PROXY", "DIRECT", "REJECT"] as const).map(policy => (
-                                        <button key={policy} onClick={() => setDialogData({ ...dialogData, policy })} className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-bold transition-all uppercase tracking-widest", dialogData.policy === policy ? (policy === "PROXY" ? "bg-purple-500 text-white shadow-lg" : policy === "DIRECT" ? "bg-emerald-500 text-white shadow-lg" : "bg-red-500 text-white shadow-lg") : "text-text-secondary hover:text-text-primary")}>{policy}</button>
+                                        <button key={policy} onClick={() => setDialogData({ ...dialogData, policy })} className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-bold transition-all uppercase tracking-widest", dialogData.policy === policy ? (policy === "PROXY" ? "bg-purple-500 text-white shadow-lg" : policy === "DIRECT" ? "bg-emerald-500 text-white shadow-lg" : "bg-red-500 text-white shadow-lg") : "text-text-secondary hover:text-text-primary")}>{t(`rules.policies.${policy.toLowerCase()}` as any)}</button>
                                     ))}
                                 </div>
                             </div>

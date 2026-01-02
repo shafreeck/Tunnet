@@ -271,6 +271,19 @@
             "rule_updated": "规则已更新",
             "rule_added": "规则已添加",
             "save_failed": "保存规则失败"
+        },
+        "policies": {
+            "all": "全部",
+            "proxy": "代理",
+            "direct": "直连",
+            "reject": "拒绝"
+        },
+        "description": {
+            "geoip_cn": "中国大陆 IP 直连",
+            "geosite_cn": "中国大陆域名直连",
+            "google": "Google 走代理",
+            "local_network": "局域网直连",
+            "ads": "拦截广告"
         }
     }
 }

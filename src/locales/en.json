@@ -271,6 +271,19 @@
             "rule_updated": "Rule updated",
             "rule_added": "Rule added",
             "save_failed": "Failed to save rule"
+        },
+        "policies": {
+            "all": "ALL",
+            "proxy": "PROXY",
+            "direct": "DIRECT",
+            "reject": "REJECT"
+        },
+        "description": {
+            "geoip_cn": "Direct connection for Mainland China IPs",
+            "geosite_cn": "Direct connection for Mainland China Domains",
+            "google": "Force Google via Proxy",
+            "local_network": "Local Network",
+            "ads": "Block Ads"
         }
     }
 }
