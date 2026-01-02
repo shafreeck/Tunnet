@@ -410,13 +410,12 @@ export default function Home() {
     if (!url) return
     setIsImporting(true)
     try {
-      // 1. Snapshot existing profiles to identify the new one later
-      const preProfiles: any[] = await invoke("get_profiles")
-      const preIds = new Set(preProfiles.map(p => p.id))
+      // 1. Snapshot existing profiles to identify the new one later (Wait, we get ID now!)
+      // No need for snapshotting anymore.
 
       // 2. Perform Import
-      // TODO: Add name support in separate modal or prompt? For now auto-name in backend
-      await invoke("import_subscription", { url, name: null })
+      // Backend now returns the new Profile ID string
+      const newProfileId: string = await invoke("import_subscription", { url, name: null })
 
       // 3. update UI immediately to show the new card
       const postProfiles: any[] = await invoke("get_profiles")
@@ -430,17 +429,18 @@ export default function Home() {
       toast.success(t('toast.import_success'))
       setIsImporting(false) // Stop loading animation immediately
 
-      // 4. Find the NEW profile(s) and probe in background
-      const newProfiles = postProfiles.filter(p => !preIds.has(p.id))
-      const newNodes = newProfiles.flatMap(p => p.nodes)
-      const ids = newNodes.map(n => n.id)
-
-      if (ids.length > 0) {
-        // Run in background, refresh UI when done
-        // NO AWAIT here to ensure UI is unblocked
-        invoke("check_node_locations", { nodeIds: ids }).then(() => {
-          fetchProfiles()
-        }).catch(e => console.error("Background probe failed:", e))
+      // 4. Find the NEW profile and probe its nodes
+      const targetProfile = postProfiles.find(p => p.id === newProfileId)
+      if (targetProfile && targetProfile.nodes) {
+        const ids = targetProfile.nodes.map((n: any) => n.id)
+        if (ids.length > 0) {
+          // Run in background, refresh UI when done
+          // NO AWAIT here to ensure UI is unblocked
+          invoke("check_node_locations", { nodeIds: ids }).then(() => {
+            // Re-fetch profiles to get the updated location data
+            fetchProfiles()
+          }).catch(e => console.error("Background probe failed:", e))
+        }
       }
     } catch (e: any) {
       toast.error(t('toast.action_failed', { error: e }))

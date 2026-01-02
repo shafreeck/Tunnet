@@ -46,7 +46,7 @@ async fn import_subscription(
     url: String,
     name: Option<String>,
     service: State<'_, ProxyService<tauri::Wry>>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     service.import_subscription(&url, name).await
 }
 

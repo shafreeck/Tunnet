@@ -858,16 +858,22 @@ impl<R: Runtime> ProxyService<R> {
         }
     }
 
-    pub async fn import_subscription(&self, url: &str, name: Option<String>) -> Result<(), String> {
+    pub async fn import_subscription(
+        &self,
+        url: &str,
+        name: Option<String>,
+    ) -> Result<String, String> {
         let new_profile = self.manager.fetch_subscription(url, name).await?;
         let mut profiles = self.manager.load_profiles()?;
+        let id_clone = new_profile.id.clone();
 
         // Remove existing profile with same URL or ID if logic requires,
         // but for now we just append. Maybe check for duplicate URL?
         // Let's allow duplicates for now to be safe, user can delete.
         profiles.push(new_profile);
         info!("Imported subscription. Total profiles: {}", profiles.len());
-        self.manager.save_profiles(&profiles)
+        self.manager.save_profiles(&profiles)?;
+        Ok(id_clone)
     }
 
     pub fn get_profiles(&self) -> Result<Vec<crate::profile::Profile>, String> {
