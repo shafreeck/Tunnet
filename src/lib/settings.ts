@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core"
+import { emit } from "@tauri-apps/api/event"
 
 export interface AppSettings {
     // General
@@ -55,6 +56,8 @@ export async function getAppSettings(): Promise<AppSettings> {
 export async function saveAppSettings(settings: AppSettings): Promise<void> {
     try {
         await invoke("save_app_settings", { settings })
+        // Optimistically emit update to all windows
+        await emit("settings-update", settings)
     } catch (e) {
         console.error("Failed to save app settings", e)
         throw e

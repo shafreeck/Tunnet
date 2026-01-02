@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { listen, emit } from "@tauri-apps/api/event"
 import { useTranslation } from "react-i18next"
+import { AppSettings, defaultSettings, getAppSettings, saveAppSettings } from "@/lib/settings"
 import { Sidebar } from "@/components/dashboard/sidebar"
 import { LocationsView } from "@/components/dashboard/locations-view"
 import { SubscriptionsView } from "@/components/dashboard/subscriptions-view"
@@ -57,10 +58,39 @@ export default function Home() {
   // Connection Details State (Real IP)
   const [connectionDetails, setConnectionDetails] = useState<{ ip: string; country: string; countryCode: string } | null>(null)
 
-  // Proxy Mode State
   const [proxyMode, setProxyMode] = useState<'global' | 'rule' | 'direct'>('rule')
   const [tunEnabled, setTunEnabled] = useState(false)
   const [ipRefreshKey, setIpRefreshKey] = useState(0)
+
+  // Settings State
+  const [settings, setSettings] = useState<AppSettings>(defaultSettings)
+  const [systemProxyEnabled, setSystemProxyEnabled] = useState(false)
+
+  // Sync derived state
+  useEffect(() => {
+    setSystemProxyEnabled(settings.system_proxy)
+  }, [settings.system_proxy])
+
+
+  const toggleSystemProxy = async () => {
+    const newSettings = { ...settings, system_proxy: !settings.system_proxy }
+    // Optimistic update
+    setSettings(newSettings)
+    try {
+      await saveAppSettings(newSettings)
+      // Visual feedback via toast? Maybe not needed for simple toggle, consistent with Tray which has no toast for this.
+      // Dashboard usually has toasts for actions.
+      // toast.success(newSettings.system_proxy ? t('status.system_proxy_on') : t('status.system_proxy_off'))
+      // Let's use the translation text for toast if we want it.
+      // But text keys are "System On" / "System Off".
+      // Let's just rely on the switch UI for feedback.
+    } catch (e: any) {
+      console.error(e)
+      toast.error(t('toast.save_failed', { error: e }))
+      // Revert
+      setSettings(settings)
+    }
+  }
 
   useEffect(() => {
     let timer: NodeJS.Timeout
@@ -225,6 +255,14 @@ export default function Home() {
       setProxyMode(savedMode as any)
     }
 
+    // Init: Load App Settings (including System Proxy)
+    getAppSettings().then(setSettings)
+
+    // Listen for settings update from other windows (e.g. Tray)
+    const unlistenSettings = listen<AppSettings>("settings-update", (event) => {
+      setSettings(event.payload)
+    })
+
     // Init: Load stored profiles and nodes
     fetchProfiles()
 
@@ -298,8 +336,22 @@ export default function Home() {
       unlistenStatus.then(f => f())
       unlistenIp.then(f => f())
       unlistenIpRequest.then(f => f())
+      unlistenSettings.then(f => f())
     }
   }, [])
+
+  // Listen for TUN mode sync from Tray (when proxy is stopped)
+  useEffect(() => {
+    const unlistenTunPromise = listen<boolean>("tun-mode-updated", (event) => {
+      // Only update if not running (if running, proxy-status-change handles it)
+      if (!isConnected) {
+        setTunEnabled(event.payload)
+      }
+    })
+    return () => {
+      unlistenTunPromise.then(f => f())
+    }
+  }, [isConnected])
 
   // Keep ref updated for listener access
   const connectionDetailsRef = useRef(connectionDetails)
@@ -527,6 +579,9 @@ export default function Home() {
 
     // Just update the preference state. The reactive useEffect will handle the rest.
     setTunEnabled(nextState)
+    // Emit sync event for Tray (when stopped)
+    emit("tun-mode-updated", nextState)
+
     if (isConnected) {
       toast.success(t(nextState ? 'toast.tun_mode_enabled' : 'toast.tun_mode_disabled'))
     }
@@ -752,6 +807,8 @@ export default function Home() {
                 onModeChange={setProxyMode}
                 tunEnabled={tunEnabled}
                 onTunToggle={handleTunToggle}
+                systemProxyEnabled={systemProxyEnabled}
+                onSystemProxyToggle={toggleSystemProxy}
               />
 
 

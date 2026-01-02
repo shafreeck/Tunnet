@@ -13,9 +13,11 @@ interface ConnectionStatusProps {
     onModeChange: (mode: 'global' | 'rule' | 'direct') => void;
     tunEnabled: boolean;
     onTunToggle: () => void;
+    systemProxyEnabled: boolean;
+    onSystemProxyToggle: () => void;
 }
 
-export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mode, onModeChange, tunEnabled, onTunToggle }: ConnectionStatusProps) {
+export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mode, onModeChange, tunEnabled, onTunToggle, systemProxyEnabled, onSystemProxyToggle }: ConnectionStatusProps) {
     const { t } = useTranslation()
     const displayFlag = flagUrl // If empty string, it's falsey
     const displayName = isConnected ? (serverName || t('status.unknown_server')) : t('status.disconnected')
@@ -64,16 +66,26 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mod
                     {isConnected ? (realIp || t('status.checking_ip')) : '--'}
                 </span>
                 <span className="w-px h-3 bg-border-color"></span>
+
+                <button
+                    onClick={onSystemProxyToggle}
+                    className="flex items-center gap-1.5 transition-colors hover:text-text-primary text-text-secondary"
+                    title="Toggle System Proxy"
+                >
+                    <div className={`size-2 rounded-full ${systemProxyEnabled ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-gray-500/30'} transition-all duration-300`} />
+                    <span className="text-xs font-semibold tracking-wide">
+                        {t('status.system_proxy_switch')}
+                    </span>
+                </button>
+                <span className="w-px h-3 bg-border-color"></span>
                 <button
                     onClick={onTunToggle}
                     className="flex items-center gap-1.5 transition-colors hover:text-text-primary text-text-secondary"
-                    title="Toggle TUN Mode (Requires Helper)"
+                    title="Toggle TUN Mode"
                 >
-                    {tunEnabled && (
-                        <div className={`size-2 rounded-full ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-in fade-in zoom-in duration-300' : 'bg-gray-500 animate-in fade-in zoom-in duration-300'}`} />
-                    )}
+                    <div className={`size-2 rounded-full ${tunEnabled ? (isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-green-500/50') : 'bg-gray-500/30'} transition-all duration-300`} />
                     <span className="text-xs font-semibold tracking-wide">
-                        {tunEnabled ? t('status.tun_on') : t('status.tun_off')}
+                        {t('status.tun_mode_switch')}
                     </span>
                 </button>
             </div>

@@ -78,11 +78,22 @@ export default function TrayPage() {
             i18n.changeLanguage(event.payload)
         })
 
+        // Listen for TUN mode sync from Dashboard (when proxy is stopped)
+        const unlistenTun = listen<boolean>("tun-mode-updated", (event) => {
+            setStatus((prev: any) => {
+                if (!prev.is_running) {
+                    return { ...prev, tun_mode: event.payload }
+                }
+                return prev
+            })
+        })
+
         return () => {
             unlistenSettings.then(f => f())
             unlistenStatus.then(f => f())
             unlistenIp.then(f => f())
             unlistenLang.then(f => f())
+            unlistenTun.then(f => f())
         }
     }, [])
 
@@ -261,6 +272,8 @@ export default function TrayPage() {
             } else {
                 // Just update local status state so next start uses it
                 setStatus({ ...status, tun_mode: newTunMode })
+                // Emit sync event for Dashboard (when stopped)
+                emit("tun-mode-updated", newTunMode)
                 setIsTransitioning(false)
             }
         } catch (e) {
