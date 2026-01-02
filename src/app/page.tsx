@@ -795,16 +795,28 @@ export default function Home() {
       case "dashboard":
       default:
         // Original Dashboard Content
+        const activeServer = servers.find(s => s.id === activeServerId)
+
         return (
           <div className="flex-1 overflow-y-auto px-8 py-8 sidebar-scroll flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
             <div className="max-w-5xl mx-auto flex flex-col w-full space-y-10 pb-20">
               <ConnectionStatus
                 isConnected={isConnected}
-                serverName={servers.find(s => s.id === activeServerId)?.name}
-                flagUrl={connectionDetails ? getFlagUrlFromCode(connectionDetails.countryCode) : servers.find(s => s.id === activeServerId)?.flagUrl}
-                realIp={connectionDetails?.ip}
+                serverName={activeServer?.name}
+                flagUrl={activeServer?.flagUrl}
+                latency={activeServer?.ping}
+                connectionDetails={connectionDetails ? {
+                  ip: connectionDetails.ip,
+                  country: connectionDetails.country,
+                  isp: connectionDetails.isp
+                } : undefined}
+                onLatencyClick={() => activeServerId && handlePingNode(activeServerId)}
+                onMainToggle={toggleProxy}
                 mode={proxyMode}
-                onModeChange={setProxyMode}
+                onModeChange={(m) => {
+                  setProxyMode(m)
+                  // If connected, syncProxy effect will handle the rest
+                }}
                 tunEnabled={tunEnabled}
                 onTunToggle={handleTunToggle}
                 systemProxyEnabled={systemProxyEnabled}

@@ -1,14 +1,20 @@
 "use client"
 
 import React from "react"
-import { RefreshCw, Power, Wifi, Bolt, CheckCircle2, XCircle, Globe } from "lucide-react"
+import { RefreshCw, Power, Wifi, Bolt, CheckCircle2, XCircle, Globe, Info } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { Tooltip } from "react-tooltip"
+import 'react-tooltip/dist/react-tooltip.css'
 
 interface ConnectionStatusProps {
     isConnected: boolean;
     serverName?: string;
     flagUrl?: string;
-    realIp?: string;
+    // realIp?: string; // Removed in favor of connectionDetails tooltip
+    latency?: number;
+    onLatencyClick?: () => void;
+    onMainToggle?: () => void;
+    connectionDetails?: { ip: string; country: string; isp?: string };
     mode: 'global' | 'rule' | 'direct';
     onModeChange: (mode: 'global' | 'rule' | 'direct') => void;
     tunEnabled: boolean;
@@ -17,14 +23,14 @@ interface ConnectionStatusProps {
     onSystemProxyToggle: () => void;
 }
 
-export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mode, onModeChange, tunEnabled, onTunToggle, systemProxyEnabled, onSystemProxyToggle }: ConnectionStatusProps) {
+export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, onLatencyClick, onMainToggle, connectionDetails, mode, onModeChange, tunEnabled, onTunToggle, systemProxyEnabled, onSystemProxyToggle }: ConnectionStatusProps) {
     const { t } = useTranslation()
     const displayFlag = flagUrl // If empty string, it's falsey
     const displayName = isConnected ? (serverName || t('status.unknown_server')) : t('status.disconnected')
 
     return (
         <div className="flex flex-col items-center justify-center py-10 relative">
-            <div className="relative mb-6 group cursor-pointer">
+            <div className="relative mb-6 group cursor-pointer" onClick={onMainToggle}>
                 <span className={`animate-ping absolute inset-0 inline-flex h-full w-full rounded-full ${isConnected ? 'bg-accent-green' : 'bg-red-500'} opacity-20 duration-1000`}></span>
                 <div className={`relative size-28 rounded-full border border-white/10 bg-black/40 backdrop-blur-xl glow-effect flex items-center justify-center overflow-hidden shadow-2xl transition-transform duration-300 group-hover:scale-105`}>
                     {displayFlag ? (
@@ -45,15 +51,51 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mod
                 </div>
                 <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-card-bg backdrop-blur-md border border-border-color pl-1 pr-2 py-0.5 rounded-full shadow-lg flex items-center gap-1">
                     <span className={`size-2 rounded-full ${isConnected ? 'bg-accent-green' : 'bg-red-500'} animate-pulse`}></span>
-                    <span className={`${isConnected ? 'text-accent-green' : 'text-red-500'} text-[10px] font-bold tracking-wider uppercase`}>
+                    <span className={`${isConnected ? 'text-accent-green' : 'text-red-500'} text-[10px] font-bold tracking-wider uppercase whitespace-nowrap`}>
                         {isConnected ? t('status.active') : t('status.stopped')}
                     </span>
                 </div>
             </div >
 
-            <h1 className="text-3xl font-bold text-text-primary mb-2 tracking-tight text-center drop-shadow-md">
+            <h1
+                className="text-3xl font-bold text-text-primary mb-2 tracking-tight text-center drop-shadow-md cursor-default outline-none"
+                data-tooltip-id="node-info-tooltip"
+            >
                 {displayName}
             </h1>
+
+            <Tooltip
+                id="node-info-tooltip"
+                className="z-50 !bg-black/90 !text-white !px-4 !py-3 !rounded-xl !shadow-xl !opacity-100 backdrop-blur-md border border-white/10"
+                place="bottom"
+                variant="dark"
+                border="1px solid rgba(255,255,255,0.1)"
+            >
+                {isConnected && connectionDetails ? (
+                    <div className="flex flex-col gap-1.5 min-w-[200px]">
+                        <div className="flex justify-between items-center pb-2 border-b border-white/10 mb-1">
+                            <span className="text-white/60 text-xs font-medium uppercase tracking-wider">{t('dashboard.node_info')}</span>
+                            <Info className="size-3.5 text-accent-green/80" />
+                        </div>
+                        <div className="grid grid-cols-[80px_1fr] gap-x-2 gap-y-1.5 text-sm">
+                            <span className="text-white/50">{t('dashboard.ip')}</span>
+                            <span className="font-mono text-white/90">{connectionDetails.ip}</span>
+
+                            <span className="text-white/50">{t('dashboard.location')}</span>
+                            <span className="text-white/90">{connectionDetails.country}</span>
+
+                            {connectionDetails.isp && (
+                                <>
+                                    <span className="text-white/50">{t('dashboard.isp')}</span>
+                                    <span className="text-white/90 truncate max-w-[180px]">{connectionDetails.isp}</span>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                ) : (
+                    <span className="text-sm text-white/70 px-2">{isConnected ? t('status.checking_ip') : t('status.disconnected_tooltip')}</span>
+                )}
+            </Tooltip>
 
             <div className="flex items-center gap-3 text-text-secondary text-xs font-medium mb-8 bg-card-bg backdrop-blur-md px-4 py-1.5 rounded-full border border-border-color shadow-sm">
                 <span className="flex items-center gap-1.5 text-text-primary">
@@ -61,9 +103,13 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mod
                     {isConnected ? t('status.connected') : t('status.offline')}
                 </span>
                 <span className="w-px h-3 bg-border-color"></span>
-                <span className="flex items-center gap-1.5 font-mono text-text-secondary">
-                    <Bolt className="size-3.5" />
-                    {isConnected ? (realIp || t('status.checking_ip')) : '--'}
+                <span
+                    onClick={isConnected ? onLatencyClick : undefined}
+                    className={`flex items-center gap-1.5 font-mono text-text-secondary ${isConnected ? 'cursor-pointer hover:text-text-primary transition-colors active:scale-95' : ''}`}
+                    title={isConnected ? t('dashboard.node_info') : undefined} // Or a specific ping tooltip
+                >
+                    <Bolt className={`size-3.5 ${isConnected ? 'text-text-primary' : ''}`} />
+                    {isConnected ? (latency !== undefined && latency > 0 ? `${latency} ms` : '-- ms') : '--'}
                 </span>
                 <span className="w-px h-3 bg-border-color"></span>
 
@@ -72,7 +118,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mod
                     className="flex items-center gap-1.5 transition-colors hover:text-text-primary text-text-secondary"
                     title="Toggle System Proxy"
                 >
-                    <div className={`size-2 rounded-full ${systemProxyEnabled ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-gray-500/30'} transition-all duration-300`} />
+                    <div className={`size-2 rounded-full ${systemProxyEnabled ? (isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-text-secondary/80') : 'bg-gray-500/30'} transition-all duration-300`} />
                     <span className="text-xs font-semibold tracking-wide">
                         {t('status.system_proxy_switch')}
                     </span>
@@ -83,7 +129,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, realIp, mod
                     className="flex items-center gap-1.5 transition-colors hover:text-text-primary text-text-secondary"
                     title="Toggle TUN Mode"
                 >
-                    <div className={`size-2 rounded-full ${tunEnabled ? (isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-green-500/50') : 'bg-gray-500/30'} transition-all duration-300`} />
+                    <div className={`size-2 rounded-full ${tunEnabled ? (isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-text-secondary/80') : 'bg-gray-500/30'} transition-all duration-300`} />
                     <span className="text-xs font-semibold tracking-wide">
                         {t('status.tun_mode_switch')}
                     </span>

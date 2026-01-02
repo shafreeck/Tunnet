@@ -14,6 +14,12 @@
         "active": "Active",
         "no_active_plan": "No active plan"
     },
+    "dashboard": {
+        "node_info": "Node Info",
+        "location": "Location",
+        "ip": "IP Address",
+        "isp": "ISP"
+    },
     "settings": {
         "loading": "Loading settings...",
         "nav": {
