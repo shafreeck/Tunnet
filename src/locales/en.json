@@ -217,7 +217,22 @@
             "asia_pacific": "Asia Pacific",
             "europe": "Europe",
             "americas": "Americas",
-            "favorites": "Favorites"
+            "favorites": "Favorites",
+            "all_regions": "All Regions"
+        },
+        "card": {
+            "location_count": "{{count}} Location",
+            "location_count_other": "{{count}} Locations",
+            "usage": "Usage",
+            "usage_low": "Low",
+            "multiple_providers": "Multiple Providers",
+            "latency": "Latency",
+            "grade": {
+                "excellent": "Excellent",
+                "good": "Good",
+                "poor": "Poor",
+                "unknown": "Unknown"
+            }
         },
         "drawer": {
             "region_nodes": "Region Nodes",

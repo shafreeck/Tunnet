@@ -6,7 +6,7 @@
     "sidebar": {
         "network": "网络",
         "dashboard": "仪表板",
-        "locations": "节点列表",
+        "locations": "节点地区",
         "rules": "分流规则",
         "system": "系统",
         "settings": "设置",
@@ -217,7 +217,21 @@
             "asia_pacific": "亚太",
             "europe": "欧洲",
             "americas": "美洲",
-            "favorites": "收藏"
+            "favorites": "收藏",
+            "all_regions": "所有地区"
+        },
+        "card": {
+            "location_count": "{{count}} 个节点",
+            "usage": "负载",
+            "usage_low": "空闲",
+            "multiple_providers": "多种协议",
+            "latency": "延迟质量",
+            "grade": {
+                "excellent": "极佳",
+                "good": "良好",
+                "poor": "一般",
+                "unknown": "未知"
+            }
         },
         "drawer": {
             "region_nodes": "地区节点",

@@ -117,7 +117,6 @@ export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCou
                                 flagUrl={country.flagUrl}
                                 locationCount={country.count}
                                 providerName={country.provider} // Display one provider or "Multiple"
-                                usagePercent={Math.floor(Math.random() * 80) + 10} // Mock usage
                                 ping={country.avgPing}
                                 onClick={() => onSelectCountry(country.country)}
                             />

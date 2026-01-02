@@ -1,4 +1,5 @@
 import React from "react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 // @ts-ignore
 import { Globe, ChevronRight } from "lucide-react"
@@ -8,7 +9,6 @@ interface ServerCardProps {
     flagUrl: string | null
     locationCount: number
     providerName?: string
-    usagePercent?: number
     ping?: number
     onClick: () => void
     isHovered?: boolean
@@ -19,15 +19,27 @@ export function ServerCard({
     flagUrl,
     locationCount,
     providerName = "Multiple Providers",
-    usagePercent = 0,
     ping,
     onClick
 }: ServerCardProps) {
-    const getPingColor = (p: number) => {
+    const { t } = useTranslation()
+    const displayProviderName = providerName === "Multiple Providers" ? t('locations.card.multiple_providers') : providerName
+
+    const getPingColor = (p?: number) => {
+        if (p === undefined || p === 0) return "text-text-tertiary"
         if (p < 100) return "text-emerald-400"
         if (p < 200) return "text-yellow-400"
         return "text-red-400"
     }
+
+    const getLatencyGrade = (p?: number) => {
+        if (p === undefined || p === 0) return { key: 'locations.card.grade.unknown', color: 'text-text-tertiary' }
+        if (p < 100) return { key: 'locations.card.grade.excellent', color: 'text-emerald-400' }
+        if (p < 200) return { key: 'locations.card.grade.good', color: 'text-yellow-400' }
+        return { key: 'locations.card.grade.poor', color: 'text-red-400' }
+    }
+
+    const grade = getLatencyGrade(ping)
 
     return (
         <div
@@ -59,14 +71,14 @@ export function ServerCard({
                     {countryName}
                 </h3>
                 <p className="text-xs text-text-secondary font-medium">
-                    {locationCount} Locations • {providerName}
+                    {t('locations.card.location_count', { count: locationCount })} • {displayProviderName}
                 </p>
             </div>
 
-            {/* Footer / Usage (Mock) */}
+            {/* Footer / Latency Grade */}
             <div className="mt-6 flex items-center justify-between">
                 <span className="text-[10px] text-text-tertiary font-medium">
-                    Usage: {usagePercent > 0 ? `${usagePercent}%` : "Low"}
+                    {t('locations.card.latency')}: <span className={cn("font-bold", grade.color)}>{t(grade.key)}</span>
                 </span>
 
                 <div className="text-text-tertiary group-hover:text-text-primary transition-transform duration-300 group-hover:translate-x-1">
