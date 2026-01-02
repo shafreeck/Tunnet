@@ -377,12 +377,15 @@ export default function Home() {
     }).catch(console.error)
   }
 
-  const checkLatency = (nodes: any[]) => {
+  const checkLatency = async (nodes: any[]) => {
     const ids = nodes.map((n: any) => n.id)
-    invoke("check_node_pings", { nodeIds: ids }).then(() => {
+    try {
+      await invoke("check_node_pings", { nodeIds: ids })
       // Reload to reflect pings
       fetchProfiles(false)
-    }).catch(console.error)
+    } catch (e) {
+      console.error(e)
+    }
   }
 
   // Helper to map backend nodes to UI servers
@@ -640,6 +643,10 @@ export default function Home() {
   }
 
   const handlePingNode = async (id: string) => {
+    if (id === "ALL") {
+      await checkLatency(servers)
+      return
+    }
     try {
       const ping: number = await invoke("url_test", { nodeId: id })
       setServers(prev => prev.map(s => s.id === id ? { ...s, ping } : s))
@@ -729,6 +736,7 @@ export default function Home() {
             }}
             onDelete={handleDeleteNode}
             onRefresh={() => fetchProfiles(true)}
+            onPing={handlePingNode}
           />
         )
       case "proxies": // Mapped to Subscriptions

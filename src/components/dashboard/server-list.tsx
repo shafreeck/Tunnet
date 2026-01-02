@@ -48,7 +48,7 @@ interface ServerListProps {
     setShowLogs: (show: boolean) => void
     logs: string[]
     onClearLogs: () => void
-    onPing?: (id: string) => void
+    onPing?: (id: string) => Promise<void>
     hideHeader?: boolean
 }
 
@@ -126,6 +126,63 @@ export function ServerList({
         })
     }, [servers, pinnedServerId])
 
+    const [filterText, setFilterText] = useState("")
+    const [sortBy, setSortBy] = useState<"name" | "ping">("name")
+    const [isPinging, setIsPinging] = useState(false)
+
+    const handlePing = async () => {
+        if (!onPing) return
+        setIsPinging(true)
+        try {
+            await onPing("ALL")
+        } finally {
+            setIsPinging(false)
+        }
+    }
+
+    // Sort logic using pinnedServerId and filter
+    const filteredAndSortedServers = React.useMemo(() => {
+        let result = [...servers]
+
+        // Filter
+        if (filterText) {
+            const lower = filterText.toLowerCase()
+            result = result.filter(s =>
+                s.name.toLowerCase().includes(lower) ||
+                s.provider.toLowerCase().includes(lower) ||
+                s.country.toLowerCase().includes(lower)
+            )
+        }
+
+        // Sort
+        result.sort((a, b) => {
+            // Pinned always on top
+            if (a.id === pinnedServerId) return -1
+            if (b.id === pinnedServerId) return 1
+
+            if (sortBy === "ping") {
+                // 0 ping (timeout/unknown) should be at bottom? or top? usually bottom or distinct.
+                // Let's treat 0 as Infinity for sorting ascending
+                const pingA = a.ping === 0 ? 9999 : a.ping
+                const pingB = b.ping === 0 ? 9999 : b.ping
+                return pingA - pingB
+            }
+            // By name
+            return a.name.localeCompare(b.name)
+        })
+
+        return result
+    }, [servers, pinnedServerId, filterText, sortBy])
+
+    const [showSortMenu, setShowSortMenu] = useState(false)
+    const [isSearchOpen, setIsSearchOpen] = useState(false)
+    const searchInputRef = React.useRef<HTMLInputElement>(null)
+
+    React.useEffect(() => {
+        if (isSearchOpen && searchInputRef.current) {
+            searchInputRef.current.focus()
+        }
+    }, [isSearchOpen])
 
     const handleCopyLogs = () => {
         const text = logs.join("\n")
@@ -160,20 +217,108 @@ export function ServerList({
                     </div>
 
                     {!showLogs ? (
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 items-center">
+                            {/* Expandable Search Input */}
+                            <div className={cn(
+                                "flex items-center transition-all duration-300 overflow-hidden",
+                                isSearchOpen ? "w-32 opacity-100 mr-1" : "w-0 opacity-0"
+                            )}>
+                                <div className="relative w-full">
+                                    <input
+                                        ref={searchInputRef}
+                                        type="text"
+                                        placeholder={t('filter_placeholder', { defaultValue: 'Search...' })}
+                                        value={filterText}
+                                        onChange={e => setFilterText(e.target.value)}
+                                        onBlur={() => !filterText && setIsSearchOpen(false)}
+                                        className="w-full bg-black/5 dark:bg-white/5 border border-border-color rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-primary/50 transition-all h-7"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Global Latency Test */}
+                            {onPing && (
+                                <button
+                                    onClick={handlePing}
+                                    disabled={isPinging}
+                                    className={cn(
+                                        "p-1.5 transition-colors rounded hover:bg-black/5 dark:hover:bg-white/5",
+                                        "text-text-secondary hover:text-accent-orange",
+                                        isPinging && "opacity-70 cursor-wait"
+                                    )}
+                                    title={t('check_latency_all', { defaultValue: 'Check All Latency' })}
+                                >
+                                    <RotateCw size={16} className={cn(isPinging && "animate-spin")} />
+                                </button>
+                            )}
+
+                            {/* Search Trigger */}
+                            {!isSearchOpen && (
+                                <button
+                                    onClick={() => setIsSearchOpen(true)}
+                                    className={cn(
+                                        "p-1.5 transition-colors rounded hover:bg-black/5 dark:hover:bg-white/5",
+                                        filterText ? "text-primary bg-primary/10" : "text-text-secondary hover:text-text-primary"
+                                    )}
+                                    title={t('search_tooltip', { defaultValue: 'Search' })}
+                                >
+                                    <Search size={16} />
+                                </button>
+                            )}
+
+                            {/* Sort Button & Menu */}
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowSortMenu(!showSortMenu)}
+                                    className={cn(
+                                        "p-1.5 transition-colors rounded hover:bg-black/5 dark:hover:bg-white/5",
+                                        showSortMenu ? "text-primary bg-primary/10" : "text-text-secondary hover:text-text-primary"
+                                    )}
+                                    title={t('sort_tooltip', { defaultValue: 'Sort' })}
+                                >
+                                    <ArrowUpDown size={16} />
+                                </button>
+
+                                {showSortMenu && (
+                                    <>
+                                        <div className="fixed inset-0 z-10" onClick={() => setShowSortMenu(false)} />
+                                        <div className="absolute right-0 top-full mt-2 w-32 bg-white dark:bg-[#1e1e1e] border border-border-color rounded-xl shadow-xl z-20 p-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                                            <div className="space-y-0.5">
+                                                <button
+                                                    onClick={() => { setSortBy("name"); setShowSortMenu(false); }}
+                                                    className={cn(
+                                                        "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[10px] font-medium transition-colors",
+                                                        sortBy === "name" ? "bg-primary/10 text-primary" : "text-text-secondary hover:bg-black/5 dark:hover:bg-white/5"
+                                                    )}
+                                                >
+                                                    <span>{t('sort_by_name', { defaultValue: 'Name' })}</span>
+                                                    {sortBy === "name" && <div className="size-1 rounded-full bg-primary" />}
+                                                </button>
+                                                <button
+                                                    onClick={() => { setSortBy("ping"); setShowSortMenu(false); }}
+                                                    className={cn(
+                                                        "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[10px] font-medium transition-colors",
+                                                        sortBy === "ping" ? "bg-primary/10 text-primary" : "text-text-secondary hover:bg-black/5 dark:hover:bg-white/5"
+                                                    )}
+                                                >
+                                                    <span>{t('sort_by_latency', { defaultValue: 'Latency' })}</span>
+                                                    {sortBy === "ping" && <div className="size-1 rounded-full bg-primary" />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
                             <button
                                 onClick={() => onEdit(null)} // Trigger Add New
                                 className={cn(
                                     "p-1.5 transition-colors rounded hover:bg-black/5 dark:hover:bg-white/5",
                                     "text-text-secondary hover:text-text-primary"
                                 )}
-                                title="Add New Node"
+                                title={t('add_node_tooltip', { defaultValue: 'Add New Node' })}
                             >
                                 <Plus size={16} />
-                            </button>
-                            {/* Filter button placeholder */}
-                            <button className="p-1.5 text-text-secondary hover:text-text-primary transition-colors rounded hover:bg-black/5 dark:hover:bg-white/5">
-                                <Filter size={16} />
                             </button>
                         </div>
                     ) : (
@@ -225,7 +370,7 @@ export function ServerList({
                         {/* Sentinel element to detect top of list */}
                         <div ref={listTopRef} className="h-px w-full absolute -top-10 opacity-0 pointer-events-none" />
 
-                        {sortedServers.map((server) => {
+                        {filteredAndSortedServers.map((server) => {
                             const isSelected = server.id === activeServerId
                             const isRunning = isSelected && isConnected
 

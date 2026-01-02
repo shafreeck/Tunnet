@@ -21,6 +21,7 @@ interface LocationsViewProps {
     onDelete: (id: string) => void
     onImport: (url: string) => Promise<void>
     onRefresh: () => void
+    onPing: (id: string) => Promise<void>
 }
 
 export function LocationsView({
@@ -32,7 +33,8 @@ export function LocationsView({
     onEdit,
     onDelete,
     onImport,
-    onRefresh
+    onRefresh,
+    onPing
 }: LocationsViewProps) {
     const { t } = useTranslation()
     const [viewMode, setViewMode] = useState<"grid" | "map">("map")
@@ -239,6 +241,7 @@ export function LocationsView({
                             onEdit={onEdit}
                             onDelete={onDelete}
                             onImport={onImport}
+                            onPing={onPing}
                             showLogs={false} // Force logs hidden, though header is hidden anyway
                             setShowLogs={() => { }}
                             logs={[]}
