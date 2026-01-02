@@ -73,6 +73,60 @@ export function ServerList({
     const [logFilter, setLogFilter] = useState("")
     const [autoScroll, setAutoScroll] = useState(true)
 
+    // Deferred Pinning Logic
+    // We only change the "visual" pinned ID when the user scrolls to the top.
+    // This prevents items from jumping under the cursor while browsing down the list.
+    const [pinnedServerId, setPinnedServerId] = useState<string | null>(activeServerId)
+    const [pendingPinId, setPendingPinId] = useState<string | null>(null)
+    const listTopRef = React.useRef<HTMLDivElement>(null)
+    const isTopVisibleRef = React.useRef(true) // Default to true so initial load pins correctly
+
+    // 1. Observe visibility of the top of the list
+    React.useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                isTopVisibleRef.current = entry.isIntersecting
+
+                // If top becomes visible and we have a pending pin, apply it now
+                if (entry.isIntersecting && pendingPinId) {
+                    setPinnedServerId(pendingPinId)
+                    setPendingPinId(null)
+                }
+            },
+            { threshold: 0.1 } // Trigger even if only slightly visible
+        )
+
+        if (listTopRef.current) {
+            observer.observe(listTopRef.current)
+        }
+
+        return () => observer.disconnect()
+    }, [pendingPinId])
+
+    // 2. When active ID changes:
+    // - If top is visible: Pin immediately (e.g. initial load or user is at top)
+    // - If top is hidden: Queue it as pending
+    React.useEffect(() => {
+        if (activeServerId !== pinnedServerId) {
+            if (isTopVisibleRef.current) {
+                setPinnedServerId(activeServerId)
+                setPendingPinId(null)
+            } else {
+                setPendingPinId(activeServerId)
+            }
+        }
+    }, [activeServerId, pinnedServerId])
+
+    // Sort logic using pinnedServerId instead of activeServerId directly
+    const sortedServers = React.useMemo(() => {
+        return [...servers].sort((a, b) => {
+            if (a.id === pinnedServerId) return -1
+            if (b.id === pinnedServerId) return 1
+            return 0
+        })
+    }, [servers, pinnedServerId])
+
+
     const handleCopyLogs = () => {
         const text = logs.join("\n")
         navigator.clipboard.writeText(text)
@@ -80,7 +134,7 @@ export function ServerList({
     }
 
     return (
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 relative">
             {!hideHeader && (
                 <div className="flex items-center justify-between mb-4 mt-2 px-1 shrink-0 sticky top-0 bg-sidebar-bg backdrop-blur-xl z-20 py-2 -mx-1 rounded-t-xl border-b border-border-color">
                     <div className="flex items-center gap-6">
@@ -168,7 +222,10 @@ export function ServerList({
                     />
                 ) : (
                     <div className="space-y-3 pb-12">
-                        {servers.map((server) => {
+                        {/* Sentinel element to detect top of list */}
+                        <div ref={listTopRef} className="h-px w-full absolute -top-10 opacity-0 pointer-events-none" />
+
+                        {sortedServers.map((server) => {
                             const isSelected = server.id === activeServerId
                             const isRunning = isSelected && isConnected
 
