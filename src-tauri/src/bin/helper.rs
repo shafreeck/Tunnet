@@ -24,19 +24,32 @@ struct Response {
     message: String,
 }
 
+use std::fs::File;
+use std::io::BufWriter;
+
 // Global state to hold the running proxy process
 struct AppState {
     proxy_process: Mutex<Option<Child>>,
     current_config_path: Mutex<Option<PathBuf>>,
+    log_writer: Mutex<Option<BufWriter<File>>>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Simple logger
     println!("Tunnet Helper started");
 
+    let log_path = PathBuf::from("/tmp/tunnet-helper.log");
+    let log_file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)
+        .ok()
+        .map(|f| BufWriter::new(f));
+
     let app_state = Arc::new(AppState {
         proxy_process: Mutex::new(None),
         current_config_path: Mutex::new(None),
+        log_writer: Mutex::new(log_file),
     });
 
     // Remove existing socket if present
@@ -99,48 +112,21 @@ struct StartPayload {
     working_dir: String,
 }
 
-fn handle_request(req: Request, state: &Arc<AppState>) -> Response {
-    match req.command.as_str() {
-        "start" => {
-            if let Some(payload_str) = req.payload {
-                // Try parsing as StartPayload
-                match serde_json::from_str::<StartPayload>(&payload_str) {
-                    Ok(payload) => start_sing_box(payload, state),
-                    Err(_) => Response {
-                        status: "error".into(),
-                        message: "Invalid payload format for start".into(),
-                    },
-                }
-            } else {
-                Response {
-                    status: "error".into(),
-                    message: "Missing payload for start".into(),
-                }
-            }
-        }
-
-        "stop" => stop_sing_box(state),
-        "status" => check_status(state),
-        "version" => Response {
-            status: "success".into(),
-            message: "1.1.0".into(), // Bumped version for SIGHUP support
-        },
-        _ => Response {
-            status: "error".into(),
-            message: format!("Unknown command: '{}'", req.command),
-        },
-    }
+#[derive(Serialize, Deserialize, Debug)]
+struct KillPortPayload {
+    port: u16,
 }
 
-fn log_to_file(msg: &str) {
-    use std::io::Write;
-    let path = PathBuf::from("/tmp/tunnet-helper.log");
-    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) {
+fn log(state: &Arc<AppState>, msg: &str) {
+    let mut writer_guard = state.log_writer.lock().unwrap();
+    if let Some(writer) = writer_guard.as_mut() {
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let _ = writeln!(file, "[{}] {}", timestamp, msg);
+        let _ = writeln!(writer, "[{}] {}", timestamp, msg);
+        // We do NOT flush here intentionally to benefit from buffering.
+        // Operating system/libc will handle flushing.
     }
 }
 
@@ -148,7 +134,7 @@ fn start_sing_box(payload: StartPayload, state: &Arc<AppState>) -> Response {
     let mut process_guard = state.proxy_process.lock().unwrap();
     let mut config_path_guard = state.current_config_path.lock().unwrap();
 
-    log_to_file("Start requested");
+    log(state, "Start requested");
 
     let max_retries = 3;
     let mut retry_count = 0;
@@ -157,7 +143,7 @@ fn start_sing_box(payload: StartPayload, state: &Arc<AppState>) -> Response {
     loop {
         // 1. Cleanup Existing Process (Robust)
         if let Some(mut child) = process_guard.take() {
-            log_to_file("Killing existing process");
+            log(state, "Killing existing process");
             let _ = child.kill();
             let _ = child.wait();
         }
@@ -167,7 +153,7 @@ fn start_sing_box(payload: StartPayload, state: &Arc<AppState>) -> Response {
         let config_path = PathBuf::from("/tmp/tunnet_config.json");
         if let Err(e) = fs::write(&config_path, &payload.config) {
             let err = format!("Failed to write config: {}", e);
-            log_to_file(&err);
+            log(state, &err);
             return Response {
                 status: "error".into(),
                 message: err,
@@ -190,7 +176,7 @@ fn start_sing_box(payload: StartPayload, state: &Arc<AppState>) -> Response {
 
         match spawn_result {
             Ok(mut child) => {
-                log_to_file(&format!("Sing-box spawned, PID {}", child.id()));
+                log(state, &format!("Sing-box spawned, PID {}", child.id()));
 
                 // Wait briefly to check for immediate failure
                 std::thread::sleep(std::time::Duration::from_millis(500));
@@ -212,7 +198,7 @@ fn start_sing_box(payload: StartPayload, state: &Arc<AppState>) -> Response {
                         "Proxy core exited prematurely with: {}. Logs:\n{}",
                         status, err_msg
                     );
-                    log_to_file(&exit_msg);
+                    log(state, &exit_msg);
 
                     return Response {
                         status: "error".into(),
@@ -222,23 +208,25 @@ fn start_sing_box(payload: StartPayload, state: &Arc<AppState>) -> Response {
 
                 // Still running: Spawn threads to pipe logs to file for troubleshooting
                 if let Some(stdout) = child.stdout.take() {
+                    let state_clone = state.clone(); // Clone Arc for the new thread
                     std::thread::spawn(move || {
                         use std::io::{BufRead, BufReader};
                         let reader = BufReader::new(stdout);
                         for line in reader.lines() {
                             if let Ok(l) = line {
-                                log_to_file(&format!("[Core STDOUT] {}", l));
+                                log(&state_clone, &format!("[Core STDOUT] {}", l));
                             }
                         }
                     });
                 }
                 if let Some(stderr) = child.stderr.take() {
+                    let state_clone = state.clone(); // Clone Arc for the new thread
                     std::thread::spawn(move || {
                         use std::io::{BufRead, BufReader};
                         let reader = BufReader::new(stderr);
                         for line in reader.lines() {
                             if let Ok(l) = line {
-                                log_to_file(&format!("[Core STDERR] {}", l));
+                                log(&state_clone, &format!("[Core STDERR] {}", l));
                             }
                         }
                     });
@@ -257,7 +245,7 @@ fn start_sing_box(payload: StartPayload, state: &Arc<AppState>) -> Response {
                     retry_count + 1,
                     e
                 );
-                log_to_file(&err);
+                log(state, &err);
                 retry_count += 1;
                 if retry_count >= max_retries {
                     return Response {
@@ -271,10 +259,47 @@ fn start_sing_box(payload: StartPayload, state: &Arc<AppState>) -> Response {
     }
 }
 
+fn kill_process_on_port(port: u16, state: &Arc<AppState>) -> Response {
+    log(state, &format!("Kill port requested for port {}", port));
+    // Find PIDs using lsof
+    if let Ok(output) = Command::new("lsof")
+        .args(&["-ti", &format!(":{}", port)])
+        .output()
+    {
+        if output.status.success() {
+            let pids = String::from_utf8_lossy(&output.stdout);
+            if pids.trim().is_empty() {
+                return Response {
+                    status: "success".into(),
+                    message: "No process found on port".into(),
+                };
+            }
+
+            for pid_str in pids.lines() {
+                if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                    log(state, &format!("Killing process {} on port {}", pid, port));
+                    let _ = Command::new("kill")
+                        .args(&["-9", &pid.to_string()])
+                        .output();
+                }
+            }
+            return Response {
+                status: "success".into(),
+                message: "Processes killed".into(),
+            };
+        }
+    }
+
+    Response {
+        status: "success".into(),
+        message: "No process found or lsof failed".into(),
+    }
+}
+
 fn stop_sing_box(state: &Arc<AppState>) -> Response {
     let mut process_guard = state.proxy_process.lock().unwrap();
     if let Some(mut child) = process_guard.take() {
-        log_to_file("Stopping process gracefully...");
+        log(state, "Stopping process gracefully...");
 
         let pid = child.id();
         let mut stopped = false;
@@ -286,8 +311,8 @@ fn stop_sing_box(state: &Arc<AppState>) -> Response {
                 .arg("-TERM")
                 .arg(pid.to_string())
                 .status();
-            // Wait up to 2s
-            for _ in 0..20 {
+            // Wait up to 5s
+            for _ in 0..50 {
                 match child.try_wait() {
                     Ok(Some(_)) => {
                         stopped = true;
@@ -301,11 +326,11 @@ fn stop_sing_box(state: &Arc<AppState>) -> Response {
 
         // 2. Force Kill if still running
         if !stopped {
-            log_to_file("Process didn't exit, forcing KILL");
+            log(state, "Process didn't exit, forcing KILL");
             let _ = child.kill();
             let _ = child.wait();
         } else {
-            log_to_file("Process exited gracefully");
+            log(state, "Process exited gracefully");
         }
 
         let mut config_path_guard = state.current_config_path.lock().unwrap();
@@ -348,5 +373,57 @@ fn check_status(state: &Arc<AppState>) -> Response {
             status: "stopped".into(),
             message: "Not running".into(),
         }
+    }
+}
+
+// Assuming a handle_request function exists elsewhere in the code
+// This is a placeholder to show where the new match arm would go.
+// In a real scenario, you'd insert this into the actual handle_request function.
+fn handle_request(req: Request, state: &Arc<AppState>) -> Response {
+    match req.command.as_str() {
+        "start" => {
+            if let Some(payload_str) = req.payload {
+                // Try parsing as StartPayload
+                match serde_json::from_str::<StartPayload>(&payload_str) {
+                    Ok(payload) => start_sing_box(payload, state),
+                    Err(_) => Response {
+                        status: "error".into(),
+                        message: "Invalid payload format for start".into(),
+                    },
+                }
+            } else {
+                Response {
+                    status: "error".into(),
+                    message: "Missing payload for start".into(),
+                }
+            }
+        }
+
+        "stop" => stop_sing_box(state),
+        "status" => check_status(state),
+        "version" => Response {
+            status: "success".into(),
+            message: "1.1.3".into(), // Bumped version for timeout increase
+        },
+        "kill_port" => {
+            if let Some(payload_str) = req.payload {
+                match serde_json::from_str::<KillPortPayload>(&payload_str) {
+                    Ok(payload) => kill_process_on_port(payload.port, state),
+                    Err(_) => Response {
+                        status: "error".into(),
+                        message: "Invalid payload for kill_port".into(),
+                    },
+                }
+            } else {
+                Response {
+                    status: "error".into(),
+                    message: "Missing payload for kill_port".into(),
+                }
+            }
+        }
+        _ => Response {
+            status: "error".into(),
+            message: format!("Unknown command: '{}'", req.command),
+        },
     }
 }

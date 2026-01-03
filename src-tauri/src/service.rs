@@ -693,6 +693,13 @@ impl<R: Runtime> ProxyService<R> {
                 }
             }
         }
+
+        // Also try to ask helper to kill (for root processes)
+        let client = crate::helper_client::HelperClient::new();
+        if let Ok(_) = client.kill_port(port) {
+            killed = true;
+        }
+
         killed
     }
 
