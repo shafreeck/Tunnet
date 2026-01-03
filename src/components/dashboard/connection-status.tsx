@@ -22,28 +22,18 @@ interface ConnectionStatusProps {
     systemProxyEnabled: boolean;
     onSystemProxyToggle: () => void;
     isLoading?: boolean;
+    targetType?: 'node' | 'group';
+    groupIcon?: string;
+    targetId?: string | null;
+    activeNodeName?: string;
 }
 
-export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, onLatencyClick, onMainToggle, connectionDetails, mode, onModeChange, tunEnabled, onTunToggle, systemProxyEnabled, onSystemProxyToggle, isLoading }: ConnectionStatusProps) {
+export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, onLatencyClick, onMainToggle, connectionDetails, mode, onModeChange, tunEnabled, onTunToggle, systemProxyEnabled, onSystemProxyToggle, isLoading, targetType, groupIcon, targetId, activeNodeName }: ConnectionStatusProps) {
     const { t } = useTranslation()
     const displayFlag = flagUrl
 
-    // Logic for Auto-Select display
-    // If serverName is missing but we are connected, check if activeServerId was "auto_..." (passed via serverName? No, serverName passed to here is usually `activeServer?.name`)
-    // page.tsx calculates serverName: `const activeServer = servers.find(...)`
-    // If activeServer is not found (because it's a group), serverName is undefined.
-    // In page.tsx: `serverName={activeServer?.name}`
-    // We should patch page.tsx to pass a proper name if activeServer is missing but activeServerId starts with "auto_"
-    // OR we handle it here if we had the ID. But we don't have the ID here.
-    // So we must fix page.tsx.
-
-    // However, if we fix page.tsx, we don't need to change this file much, except maybe fallback icon.
-    // Let's assume page.tsx passes "Auto Select - ..." as serverName.
-    // Then displayFlag will be null.
-    // We want a Zap icon or something for Auto groups? 
-    // Currently it shows Globe (default). That's fine.
-
     const displayName = isConnected ? (serverName || t('status.unknown_server')) : t('status.disconnected')
+    const displaySubName = isConnected && targetType === 'group' && activeNodeName && activeNodeName !== serverName ? activeNodeName : null
 
     return (
         <div className="flex flex-col items-center justify-center py-10 relative">
@@ -78,12 +68,20 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                 </div>
             </div>
 
-            <h1
-                className="text-3xl font-bold text-text-primary mb-2 tracking-tight text-center drop-shadow-md cursor-default outline-none"
-                data-tooltip-id="node-info-tooltip"
-            >
-                {displayName}
-            </h1>
+            <div className="flex flex-col items-center mb-2">
+                <h1
+                    className="text-3xl font-bold text-text-primary mb-1 tracking-tight text-center drop-shadow-md cursor-default outline-none"
+                    data-tooltip-id="node-info-tooltip"
+                >
+                    {displayName}
+                </h1>
+                {displaySubName && (
+                    <div className="flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-white/5 border border-white/10">
+                        <span className="text-[10px] text-text-tertiary uppercase font-bold tracking-widest">{t('status.connected')}</span>
+                        <span className="text-xs font-medium text-text-secondary">{displaySubName}</span>
+                    </div>
+                )}
+            </div>
 
             <Tooltip
                 id="node-info-tooltip"

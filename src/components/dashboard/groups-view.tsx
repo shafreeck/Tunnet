@@ -37,9 +37,11 @@ export interface ProxyNodeStatus {
 
 interface GroupsViewProps {
     allNodes: any[] // Passed from page.tsx (flattened nodes)
+    activeTargetId: string | null
+    onSelectTarget: (id: string) => void
 }
 
-export function GroupsView({ allNodes }: GroupsViewProps) {
+export function GroupsView({ allNodes, activeTargetId, onSelectTarget }: GroupsViewProps) {
     const { t } = useTranslation()
     const [groups, setGroups] = useState<Group[]>([])
     const [isLoading, setIsLoading] = useState(false)
@@ -266,23 +268,44 @@ export function GroupsView({ allNodes }: GroupsViewProps) {
                                                 <p className="text-xs text-text-tertiary">{getGroupDescription(group)}</p>
                                             </div>
                                         </div>
-                                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                            <button onClick={() => openDialog(group)} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><Edit2 size={16} /></button>
-                                            <button onClick={() => handleDeleteClick(group.id)} className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all"><Trash2 size={16} /></button>
-                                        </div>
+                                        {!group.id.includes(":") && (
+                                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                                <button onClick={() => openDialog(group)} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><Edit2 size={16} /></button>
+                                                <button onClick={() => handleDeleteClick(group.id)} className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all"><Trash2 size={16} /></button>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="flex gap-2">
                                         <span className="px-2 py-1 rounded-lg bg-black/5 dark:bg-white/5 text-[10px] font-bold text-text-secondary uppercase">{group.group_type === "UrlTest" ? t('groups.auto_select') : t('groups.manual_select')}</span>
                                         <span className="px-2 py-1 rounded-lg bg-black/5 dark:bg-white/5 text-[10px] font-bold text-text-secondary uppercase">{"node_ids" in group.source ? "Static" : "Dynamic"}</span>
-                                        {group.group_type === "Selector" && (
-                                            <button
-                                                onClick={() => openSelectionDialog(group)}
-                                                className="ml-auto px-3 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-bold uppercase transition-all flex items-center gap-1.5"
-                                            >
-                                                <Target size={12} />
-                                                {t('groups.select_active')}
-                                            </button>
-                                        )}
+
+                                        <div className="ml-auto flex items-center gap-2">
+                                            {activeTargetId === group.id ? (
+                                                <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-accent-green/10 text-accent-green text-[10px] font-bold uppercase border border-accent-green/20">
+                                                    <Check size={12} />
+                                                    {t('groups.active_exit')}
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => onSelectTarget(group.id)}
+                                                    className="px-3 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-text-secondary hover:text-text-primary text-[10px] font-bold uppercase transition-all flex items-center gap-1.5 border border-white/5"
+                                                    title={t('groups.select_as_exit')}
+                                                >
+                                                    <Zap size={12} />
+                                                    {t('groups.select_as_exit')}
+                                                </button>
+                                            )}
+
+                                            {group.group_type === "Selector" && (
+                                                <button
+                                                    onClick={() => openSelectionDialog(group)}
+                                                    className="px-3 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-bold uppercase transition-all flex items-center gap-1.5"
+                                                >
+                                                    <Target size={12} />
+                                                    {t('groups.select_active')}
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             ))}

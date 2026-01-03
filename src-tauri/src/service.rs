@@ -8,7 +8,10 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 #[derive(serde::Serialize, Clone, Debug)]
 pub struct ProxyStatus {
     pub is_running: bool,
-    pub node: Option<crate::profile::Node>,
+    pub node: Option<crate::profile::Node>, // Keep for compatibility, might be a virtual node for group
+    pub target_id: Option<String>,
+    pub target_name: Option<String>,
+    pub target_type: Option<String>, // "node" or "group"
     pub tun_mode: bool,
     pub routing_mode: String,
     pub clash_api_port: Option<u16>,
@@ -654,7 +657,7 @@ impl<R: Runtime> ProxyService<R> {
 
         // 2. Load Resources (Profiles/Groups)
         let profiles = self.manager.load_profiles().unwrap_or_default();
-        let groups = self.manager.load_groups().unwrap_or_default();
+        let mut groups = self.get_groups().unwrap_or_default(); // Uses the new dynamic get_groups
 
         // 3. Add ALL Nodes as Outbounds
         // We iterate all profiles and their nodes
@@ -1131,9 +1134,27 @@ impl<R: Runtime> ProxyService<R> {
             *self.tun_mode.lock().unwrap()
         };
 
+        let node = self.latest_node.lock().unwrap().clone();
+        let mut target_id = None;
+        let mut target_name = None;
+        let mut target_type = None;
+
+        if let Some(n) = &node {
+            target_id = Some(n.id.clone());
+            target_name = Some(n.name.clone());
+            target_type = Some(if n.protocol == "group" {
+                "group".to_string()
+            } else {
+                "node".to_string()
+            });
+        }
+
         ProxyStatus {
             is_running,
-            node: self.latest_node.lock().unwrap().clone(),
+            node,
+            target_id,
+            target_name,
+            target_type,
             tun_mode: current_tun,
             routing_mode: self.latest_routing_mode.lock().unwrap().clone(),
             clash_api_port: *self.clash_api_port.lock().unwrap(),
@@ -1569,7 +1590,73 @@ impl<R: Runtime> ProxyService<R> {
 
     // Group Management
     pub fn get_groups(&self) -> Result<Vec<crate::profile::Group>, String> {
-        self.manager.load_groups()
+        let mut groups = self.manager.load_groups().unwrap_or_default();
+
+        // Add Implicit Groups
+        let profiles = self.manager.load_profiles().unwrap_or_default();
+        let mut all_node_ids = Vec::new();
+
+        // 1. Global Group
+        for p in &profiles {
+            for n in &p.nodes {
+                all_node_ids.push(n.id.clone());
+            }
+        }
+        groups.insert(
+            0,
+            crate::profile::Group {
+                id: "system:global".to_string(),
+                name: "GLOBAL".to_string(),
+                group_type: crate::profile::GroupType::Selector,
+                source: crate::profile::GroupSource::Static {
+                    node_ids: all_node_ids,
+                },
+                icon: Some("globe".to_string()),
+            },
+        );
+
+        // 2. Subscription Groups
+        for p in &profiles {
+            let node_ids = p.nodes.iter().map(|n| n.id.clone()).collect();
+            groups.push(crate::profile::Group {
+                id: format!("system:sub:{}", p.id),
+                name: p.name.clone(),
+                group_type: crate::profile::GroupType::Selector,
+                source: crate::profile::GroupSource::Static { node_ids },
+                icon: Some("layers".to_string()),
+            });
+        }
+
+        // 3. Region Groups
+        let mut region_map: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
+        for p in &profiles {
+            for n in &p.nodes {
+                if let Some(loc) = &n.location {
+                    if !loc.country.is_empty() {
+                        region_map
+                            .entry(loc.country.clone())
+                            .or_default()
+                            .push(n.id.clone());
+                    }
+                }
+            }
+        }
+
+        for (country, node_ids) in region_map {
+            groups.push(crate::profile::Group {
+                id: format!("system:region:{}", country),
+                name: country.clone(),
+                group_type: crate::profile::GroupType::UrlTest {
+                    interval: 600,
+                    tolerance: 50,
+                },
+                source: crate::profile::GroupSource::Static { node_ids },
+                icon: Some("map-pin".to_string()),
+            });
+        }
+
+        Ok(groups)
     }
 
     pub async fn save_groups(&self, groups: Vec<crate::profile::Group>) -> Result<(), String> {

@@ -76,6 +76,15 @@ export default function Home() {
   }, [settings.system_proxy])
 
 
+  const activeTarget = useMemo(() => {
+    if (!activeServerId) return null
+    const node = servers.find(s => s.id === activeServerId)
+    if (node) return { ...node, type: "node" }
+    const group = groups.find(g => g.id === activeServerId)
+    if (group) return { ...group, type: "group" }
+    return null
+  }, [activeServerId, servers, groups])
+
   const toggleSystemProxy = async () => {
     const newSettings = { ...settings, system_proxy: !settings.system_proxy }
     // Optimistic update
@@ -271,9 +280,9 @@ export default function Home() {
   useEffect(() => {
     if (activeServerId) {
       invoke("get_app_settings").then((settings: any) => {
-        if (settings.active_node_id !== activeServerId) {
+        if (settings.active_target_id !== activeServerId) {
           invoke("save_app_settings", {
-            settings: { ...settings, active_node_id: activeServerId }
+            settings: { ...settings, active_target_id: activeServerId }
           }).catch(console.error)
         }
       }).catch(console.error)
@@ -315,8 +324,8 @@ export default function Home() {
     invoke("get_proxy_status").then((status: any) => {
       if (status.is_running) {
         setIsConnected(true)
-        if (status.node) {
-          setActiveServerId(status.node.id)
+        if (status.target_id) {
+          setActiveServerId(status.target_id)
         }
         if (status.routing_mode) {
           setProxyMode(status.routing_mode)
@@ -324,15 +333,15 @@ export default function Home() {
         setTunEnabled(status.tun_mode)
 
         // Prevent immediate reload by setting lastAppliedConfigRef
-        const nodeId = status.node?.id
-        if (nodeId) {
-          lastAppliedConfigRef.current = `${nodeId}:${status.routing_mode}:${status.tun_mode}`
+        const targetId = status.target_id
+        if (targetId) {
+          lastAppliedConfigRef.current = `${targetId}:${status.routing_mode}:${status.tun_mode}`
         }
       } else {
-        // If not running, load the persisted active node ID from settings
+        // If not running, load the persisted active target ID from settings
         invoke("get_app_settings").then((settings: any) => {
-          if (settings.active_node_id) {
-            setActiveServerId(settings.active_node_id)
+          if (settings.active_target_id) {
+            setActiveServerId(settings.active_target_id)
           }
         }).catch(console.error)
       }
@@ -346,16 +355,16 @@ export default function Home() {
 
       const status = event.payload
       setIsConnected(status.is_running)
-      if (status.node) {
-        setActiveServerId(status.node.id)
+      if (status.target_id) {
+        setActiveServerId(status.target_id)
       }
       if (status.routing_mode) {
         setProxyMode(status.routing_mode)
       }
       setTunEnabled(status.tun_mode)
       // Sync ref to avoid restart loop
-      if (status.node) {
-        lastAppliedConfigRef.current = `${status.node.id}:${status.routing_mode}:${status.tun_mode}`
+      if (status.target_id) {
+        lastAppliedConfigRef.current = `${status.target_id}:${status.routing_mode}:${status.tun_mode}`
       }
 
       // Trigger IP refresh on status change if running
@@ -698,9 +707,17 @@ export default function Home() {
       await checkLatency(servers)
       return
     }
+
+    // If testing the active target and it's a group, test the currently active sub-node instead
+    const targetPingId = (id === activeServerId && activeAutoNodeId) ? activeAutoNodeId : id;
+
     try {
-      const ping: number = await invoke("url_test", { nodeId: id })
+      const ping: number = await invoke("url_test", { nodeId: targetPingId })
       setServers(prev => prev.map(s => s.id === id ? { ...s, ping } : s))
+      // Also update the auto node's ping if it was tested
+      if (targetPingId !== id) {
+        setServers(prev => prev.map(s => s.id === targetPingId ? { ...s, ping } : s))
+      }
     } catch (e) {
       console.error("Ping failed:", e)
       toast.error(t('toast.action_failed', { error: "Latency test failed" }))
@@ -811,17 +828,19 @@ export default function Home() {
     return servers.find(s => s.id === activeAutoNodeId || s.name === activeAutoNodeId)
   }, [servers, activeAutoNodeId])
 
-  // Global polling for active node in auto group
+  // Global polling for active node in any group
   useEffect(() => {
     let timer: NodeJS.Timeout
-    if (isConnected && activeServerId?.startsWith("auto_")) {
+    const isGroup = activeServerId && (activeServerId.startsWith("auto_") || groups.some(g => g.id === activeServerId) || activeServerId.includes(":"))
+
+    if (isConnected && isGroup) {
       const fetchStatus = async () => {
         try {
-          const status: string = await invoke("get_group_status", { groupId: activeServerId })
+          const status: string = await invoke("get_group_status", { groupId: activeServerId as string })
           setActiveAutoNodeId(status)
-          console.log("[AutoSelect] Active node ID:", status)
+          console.log("[GroupSelect] Active node ID:", status)
         } catch (e) {
-          console.error("[AutoSelect] Failed to fetch group status:", e)
+          console.error("[GroupSelect] Failed to fetch group status:", e)
         }
       }
       fetchStatus()
@@ -830,7 +849,7 @@ export default function Home() {
       setActiveAutoNodeId(null)
     }
     return () => clearInterval(timer)
-  }, [isConnected, activeServerId])
+  }, [isConnected, activeServerId, groups])
 
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<string | null>(null)
 
@@ -867,7 +886,11 @@ export default function Home() {
         )
       case "groups":
         return (
-          <GroupsView allNodes={servers} />
+          <GroupsView
+            allNodes={servers}
+            activeTargetId={activeServerId}
+            onSelectTarget={(id) => setActiveServerId(id)}
+          />
         )
       case "proxies": // Mapped to Subscriptions
         return <SubscriptionsView
@@ -971,22 +994,22 @@ export default function Home() {
           <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in zoom-in-95 duration-300">
             <div className="flex-1 overflow-y-auto px-8 pb-8 sidebar-scroll">
               <ConnectionStatus
-                activeServerId={activeServerId} // Pass ID if needed
-                activeNodeName={
-                  activeAutoNode?.name || displayServer?.name
-                }
-                serverName={displayServer?.name}
-                flagUrl={activeAutoNode?.flagUrl || displayServer?.flagUrl}
                 isConnected={isConnected}
-                // ...
-                latency={activeServer?.ping} // Auto group doesn't have ping. Show --
-                onLatencyClick={() => { }}
+                targetId={activeServerId}
+                targetType={activeTarget?.type as any}
+                activeNodeName={activeAutoNode?.name || activeTarget?.name}
+                serverName={activeTarget?.name}
+                flagUrl={activeAutoNode?.flagUrl || (activeTarget?.type === 'node' ? (activeTarget as any).flagUrl : undefined)}
+                latency={activeAutoNode?.ping || (activeTarget?.type === 'node' ? activeTarget?.ping : undefined)}
+                onLatencyClick={() => {
+                  const id = activeAutoNodeId || activeServerId;
+                  if (id) handlePingNode(id);
+                }}
                 onMainToggle={toggleProxy}
-                connectionDetails={connectionDetails}
+                connectionDetails={connectionDetails || undefined}
                 mode={proxyMode}
                 onModeChange={(m) => {
                   setProxyMode(m)
-                  // If connected, it will trigger sync logic
                 }}
                 tunEnabled={tunEnabled}
                 onTunToggle={() => setTunEnabled(!tunEnabled)}

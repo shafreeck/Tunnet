@@ -23,7 +23,7 @@ pub struct AppSettings {
 
     // Advanced
     pub log_level: String,
-    pub active_node_id: Option<String>,
+    pub active_target_id: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -43,7 +43,7 @@ impl Default for AppSettings {
             dns_strategy: "ipv4".to_string(),
             dns_servers: "8.8.8.8\n1.1.1.1".to_string(),
             log_level: "info".to_string(),
-            active_node_id: None,
+            active_target_id: None,
         }
     }
 }

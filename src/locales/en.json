@@ -364,7 +364,14 @@
         "select_node_desc": "Select the active node for this selector group.",
         "fetch_nodes_failed": "Failed to fetch node status.",
         "node_selected": "Node selected.",
-        "select_failed": "Failed to select node."
+        "select_failed": "Failed to select node.",
+        "system_groups": "System Groups",
+        "custom_groups": "Custom Groups",
+        "select_as_exit": "Set as Default Exit",
+        "active_exit": "Currently used as exit",
+        "global": "Global Group",
+        "subscription": "Subscription Group",
+        "region": "Group by Region"
     },
     "auto_select_global": "Global",
     "auto_select_prefix": "Auto",

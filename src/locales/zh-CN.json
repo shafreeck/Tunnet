@@ -363,7 +363,14 @@
         "select_node_desc": "为此选择器组选择当前活动节点。",
         "fetch_nodes_failed": "获取节点状态失败",
         "node_selected": "已切换节点",
-        "select_failed": "切换节点失败"
+        "select_failed": "切换节点失败",
+        "system_groups": "系统内置组",
+        "custom_groups": "用户自定义组",
+        "select_as_exit": "设为默认出口",
+        "active_exit": "当前正在使用此出口",
+        "global": "全局组",
+        "subscription": "订阅组",
+        "region": "按地区分组"
     },
     "auto_select_global": "全局",
     "auto_select_prefix": "自动",
