@@ -62,6 +62,13 @@ export default function Home() {
   // Connection Details State (Real IP)
   const [connectionDetails, setConnectionDetails] = useState<{ ip: string; country: string; countryCode: string } | null>(null)
 
+  // Filter State for Dashboard
+  const [forceShowAll, setForceShowAll] = useState(false)
+  // Reset filter when active server changes
+  useEffect(() => {
+    setForceShowAll(false)
+  }, [activeServerId])
+
   const [proxyMode, setProxyMode] = useState<'global' | 'rule' | 'direct'>('rule')
   const [tunEnabled, setTunEnabled] = useState(false)
   const [ipRefreshKey, setIpRefreshKey] = useState(0)
@@ -267,7 +274,10 @@ export default function Home() {
       } catch (e) {
         console.error("Failed to sync proxy", e)
         if (pulseId !== lastPulseIdRef.current) return
-        if (!lastAppliedConfigRef.current) setIsConnected(false)
+
+        // If start_proxy fails, we are disconnected because it stops the previous instance first.
+        setIsConnected(false)
+        lastAppliedConfigRef.current = null
       } finally {
         setIsLoading(false)
       }
@@ -709,7 +719,13 @@ export default function Home() {
     }
 
     // If testing the active target and it's a group, test the currently active sub-node instead
-    const targetPingId = (id === activeServerId && activeAutoNodeId) ? activeAutoNodeId : id;
+    let targetPingId = (id === activeServerId && activeAutoNodeId) ? activeAutoNodeId : id;
+
+    // Guard: url_test backend only supports node IDs. If we have a group ID here, we can't cold ping it.
+    if (targetPingId.startsWith("system:") || targetPingId.startsWith("auto_")) {
+      console.log("Skipping cold ping for group ID:", targetPingId)
+      return
+    }
 
     try {
       const ping: number = await invoke("url_test", { nodeId: targetPingId })
@@ -831,7 +847,12 @@ export default function Home() {
   // Global polling for active node in any group
   useEffect(() => {
     let timer: NodeJS.Timeout
-    const isGroup = activeServerId && (activeServerId.startsWith("auto_") || groups.some(g => g.id === activeServerId) || activeServerId.includes(":"))
+    const isGroup = activeServerId && (
+      activeServerId.startsWith("auto_") ||
+      activeServerId.startsWith("system:") ||
+      groups.some(g => g.id === activeServerId) ||
+      activeServerId.includes(":")
+    )
 
     if (isConnected && isGroup) {
       const fetchStatus = async () => {
@@ -895,14 +916,14 @@ export default function Home() {
       case "proxies": // Mapped to Subscriptions
         return <SubscriptionsView
           profiles={profiles}
-          onUpdate={loadProfiles}
+          onUpdate={() => fetchProfiles()}
           onDelete={async (id) => {
             await invoke("delete_subscription", { id })
-            loadProfiles()
+            fetchProfiles()
           }}
           onAdd={() => setShowAddSubscription(true)}
           onSelect={handleSubscriptionSelect}
-          onUpdateAll={loadProfiles}
+          onUpdateAll={() => fetchProfiles()}
           isImporting={false}
           onNodeSelect={(id, selectOnly) => handleServerToggle(id, !selectOnly)}
           isConnected={isConnected}
@@ -984,11 +1005,44 @@ export default function Home() {
         // It's hard to reverse.
         // But we know it's "Auto - [Something]". server-list.tsx uses "Auto - [suffix]".
         // Just "Auto Select" is safe generic for now.
-        const displayServer = activeServer || (activeServerId?.startsWith("auto_") ? {
-          name: t('status.auto_select', { defaultValue: 'Auto Select' }),
+        const isAutoOrSystem = activeServerId?.startsWith("auto_") || activeServerId?.startsWith("system:")
+        const displayServer = activeServer || (isAutoOrSystem ? {
+          name: activeTarget?.name || t('status.auto_select', { defaultValue: 'Auto Select' }),
           flagUrl: "", // Use globe
           id: activeServerId
         } : null)
+
+        const displayActiveNodeName = activeAutoNode?.name || (() => {
+          const id = activeServerId
+          if (!id) return activeTarget?.name
+          if (id === "system:global") return t('auto_select_global', { defaultValue: 'Auto - Global' })
+          if (id.startsWith("system:sub:")) {
+            return t('auto_select_subscription', { defaultValue: 'Auto - Subscription' })
+          }
+          if (id.startsWith("auto_")) return `Auto - ${activeTarget?.name || 'Unknown'}`
+          return activeTarget?.name || id
+        })()
+
+        // Filter Logic
+        let displayedServers = servers;
+        let isFiltered = false;
+        let currentFilterName = "";
+
+        // Only filter if:
+        // 1. We have an active server ID that is a Subscription Group (system:sub:...)
+        // 2. forceShowAll is FALSE
+        // 3. We are in Dashboard view (implied by case "dashboard")
+
+        if (activeServerId && activeServerId.startsWith("system:sub:") && !forceShowAll) {
+          const subId = activeServerId.replace("system:sub:", "")
+          const subProfile = profiles.find(p => p.id === subId)
+          if (subProfile) {
+            const subNodeIds = new Set(subProfile.nodes.map((n: any) => n.id))
+            displayedServers = servers.filter(s => subNodeIds.has(s.id))
+            isFiltered = true
+            currentFilterName = subProfile.name
+          }
+        }
 
         return (
           <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in zoom-in-95 duration-300">
@@ -997,7 +1051,7 @@ export default function Home() {
                 isConnected={isConnected}
                 targetId={activeServerId}
                 targetType={activeTarget?.type as any}
-                activeNodeName={activeAutoNode?.name || activeTarget?.name}
+                activeNodeName={displayActiveNodeName}
                 serverName={activeTarget?.name}
                 flagUrl={activeAutoNode?.flagUrl || (activeTarget?.type === 'node' ? (activeTarget as any).flagUrl : undefined)}
                 latency={activeAutoNode?.ping || (activeTarget?.type === 'node' ? activeTarget?.ping : undefined)}
@@ -1021,9 +1075,13 @@ export default function Home() {
 
 
               <ServerList
-                servers={servers}
+                servers={displayedServers}
                 activeServerId={activeServerId}
                 isConnected={isConnected}
+                // Filter Props
+                filterName={currentFilterName}
+                isFiltered={isFiltered}
+                onClearFilter={() => setForceShowAll(true)}
                 onSelect={(id) => setActiveServerId(id)}
                 onToggle={handleServerToggle}
                 onImport={handleImport}

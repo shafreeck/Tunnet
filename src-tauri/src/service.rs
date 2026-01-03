@@ -798,12 +798,9 @@ impl<R: Runtime> ProxyService<R> {
 
             // If group is empty, we must handle it. Singbox fails with empty selector?
             // Let's add 'block' if empty to prevent crash
+            // Prevent crash on empty groups: if no members, fallback to direct
             if member_tags.is_empty() {
-                // warn!("Group {} is empty", group.name);
-                // continue; // Or add placeholder?
-                // If we skip, rules referencing it will crash. Better to add a valid selector to 'block'.
-                // But we don't have block tag exposed easily, usually 'reject' rule action.
-                // Let's assume we have a 'direct' fallback or just warn.
+                member_tags.push("direct".to_string());
             }
 
             match group.group_type {

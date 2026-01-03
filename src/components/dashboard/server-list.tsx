@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
-import { ArrowUpDown, Filter, Play, Square, Plus, Pencil, Trash2, Globe, RotateCw, Search, Scroll, Pause, Copy, Zap } from "lucide-react"
+import { ArrowUpDown, Filter, Play, Square, Plus, Pencil, Trash2, Globe, RotateCw, Search, Scroll, Pause, Copy, Zap, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
 import { useTranslation } from "react-i18next"
@@ -53,6 +53,9 @@ interface ServerListProps {
     hideHeader?: boolean
     onAutoSelect?: () => void
     activeAutoNodeId?: string | null
+    filterName?: string
+    isFiltered?: boolean
+    onClearFilter?: () => void
 }
 
 export function ServerList({
@@ -71,7 +74,10 @@ export function ServerList({
     onPing,
     hideHeader = false,
     onAutoSelect,
-    activeAutoNodeId
+    activeAutoNodeId,
+    filterName,
+    isFiltered,
+    onClearFilter
 }: ServerListProps) {
     const { t } = useTranslation()
     const [loading, setLoading] = useState(false)
@@ -180,31 +186,21 @@ export function ServerList({
     }, [servers, pinnedServerId, filterText, sortBy])
 
     const internalAutoSelect = async () => {
-        // Use all visible filtered servers
-        const currentList = filteredAndSortedServers
-
-        if (currentList.length === 0) {
-            toast.error(t('auto_select_empty'))
+        // If we have a filter, we cannot meaningfully "Auto Select" the filtered result 
+        // without creating a dynamic group, which we want to avoid to prevent junk groups.
+        if (filterText) {
+            toast.error(t('auto_select_unavailable_filter', { defaultValue: 'Auto-select unavailable while filtering' }))
             return
         }
 
-        const ids = currentList.map(s => s.id)
-        // Name usually "Auto - All" or based on filter?
-        // If filtering, "Auto - Filtered", if not, "Auto - Global"
-        const nameSuffix = filterText ? t('auto_select_filtered', { defaultValue: 'Custom' }) : t('auto_select_global', { defaultValue: 'Global' })
-        const name = `${t('auto_select_prefix', { defaultValue: 'Auto' })} - ${nameSuffix}`
+        const groupId = "system:global"
 
-        // Check if this specific auto group is already active
-        // Ideally we compare IDs, but we don't know the ID yet (it's generated).
-        // Since we are creating/updating "Auto - Global" (or similar),
-        // we can guess if activeServerId starts with "auto_" and we want to toggle OFF.
-        // User wants to "cancel" activate state.
-        // If activeServerId starts with "auto_", we assume we are in SOME auto mode.
-        // If we click the button again, we switch to Manual (First Node).
-
-        if (activeServerId?.startsWith("auto_")) {
-            // Switch to first manual node
-            const firstManual = currentList[0]
+        // Handle Toggle (Deactivate)
+        if (activeServerId === groupId) {
+            // Switch to first manual node if available, or just toggle off?
+            // Since this is the main list (all servers), switching to "first available" 
+            // is essentially selecting the first server in the list.
+            const firstManual = servers[0]
             if (firstManual) {
                 if (isConnected) {
                     onToggle(firstManual.id)
@@ -217,24 +213,12 @@ export function ServerList({
         }
 
         try {
-            const groupId: string = await invoke("ensure_auto_group", {
-                name,
-                references: ids,
-                groupType: "url-test"
-            })
-
-            onSelect(groupId)
-            // If already connected, we switch to this group immediately (restart proxy via onToggle)
-            // If not connected, we just select it (user must click Connect to start)
             if (isConnected) {
                 onToggle(groupId)
             } else {
-                if (activeServerId === groupId) {
-                    // Already selected, do nothing or show toast
-                }
-                // Just selected.
+                onSelect(groupId)
             }
-            toast.success(t('auto_select_group_created', { name }))
+            toast.success(t('auto_select_group_created', { name: t('auto_select_global', { defaultValue: 'Auto - Global' }) }))
         } catch (e: any) {
             toast.error(t('toast.action_failed', { error: e }))
         }
@@ -278,12 +262,32 @@ export function ServerList({
                         >
                             {t('server_list', { defaultValue: 'Server List' })}
                             {loading && !activeAutoNodeId && ` (${t('loading', { defaultValue: 'Loading...' })})`}
-                            {activeAutoNode && activeServerId?.startsWith("auto_") && (
+                            {activeAutoNode && (activeServerId === "system:global" || activeServerId?.startsWith("system:sub:")) && (
                                 <span className="ml-2 text-[9px] font-normal opacity-70 normal-case bg-accent-green/10 text-accent-green px-1.5 py-0.5 rounded">
                                     {activeAutoNode.name}
                                 </span>
                             )}
                         </button>
+                        {isFiltered && filterName && (
+                            <div
+                                className="flex items-center gap-1 bg-primary/10 text-primary px-1.5 py-0.5 rounded-md transition-colors hover:bg-primary/20 cursor-default border border-primary/10"
+                            >
+                                <span className="text-[10px] font-medium max-w-[100px] truncate">
+                                    {filterName}
+                                </span>
+                                <div
+                                    role="button"
+                                    className="cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 rounded-full p-0.5 transition-colors"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        onClearFilter?.()
+                                    }}
+                                    title={t('show_all_servers', { defaultValue: 'Show All Servers' })}
+                                >
+                                    <X size={10} strokeWidth={3} />
+                                </div>
+                            </div>
+                        )}
                         <button
                             onClick={() => setShowLogs(true)}
                             className={cn(
@@ -335,15 +339,17 @@ export function ServerList({
                             {/* Auto Select Best */}
                             <button
                                 onClick={onAutoSelect || internalAutoSelect}
+                                disabled={!!filterText}
                                 className={cn(
                                     "p-1.5 transition-all rounded hover:bg-black/5 dark:hover:bg-white/5",
-                                    activeServerId?.startsWith("auto_")
+                                    (!!filterText) && "opacity-30 cursor-not-allowed",
+                                    activeServerId === "system:global"
                                         ? "bg-accent-green/10 text-accent-green hover:bg-accent-green/20"
                                         : "text-text-secondary hover:text-accent-green"
                                 )}
-                                title={t('auto_select_tooltip')}
+                                title={!!filterText ? t('auto_select_unavailable_filter') : t('auto_select_tooltip')}
                             >
-                                <Zap size={16} fill={activeServerId?.startsWith("auto_") ? "currentColor" : "none"} />
+                                <Zap size={16} fill={activeServerId === "system:global" ? "currentColor" : "none"} />
                             </button>
 
                             {/* Search Trigger */}

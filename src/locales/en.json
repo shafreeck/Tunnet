@@ -371,7 +371,8 @@
         "active_exit": "Currently used as exit",
         "global": "Global Group",
         "subscription": "Subscription Group",
-        "region": "Group by Region"
+        "region": "Group by Region",
+        "show_system": "Show System Groups"
     },
     "auto_select_global": "Global",
     "auto_select_prefix": "Auto",

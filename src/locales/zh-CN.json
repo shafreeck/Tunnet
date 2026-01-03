@@ -370,7 +370,8 @@
         "active_exit": "当前正在使用此出口",
         "global": "全局组",
         "subscription": "订阅组",
-        "region": "按地区分组"
+        "region": "按地区分组",
+        "show_system": "显示系统组"
     },
     "auto_select_global": "全局",
     "auto_select_prefix": "自动",

@@ -98,25 +98,13 @@ export function LocationsView({
             }
         }
 
-        try {
-            const groupId: string = await invoke("ensure_auto_group", {
-                name,
-                references: ids,
-                groupType: "url-test"
-            })
+        const systemId = selectedCountry
+            ? `system:region:${selectedCountry}`
+            : "system:global"
 
-            onSelect(groupId)
-            if (activeServerId === groupId) {
-                // Force toggle even if "active" because we might be updating the group content
-                onToggle(groupId)
-            } else {
-                onToggle(groupId)
-            }
-
-            toast.success(t('auto_select_group_created', { name }))
-        } catch (e: any) {
-            toast.error(t('toast.action_failed', { error: e }))
-        }
+        onSelect(systemId)
+        onToggle(systemId)
+        toast.success(t('auto_select_group_created', { name: selectedCountry || t('locations.all_regions') }))
     }
 
     const totalCountries = useMemo(() => {
@@ -125,11 +113,10 @@ export function LocationsView({
     }, [servers])
 
     const isAutoActive = React.useMemo(() => {
-        if (!activeServerId?.startsWith("auto_")) return false
         if (selectedCountry) {
-            return activeServerId.includes(selectedCountry.toLowerCase().replace(/[^a-z0-9]/g, ''))
+            return activeServerId === `system:region:${selectedCountry}`
         }
-        return activeServerId.includes("all")
+        return activeServerId === "system:global"
     }, [activeServerId, selectedCountry])
 
     const activeAutoNode = useMemo(() => {

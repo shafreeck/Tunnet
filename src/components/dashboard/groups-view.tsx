@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
 import { ConfirmationModal } from "@/components/ui/confirmation-modal"
+import { Switch } from "@/components/ui/switch"
 
 export interface Group {
     id: string
@@ -44,6 +45,7 @@ interface GroupsViewProps {
 export function GroupsView({ allNodes, activeTargetId, onSelectTarget }: GroupsViewProps) {
     const { t } = useTranslation()
     const [groups, setGroups] = useState<Group[]>([])
+    const [showSystemGroups, setShowSystemGroups] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingGroup, setEditingGroup] = useState<Group | null>(null)
@@ -234,7 +236,11 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget }: GroupsV
                             <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">{t('groups.title')}</h2>
                             <p className="text-sm text-text-secondary font-medium">{t('groups.subtitle')}</p>
                         </div>
-                        <div className="pointer-events-auto">
+                        <div className="pointer-events-auto flex items-center gap-4">
+                            <div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 px-3 py-1.5 rounded-xl border border-transparent hover:border-border-color transition-all">
+                                <span className="text-[10px] font-bold text-text-secondary uppercase">{t('groups.show_system')}</span>
+                                <Switch checked={showSystemGroups} onCheckedChange={setShowSystemGroups} className="scale-75 origin-right" />
+                            </div>
                             <button
                                 onClick={() => openDialog()}
                                 className="flex items-center gap-2 px-6 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-primary/20 scale-100 active:scale-95"
@@ -256,7 +262,7 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget }: GroupsV
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {groups.map(group => (
+                            {groups.filter(g => showSystemGroups || (!g.id.startsWith("system:") && !g.id.startsWith("auto_"))).map(group => (
                                 <div key={group.id} className="glass-card p-5 rounded-2xl hover:bg-black/5 dark:hover:bg-white/8 transition-all group border border-transparent hover:border-border-color">
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="flex items-center gap-3">

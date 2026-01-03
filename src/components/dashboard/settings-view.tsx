@@ -22,6 +22,7 @@ import {
     Minus
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Switch } from "@/components/ui/switch"
 import { AppSettings, defaultSettings, getAppSettings, saveAppSettings } from "@/lib/settings"
 import { invoke } from "@tauri-apps/api/core"
 import { useTranslation } from "react-i18next"
@@ -191,25 +192,6 @@ function SettingItem({
     )
 }
 
-function CustomSwitch({ checked, onChange }: { checked: boolean, onChange: (v: boolean) => void }) {
-    return (
-        <button
-            onClick={() => onChange(!checked)}
-            className={cn(
-                "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-300 ease-in-out focus:outline-none focus:ring-0",
-                checked ? "bg-primary" : "bg-black/10 dark:bg-white/10"
-            )}
-        >
-            <span
-                aria-hidden="true"
-                className={cn(
-                    "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-300 ease-in-out",
-                    checked ? "translate-x-5" : "translate-x-0"
-                )}
-            />
-        </button>
-    )
-}
 
 interface CommonProps {
     settings: AppSettings
@@ -287,15 +269,18 @@ function GeneralSettings({ settings, update }: CommonProps) {
                     title={t('settings.general.launch_at_login.title')}
                     description={t('settings.general.launch_at_login.desc')}
                     icon={<Power size={20} />}
+                    title={t('settings.general.launch_at_login.title')}
+                    description={t('settings.general.launch_at_login.desc')}
+                    icon={<Power size={20} />}
                 >
-                    <CustomSwitch checked={settings.launch_at_login} onChange={(v) => update("launch_at_login", v)} />
+                    <Switch checked={settings.launch_at_login} onCheckedChange={(v) => update("launch_at_login", v)} />
                 </SettingItem>
                 <SettingItem
                     title={t('settings.general.start_minimized.title')}
                     description={t('settings.general.start_minimized.desc')}
                     icon={<Monitor size={20} />}
                 >
-                    <CustomSwitch checked={settings.start_minimized} onChange={(v) => update("start_minimized", v)} />
+                    <Switch checked={settings.start_minimized} onCheckedChange={(v) => update("start_minimized", v)} />
                 </SettingItem>
             </Section>
 
@@ -305,7 +290,7 @@ function GeneralSettings({ settings, update }: CommonProps) {
                     description={t('settings.general.auto_check_update.desc')}
                     icon={<RefreshCw size={20} />}
                 >
-                    <CustomSwitch checked={settings.auto_update} onChange={(v) => update("auto_update", v)} />
+                    <Switch checked={settings.auto_update} onCheckedChange={(v) => update("auto_update", v)} />
                 </SettingItem>
             </Section>
         </div>
@@ -325,14 +310,14 @@ function ConnectionSettings({ settings, update, save }: CommonProps) {
                     description={t('settings.connection.system_proxy.desc')}
                     icon={<Server size={20} />}
                 >
-                    <CustomSwitch checked={settings.system_proxy} onChange={(v) => update("system_proxy", v)} />
+                    <Switch checked={settings.system_proxy} onCheckedChange={(v) => update("system_proxy", v)} />
                 </SettingItem>
                 <SettingItem
                     title={t('settings.connection.allow_lan.title')}
                     description={t('settings.connection.allow_lan.desc')}
                     icon={<Globe size={20} />}
                 >
-                    <CustomSwitch checked={settings.allow_lan} onChange={(v) => update("allow_lan", v)} />
+                    <Switch checked={settings.allow_lan} onCheckedChange={(v) => update("allow_lan", v)} />
                 </SettingItem>
                 <SettingItem
                     title={t('settings.connection.mixed_port.title')}
@@ -433,7 +418,7 @@ function ConnectionSettings({ settings, update, save }: CommonProps) {
                     description={t('settings.connection.strict_route.desc')}
                     icon={<RefreshCw size={20} />}
                 >
-                    <CustomSwitch checked={settings.strict_route} onChange={(v) => update("strict_route", v)} />
+                    <Switch checked={settings.strict_route} onCheckedChange={(v) => update("strict_route", v)} />
                 </SettingItem>
             </Section>
         </div >
@@ -452,7 +437,7 @@ function DnsSettings({ settings, update, save }: CommonProps) {
                     description={t('settings.dns.dns_hijack.desc')}
                     icon={<Shield size={20} />}
                 >
-                    <CustomSwitch checked={settings.dns_hijack} onChange={(v) => update("dns_hijack", v)} />
+                    <Switch checked={settings.dns_hijack} onCheckedChange={(v) => update("dns_hijack", v)} />
                 </SettingItem>
                 <SettingItem
                     title={t('settings.dns.strategy.title')}
