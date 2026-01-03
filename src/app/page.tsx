@@ -836,7 +836,22 @@ export default function Home() {
   const [profiles, setProfiles] = useState<any[]>([])
 
   // Derive active subscription stats
-  const activeSubscription = profiles.find(p => p.nodes.some((n: any) => String(n.id) === String(activeServerId))) || profiles[0]
+  const activeSubscription = useMemo(() => {
+    if (!activeServerId) return profiles[0]
+
+    // Check if it matches a subscription group ID
+    if (activeServerId.startsWith("system:sub:")) {
+      const subId = activeServerId.replace("system:sub:", "")
+      const found = profiles.find(p => p.id === subId)
+      if (found) return found
+    }
+
+    // Check if it matches a node within a subscription
+    const foundByNode = profiles.find(p => p.nodes.some((n: any) => String(n.id) === String(activeServerId)))
+    if (foundByNode) return foundByNode
+
+    return profiles[0]
+  }, [profiles, activeServerId])
 
   const [activeAutoNodeId, setActiveAutoNodeId] = useState<string | null>(null)
   const activeAutoNode = useMemo(() => {
