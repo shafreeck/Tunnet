@@ -90,6 +90,15 @@ pub struct Outbound {
     pub down_mbps: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub obfs: Option<ObfsConfig>,
+    // Selector / URLTest fields
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outbounds: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interval: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tolerance: Option<u16>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -415,6 +424,10 @@ impl SingBoxConfig {
             up_mbps: None,
             down_mbps: None,
             obfs: None,
+            outbounds: None,
+            url: None,
+            interval: None,
+            tolerance: None,
         });
         self
     }
@@ -466,6 +479,10 @@ impl SingBoxConfig {
             up_mbps: None,
             down_mbps: None,
             obfs: None,
+            outbounds: None,
+            url: None,
+            interval: None,
+            tolerance: None,
         });
         self
     }
@@ -526,6 +543,10 @@ impl SingBoxConfig {
             up_mbps: None,
             down_mbps: None,
             obfs: None,
+            outbounds: None,
+            url: None,
+            interval: None,
+            tolerance: None,
         });
         self
     }
@@ -587,6 +608,10 @@ impl SingBoxConfig {
             up_mbps: None,
             down_mbps: None,
             obfs: None,
+            outbounds: None,
+            url: None,
+            interval: None,
+            tolerance: None,
         });
         self
     }
@@ -634,6 +659,10 @@ impl SingBoxConfig {
             } else {
                 None
             },
+            outbounds: None,
+            url: None,
+            interval: None,
+            tolerance: None,
         });
         self
     }
@@ -678,6 +707,10 @@ impl SingBoxConfig {
             // congestion_controller & udp_relay_mode are specific.
             // We might need to extend Outbound struct if we strictly need them.
             // But basic connectivity often works with defaults.
+            outbounds: None,
+            url: None,
+            interval: None,
+            tolerance: None,
         });
         self
     }
@@ -732,6 +765,69 @@ impl SingBoxConfig {
             up_mbps: None,
             down_mbps: None,
             obfs: None,
+            outbounds: None,
+            url: None,
+            interval: None,
+            tolerance: None,
+        });
+        self
+    }
+
+    pub fn with_selector_outbound(mut self, tag: &str, outbounds: Vec<String>) -> Self {
+        self.outbounds.push(Outbound {
+            outbound_type: "selector".to_string(),
+            tag: tag.to_string(),
+            server: None,
+            server_port: None,
+            method: None,
+            password: None,
+            uuid: None,
+            security: None,
+            flow: None,
+            alter_id: None,
+            transport: None,
+            tls: None,
+            connect_timeout: None,
+            up_mbps: None,
+            down_mbps: None,
+            obfs: None,
+            outbounds: Some(outbounds),
+            url: None,
+            interval: None,
+            tolerance: None,
+        });
+        self
+    }
+
+    pub fn with_urltest_outbound(
+        mut self,
+        tag: &str,
+        outbounds: Vec<String>,
+        url: Option<String>,
+        interval: Option<String>,
+        tolerance: Option<u16>,
+    ) -> Self {
+        self.outbounds.push(Outbound {
+            outbound_type: "urltest".to_string(),
+            tag: tag.to_string(),
+            server: None,
+            server_port: None,
+            method: None,
+            password: None,
+            uuid: None,
+            security: None,
+            flow: None,
+            alter_id: None,
+            transport: None,
+            tls: None,
+            connect_timeout: None,
+            up_mbps: None,
+            down_mbps: None,
+            obfs: None,
+            outbounds: Some(outbounds),
+            url: url.or(Some("http://www.gstatic.com/generate_204".to_string())),
+            interval: interval.or(Some("10m".to_string())),
+            tolerance: tolerance.or(Some(50)),
         });
         self
     }

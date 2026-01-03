@@ -1,6 +1,6 @@
 "use client" // Ensure this is client component for hooks
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { listen, emit } from "@tauri-apps/api/event"
 import { useTranslation } from "react-i18next"
@@ -12,6 +12,7 @@ import { RulesView } from "@/components/dashboard/rules-view"
 import { SettingsView } from "@/components/dashboard/settings-view"
 import { Header, ConnectionStatus } from "@/components/dashboard/connection-status"
 import { ServerList } from "@/components/dashboard/server-list"
+import { GroupsView, Group } from "@/components/dashboard/groups-view"
 import { LogViewer } from "@/components/dashboard/log-viewer"
 import { WindowControls } from "@/components/ui/window-controls"
 import { toast } from "sonner" // Assuming sonner is available or standard alert
@@ -37,14 +38,17 @@ export default function Home() {
   // Server Management Lifted State
   const [servers, setServers] = useState<any[]>([]) // Using any for now to match Server interface
   const [activeServerId, setActiveServerId] = useState<string | null>(null)
+  const [groups, setGroups] = useState<Group[]>([]) // Shared groups state
 
   // Refs for stale-free access in effects
   const serversRef = useRef(servers)
   const activeServerIdRef = useRef(activeServerId)
+  const groupsRef = useRef<Group[]>([])
   const lastAppliedConfigRef = useRef<string | null>(null) // Format: "nodeId:mode:tun"
 
   useEffect(() => { serversRef.current = servers }, [servers])
   useEffect(() => { activeServerIdRef.current = activeServerId }, [activeServerId])
+  useEffect(() => { groupsRef.current = groups }, [groups])
 
   // Editor State
   const [isEditorOpen, setEditorOpen] = useState(false)
@@ -186,8 +190,27 @@ export default function Home() {
       if (currentConfigKey === lastAppliedConfigRef.current) return
       if (isLoading) return
 
-      const node = serversRef.current.find(s => s.id === activeServerIdRef.current)
-      if (!node) return
+      let node = serversRef.current.find(s => s.id === activeServerIdRef.current)
+
+      // Fallback to groups if not found in servers
+      if (!node) {
+        const group = groupsRef.current.find(g => g.id === activeServerIdRef.current)
+        if (group) {
+          node = {
+            id: group.id,
+            name: group.name,
+            protocol: "group",
+            uuid: "",
+            port: 0,
+            server: "",
+          } as any
+        }
+      }
+
+      if (!node) {
+        console.error("Node or Group not found for ID:", activeServerIdRef.current)
+        return
+      }
 
       setIsLoading(true)
       console.log("Syncing proxy config...", { proxyMode, tunEnabled, node: node.name })
@@ -360,6 +383,11 @@ export default function Home() {
       unlistenIpRequest.then(f => f())
       unlistenSettings.then(f => f())
     }
+  }, [])
+
+  useEffect(() => {
+    // Fetch groups when mounting or needed
+    invoke<Group[]>("get_groups").then(setGroups).catch(console.error)
   }, [])
 
   // Listen for TUN mode sync from Tray (when proxy is stopped)
@@ -679,7 +707,7 @@ export default function Home() {
     }
   }
 
-  const handleServerToggle = async (id: string) => {
+  const handleServerToggle = async (id: string, shouldConnect = true) => {
     if (isLoading) return
 
     // If clicking the currently connected server -> Stop
@@ -693,7 +721,52 @@ export default function Home() {
     try {
       setActiveServerId(id) // Update selection UI immediately
 
-      const node = servers.find(s => s.id === id)
+      if (!shouldConnect) {
+        // Provide feedback but don't start proxy
+        setIsLoading(false)
+        return
+      }
+
+      // Try finding in servers first
+      let node = servers.find(s => s.id === id)
+
+      // If not server, check groups (for Auto-Select groups)
+      if (!node) {
+        const group = groups.find(g => g.id === id)
+        if (group) {
+          // Construct virtual node for Group Proxy
+          node = {
+            id: group.id,
+            name: group.name,
+            protocol: "group",
+            // Other fields are mock/unused for group proxy
+            uuid: "",
+            port: 0,
+            server: "",
+          } as any
+        } else {
+          // Race condition: Group might be just created (by Auto-Select), but state is stale.
+          // Try fetching groups fresh.
+          try {
+            const freshGroups: Group[] = await invoke("get_groups")
+            setGroups(freshGroups)
+            const freshGroup = freshGroups.find(g => g.id === id)
+            if (freshGroup) {
+              node = {
+                id: freshGroup.id,
+                name: freshGroup.name,
+                protocol: "group",
+                uuid: "",
+                port: 0,
+                server: "",
+              } as any
+            }
+          } catch (err) {
+            console.error("Failed to re-fetch groups", err)
+          }
+        }
+      }
+
       if (node) {
         // Handle TUN Mode check here too
         if (tunEnabled) {
@@ -714,21 +787,50 @@ export default function Home() {
 
         setActiveServerId(id)
         setIsConnected(true)
+      } else {
+        console.error("Node or Group not found for ID:", id)
+        toast.error("Target not found")
       }
     } catch (e: any) {
       toast.error(t('toast.connection_failed', { error: e }))
-      // If failed and we were switching, maybe revert activeId? For now keep it simple.
     } finally {
       setIsLoading(false)
     }
   }
 
   // View State
-  const [currentView, setCurrentView] = useState<"dashboard" | "locations" | "rules" | "settings" | "proxies">("dashboard")
+  const [currentView, setCurrentView] = useState<"dashboard" | "locations" | "rules" | "settings" | "proxies" | "groups">("dashboard")
   const [profiles, setProfiles] = useState<any[]>([])
 
   // Derive active subscription stats
   const activeSubscription = profiles.find(p => p.nodes.some((n: any) => String(n.id) === String(activeServerId))) || profiles[0]
+
+  const [activeAutoNodeId, setActiveAutoNodeId] = useState<string | null>(null)
+  const activeAutoNode = useMemo(() => {
+    if (!activeAutoNodeId) return null
+    return servers.find(s => s.id === activeAutoNodeId || s.name === activeAutoNodeId)
+  }, [servers, activeAutoNodeId])
+
+  // Global polling for active node in auto group
+  useEffect(() => {
+    let timer: NodeJS.Timeout
+    if (isConnected && activeServerId?.startsWith("auto_")) {
+      const fetchStatus = async () => {
+        try {
+          const status: string = await invoke("get_group_status", { groupId: activeServerId })
+          setActiveAutoNodeId(status)
+          console.log("[AutoSelect] Active node ID:", status)
+        } catch (e) {
+          console.error("[AutoSelect] Failed to fetch group status:", e)
+        }
+      }
+      fetchStatus()
+      timer = setInterval(fetchStatus, 3000)
+    } else {
+      setActiveAutoNodeId(null)
+    }
+    return () => clearInterval(timer)
+  }, [isConnected, activeServerId])
 
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<string | null>(null)
 
@@ -760,20 +862,30 @@ export default function Home() {
             onDelete={handleDeleteNode}
             onRefresh={() => fetchProfiles(true)}
             onPing={handlePingNode}
+            activeAutoNodeId={activeAutoNodeId}
           />
+        )
+      case "groups":
+        return (
+          <GroupsView allNodes={servers} />
         )
       case "proxies": // Mapped to Subscriptions
-        return (
-          <SubscriptionsView
-            profiles={profiles}
-            onUpdate={handleUpdateProfile}
-            onDelete={handleDeleteProfile}
-            onAdd={() => setShowAddModal(true)}
-            onSelect={handleSubscriptionSelect}
-            onUpdateAll={handleUpdateAll}
-            isImporting={isImporting}
-          />
-        )
+        return <SubscriptionsView
+          profiles={profiles}
+          onUpdate={loadProfiles}
+          onDelete={async (id) => {
+            await invoke("delete_subscription", { id })
+            loadProfiles()
+          }}
+          onAdd={() => setShowAddSubscription(true)}
+          onSelect={handleSubscriptionSelect}
+          onUpdateAll={loadProfiles}
+          isImporting={false}
+          onNodeSelect={(id, selectOnly) => handleServerToggle(id, !selectOnly)}
+          isConnected={isConnected}
+          activeServerId={activeServerId}
+          activeAutoNodeId={activeAutoNodeId}
+        />
       case "subscription_detail" as any:
         const subscription = profiles.find(p => p.id === selectedSubscriptionId)
         if (!subscription) return <div>Subscription not found</div>
@@ -828,6 +940,7 @@ export default function Home() {
                   logs={logs}
                   onClearLogs={() => setLogs([])}
                   onPing={handlePingNode}
+                  activeAutoNodeId={activeAutoNodeId}
                   hideHeader={true}
                 />
               </div>
@@ -843,28 +956,40 @@ export default function Home() {
         // Original Dashboard Content
         const activeServer = servers.find(s => s.id === activeServerId)
 
+        // If activeServer is missing but ID starts with auto_, create a virtual one for display
+        // We can parse the name from ID: "auto_" + sanitized_name.
+        // It's hard to reverse.
+        // But we know it's "Auto - [Something]". server-list.tsx uses "Auto - [suffix]".
+        // Just "Auto Select" is safe generic for now.
+        const displayServer = activeServer || (activeServerId?.startsWith("auto_") ? {
+          name: t('status.auto_select', { defaultValue: 'Auto Select' }),
+          flagUrl: "", // Use globe
+          id: activeServerId
+        } : null)
+
         return (
-          <div className="flex-1 overflow-y-auto px-8 py-8 sidebar-scroll flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
-            <div className="max-w-5xl mx-auto flex flex-col w-full space-y-10 pb-20">
+          <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+            <div className="flex-1 overflow-y-auto px-8 pb-8 sidebar-scroll">
               <ConnectionStatus
+                activeServerId={activeServerId} // Pass ID if needed
+                activeNodeName={
+                  activeAutoNode?.name || displayServer?.name
+                }
+                serverName={displayServer?.name}
+                flagUrl={activeAutoNode?.flagUrl || displayServer?.flagUrl}
                 isConnected={isConnected}
-                serverName={activeServer?.name}
-                flagUrl={activeServer?.flagUrl}
-                latency={activeServer?.ping}
-                connectionDetails={connectionDetails ? {
-                  ip: connectionDetails.ip,
-                  country: connectionDetails.country,
-                  isp: connectionDetails.isp
-                } : undefined}
-                onLatencyClick={() => activeServerId && handlePingNode(activeServerId)}
+                // ...
+                latency={activeServer?.ping} // Auto group doesn't have ping. Show --
+                onLatencyClick={() => { }}
                 onMainToggle={toggleProxy}
+                connectionDetails={connectionDetails}
                 mode={proxyMode}
                 onModeChange={(m) => {
                   setProxyMode(m)
-                  // If connected, syncProxy effect will handle the rest
+                  // If connected, it will trigger sync logic
                 }}
                 tunEnabled={tunEnabled}
-                onTunToggle={handleTunToggle}
+                onTunToggle={() => setTunEnabled(!tunEnabled)}
                 systemProxyEnabled={systemProxyEnabled}
                 onSystemProxyToggle={toggleSystemProxy}
                 isLoading={isLoading}
@@ -893,6 +1018,7 @@ export default function Home() {
                 logs={logs}
                 onClearLogs={() => setLogs([])}
                 onPing={handlePingNode}
+                activeAutoNodeId={activeAutoNodeId}
               />
             </div>
           </div>
@@ -911,7 +1037,7 @@ export default function Home() {
         subscription={activeSubscription}
       />
       <main className="flex-1 flex flex-col h-full relative overflow-hidden rounded-xl bg-black/10 backdrop-blur-sm border border-white/5">
-        {currentView !== "locations" && currentView !== "rules" && currentView !== "settings" && currentView !== "proxies" && (currentView as any) !== "subscription_detail" && (
+        {currentView !== "locations" && currentView !== "rules" && currentView !== "settings" && currentView !== "proxies" && currentView !== "groups" && (currentView as any) !== "subscription_detail" && (
           <Header
             isConnected={isConnected}
             onToggle={toggleProxy}

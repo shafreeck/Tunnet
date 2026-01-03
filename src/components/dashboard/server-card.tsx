@@ -11,7 +11,9 @@ interface ServerCardProps {
     providerName?: string
     ping?: number
     onClick: () => void
+    onClick: () => void
     isHovered?: boolean
+    isAutoSelected?: boolean
 }
 
 export function ServerCard({
@@ -20,7 +22,8 @@ export function ServerCard({
     locationCount,
     providerName = "Multiple Providers",
     ping,
-    onClick
+    onClick,
+    isAutoSelected
 }: ServerCardProps) {
     const { t } = useTranslation()
     const displayProviderName = providerName === "Multiple Providers" ? t('locations.card.multiple_providers') : providerName
@@ -44,7 +47,10 @@ export function ServerCard({
     return (
         <div
             onClick={onClick}
-            className="group relative bg-card-bg hover:border-primary/20 border border-border-color rounded-2xl p-5 transition-all duration-300 cursor-pointer overflow-hidden backdrop-blur-sm shadow-sm hover:shadow-md"
+            className={cn(
+                "group relative bg-card-bg hover:border-primary/20 border transition-all duration-300 cursor-pointer overflow-hidden backdrop-blur-sm shadow-sm hover:shadow-md rounded-2xl p-5",
+                isAutoSelected ? "border-accent-green/50 ring-1 ring-accent-green/20" : "border-border-color"
+            )}
         >
             {/* Header: Flag & Ping */}
             <div className="flex justify-between items-start mb-3">
@@ -67,8 +73,13 @@ export function ServerCard({
 
             {/* Content */}
             <div className="space-y-1">
-                <h3 className="text-text-primary font-bold text-lg tracking-tight group-hover:text-primary transition-colors">
+                <h3 className="text-text-primary font-bold text-lg tracking-tight group-hover:text-primary transition-colors flex items-center gap-2">
                     {countryName}
+                    {isAutoSelected && (
+                        <span className="text-[9px] font-extrabold uppercase bg-accent-green text-black px-1.5 py-0.5 rounded-sm tracking-widest shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse">
+                            Auto
+                        </span>
+                    )}
                 </h3>
                 <p className="text-xs text-text-secondary font-medium">
                     {t('locations.card.location_count', { count: locationCount })} • {displayProviderName}
@@ -88,6 +99,6 @@ export function ServerCard({
 
             {/* Hover Glow Effect */}
             <div className="absolute -inset-1 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-0 group-hover:opacity-100 -skew-x-12 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-in-out pointer-events-none" />
-        </div>
+        </div >
     )
 }

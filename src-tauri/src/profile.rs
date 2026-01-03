@@ -48,6 +48,7 @@ pub struct Node {
     pub uuid: Option<String>,
     pub cipher: Option<String>,
     pub password: Option<String>,
+    #[serde(default)]
     pub tls: bool,
     pub network: Option<String>, // "ws", "grpc", "tcp"
     pub path: Option<String>,    // "/path" for ws/grpc
@@ -68,13 +69,75 @@ pub struct Node {
     pub ping: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubscriptionInfo {
     pub upload: u64,
     pub download: u64,
     pub total: u64,
     pub expire: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum GroupType {
+    Selector,
+    UrlTest {
+        #[serde(default = "default_interval")]
+        interval: u64,
+        #[serde(default = "default_tolerance")]
+        tolerance: u64,
+    },
+}
+
+fn default_interval() -> u64 {
+    600
+}
+
+fn default_tolerance() -> u64 {
+    50
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupFilter {
+    pub keywords: Option<Vec<String>>,
+    // We can add more filter criteria here (e.g. subscription_id, country, etc.)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum GroupSource {
+    Static { node_ids: Vec<String> },
+    Filter { criteria: GroupFilter },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Group {
+    pub id: String,
+    pub name: String,
+    #[serde(deserialize_with = "deserialize_group_type")]
+    pub group_type: GroupType,
+    pub source: GroupSource,
+    pub icon: Option<String>,
+}
+
+fn deserialize_group_type<'de, D>(deserializer: D) -> Result<GroupType, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v = serde_json::Value::deserialize(deserializer)?;
+    match v {
+        serde_json::Value::String(s) => match s.as_str() {
+            "Selector" => Ok(GroupType::Selector),
+            "UrlTest" => Ok(GroupType::UrlTest {
+                interval: default_interval(),
+                tolerance: default_tolerance(),
+            }),
+            _ => Err(serde::de::Error::unknown_variant(
+                &s,
+                &["Selector", "UrlTest"],
+            )),
+        },
+        _ => serde_json::from_value(v).map_err(serde::de::Error::custom),
+    }
 }
 
 pub mod parser {

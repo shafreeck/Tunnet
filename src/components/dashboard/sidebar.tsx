@@ -1,11 +1,11 @@
 "use client"
 
 import React from "react"
-import { Search, Rocket, Globe, Settings, Sliders, Info, Server, Zap } from "lucide-react"
+import { Search, Rocket, Globe, Settings, Sliders, Info, Server, Zap, LayoutGrid } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 
-export type ViewType = "dashboard" | "locations" | "rules" | "settings" | "proxies"
+export type ViewType = "dashboard" | "locations" | "rules" | "settings" | "proxies" | "groups"
 
 interface SidebarProps {
     currentView: ViewType
@@ -72,6 +72,13 @@ export function Sidebar({ currentView, onViewChange, subscription }: SidebarProp
                     label={t('sidebar.locations')}
                     active={currentView === "locations"}
                     onClick={() => onViewChange("locations")}
+                />
+
+                <NavItem
+                    icon={<LayoutGrid size={20} />}
+                    label={t('sidebar.groups')}
+                    active={currentView === "groups"}
+                    onClick={() => onViewChange("groups")}
                 />
 
                 <NavItem

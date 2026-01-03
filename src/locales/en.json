@@ -22,7 +22,8 @@
         "active": "Active",
         "no_active_plan": "No active plan",
         "expired": "Expired",
-        "unlimited": "Unlimited"
+        "unlimited": "Unlimited",
+        "groups": "Groups"
     },
     "dashboard": {
         "node_info": "Node Info",
@@ -187,7 +188,9 @@
             "global": "Global",
             "rule": "Rule",
             "direct": "Direct"
-        }
+        },
+        "auto_select": "Auto Select",
+        "disconnected_tooltip": "Connection is currently stopped"
     },
     "toast": {
         "import_success": "Import completed, updating nodes in background...",
@@ -321,5 +324,49 @@
             "local_network": "Local Network",
             "ads": "Block Ads"
         }
-    }
+    },
+    "auto_select_best": "Auto Select Best",
+    "auto_select_tooltip": "Auto select best node by latency",
+    "auto_select_success": "Auto selected {{name}} ({{ping}}ms)",
+    "auto_select_no_data": "No latency data available. Please check latency first.",
+    "auto_select_empty": "No available nodes.",
+    "groups": {
+        "title": "Server Groups",
+        "subtitle": "Create custom groups for advanced routing",
+        "create": "Create Group",
+        "no_groups": "No groups found",
+        "edit": "Edit Group",
+        "delete": "Delete",
+        "name": "Group Name",
+        "name_placeholder": "e.g. Streaming, Gaming",
+        "type": "Group Type",
+        "source": "Source Type",
+        "select_nodes": "Select Nodes",
+        "keywords": "Keywords",
+        "keywords_placeholder": "e.g. US, Netflix",
+        "keywords_help": "Comma separated keywords to filter nodes",
+        "cancel": "Cancel",
+        "save": "Save Group",
+        "created": "Group created",
+        "updated": "Group updated",
+        "deleted": "Group deleted",
+        "save_failed": "Failed to save group",
+        "delete_failed": "Failed to delete group",
+        "confirm_delete": "Are you sure you want to delete this group?",
+        "fetch_failed": "Failed to fetch groups",
+        "name_required": "Group name is required",
+        "static": "Static",
+        "filter": "Filter",
+        "nodes": "nodes",
+        "auto_select": "Auto Select",
+        "manual_select": "Manual Select",
+        "select_active": "Select Active",
+        "select_node_desc": "Select the active node for this selector group.",
+        "fetch_nodes_failed": "Failed to fetch node status.",
+        "node_selected": "Node selected.",
+        "select_failed": "Failed to select node."
+    },
+    "auto_select_global": "Global",
+    "auto_select_prefix": "Auto",
+    "auto_select_group_created": "Auto select group created"
 }

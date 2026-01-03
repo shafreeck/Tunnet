@@ -22,7 +22,8 @@
         "active": "已激活",
         "no_active_plan": "无有效订阅",
         "expired": "已过期",
-        "unlimited": "不限流量"
+        "unlimited": "不限流量",
+        "groups": "节点组"
     },
     "dashboard": {
         "node_info": "节点信息",
@@ -187,7 +188,9 @@
             "global": "全局",
             "rule": "规则",
             "direct": "直连"
-        }
+        },
+        "auto_select": "自动选择",
+        "disconnected_tooltip": "当前连接已停止"
     },
     "toast": {
         "import_success": "导入完成，后台正在更新节点...",
@@ -320,5 +323,49 @@
             "local_network": "局域网直连",
             "ads": "拦截广告"
         }
-    }
+    },
+    "auto_select_best": "自动优选",
+    "auto_select_tooltip": "根据延迟自动选择最佳节点",
+    "auto_select_success": "已自动优选 {{name}} ({{ping}}ms)",
+    "auto_select_no_data": "无可用延迟数据，请先进行测速。",
+    "auto_select_empty": "无可用节点。",
+    "groups": {
+        "title": "节点组管理",
+        "subtitle": "创建自定义节点组以实现高级分流",
+        "create": "新建组",
+        "no_groups": "暂无节点组",
+        "edit": "编辑组",
+        "delete": "删除",
+        "name": "组名称",
+        "name_placeholder": "例如：流媒体、游戏",
+        "type": "组类型",
+        "source": "节点来源",
+        "select_nodes": "选择节点",
+        "keywords": "筛选关键词",
+        "keywords_placeholder": "例如：US, Netflix",
+        "keywords_help": "多个关键词用逗号分隔",
+        "cancel": "取消",
+        "save": "保存组",
+        "created": "节点组已创建",
+        "updated": "节点组已更新",
+        "deleted": "节点组已删除",
+        "save_failed": "保存失败",
+        "delete_failed": "删除失败",
+        "confirm_delete": "确定要删除这个节点组吗？",
+        "fetch_failed": "获取节点组失败",
+        "name_required": "组名称不能为空",
+        "static": "静态指定",
+        "filter": "关键词筛选",
+        "nodes": "个节点",
+        "auto_select": "自动选择",
+        "manual_select": "手动选择",
+        "select_active": "选择节点",
+        "select_node_desc": "为此选择器组选择当前活动节点。",
+        "fetch_nodes_failed": "获取节点状态失败",
+        "node_selected": "已切换节点",
+        "select_failed": "切换节点失败"
+    },
+    "auto_select_global": "全局",
+    "auto_select_prefix": "自动",
+    "auto_select_group_created": "自动优选组已创建"
 }

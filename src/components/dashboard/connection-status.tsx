@@ -26,7 +26,23 @@ interface ConnectionStatusProps {
 
 export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, onLatencyClick, onMainToggle, connectionDetails, mode, onModeChange, tunEnabled, onTunToggle, systemProxyEnabled, onSystemProxyToggle, isLoading }: ConnectionStatusProps) {
     const { t } = useTranslation()
-    const displayFlag = flagUrl // If empty string, it's falsey
+    const displayFlag = flagUrl
+
+    // Logic for Auto-Select display
+    // If serverName is missing but we are connected, check if activeServerId was "auto_..." (passed via serverName? No, serverName passed to here is usually `activeServer?.name`)
+    // page.tsx calculates serverName: `const activeServer = servers.find(...)`
+    // If activeServer is not found (because it's a group), serverName is undefined.
+    // In page.tsx: `serverName={activeServer?.name}`
+    // We should patch page.tsx to pass a proper name if activeServer is missing but activeServerId starts with "auto_"
+    // OR we handle it here if we had the ID. But we don't have the ID here.
+    // So we must fix page.tsx.
+
+    // However, if we fix page.tsx, we don't need to change this file much, except maybe fallback icon.
+    // Let's assume page.tsx passes "Auto Select - ..." as serverName.
+    // Then displayFlag will be null.
+    // We want a Zap icon or something for Auto groups? 
+    // Currently it shows Globe (default). That's fine.
+
     const displayName = isConnected ? (serverName || t('status.unknown_server')) : t('status.disconnected')
 
     return (

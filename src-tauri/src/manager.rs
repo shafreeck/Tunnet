@@ -390,6 +390,37 @@ impl<R: Runtime> CoreManager<R> {
         Ok(rules)
     }
 
+    pub fn get_groups_path(&self) -> PathBuf {
+        self.app
+            .path()
+            .app_local_data_dir()
+            .expect("failed to resolve app local data dir")
+            .join("groups.json")
+    }
+
+    pub fn save_groups(&self, groups: &[crate::profile::Group]) -> Result<(), String> {
+        let path = self.get_groups_path();
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+        }
+        let json = serde_json::to_string_pretty(groups).map_err(|e| e.to_string())?;
+        fs::write(&path, json).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn load_groups(&self) -> Result<Vec<crate::profile::Group>, String> {
+        let path = self.get_groups_path();
+        if !path.exists() {
+            return Ok(vec![]);
+        }
+        let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let groups: Vec<crate::profile::Group> =
+            serde_json::from_str(&content).map_err(|e| e.to_string())?;
+        Ok(groups)
+    }
+
     pub fn get_settings_path(&self) -> PathBuf {
         self.app
             .path()

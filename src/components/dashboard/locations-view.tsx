@@ -3,8 +3,9 @@
 import React, { useState, useMemo } from "react"
 // @ts-ignore
 import { invoke } from "@tauri-apps/api/core"
-import { Search, RotateCcw, Map as MapIcon, LayoutGrid, Star, Globe as GlobeIcon } from "lucide-react"
+import { Search, RotateCcw, Map as MapIcon, LayoutGrid, Star, Globe as GlobeIcon, Zap } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 import { LocationsMap } from "./locations-map"
@@ -22,6 +23,7 @@ interface LocationsViewProps {
     onImport: (url: string) => Promise<void>
     onRefresh: () => void
     onPing: (id: string) => Promise<void>
+    activeAutoNodeId?: string | null
 }
 
 export function LocationsView({
@@ -34,7 +36,8 @@ export function LocationsView({
     onDelete,
     onImport,
     onRefresh,
-    onPing
+    onPing,
+    activeAutoNodeId
 }: LocationsViewProps) {
     const { t } = useTranslation()
     const [viewMode, setViewMode] = useState<"grid" | "map">("map")
@@ -69,10 +72,70 @@ export function LocationsView({
         return list
     }, [servers, selectedCountry, searchQuery])
 
+    const handleAutoSelect = async () => {
+        // Collect current filtered nodes
+        const currentList = filteredServersForList
+
+        if (currentList.length === 0) {
+            toast.error(t('auto_select_empty'))
+            return
+        }
+
+        const ids = currentList.map(n => n.id)
+        const name = `${t('auto_select_prefix', { defaultValue: 'Auto' })} - ${selectedCountry || t('locations.all_regions')}`
+
+        // Handle Toggle (Deactivate)
+        if (isAutoActive) {
+            const firstManual = currentList[0]
+            if (firstManual) {
+                if (isConnected) {
+                    onToggle(firstManual.id)
+                } else {
+                    onSelect(firstManual.id)
+                }
+                toast.info(t('auto_select_cancelled', { defaultValue: 'Switched to manual selection' }))
+                return
+            }
+        }
+
+        try {
+            const groupId: string = await invoke("ensure_auto_group", {
+                name,
+                references: ids,
+                groupType: "url-test"
+            })
+
+            onSelect(groupId)
+            if (activeServerId === groupId) {
+                // Force toggle even if "active" because we might be updating the group content
+                onToggle(groupId)
+            } else {
+                onToggle(groupId)
+            }
+
+            toast.success(t('auto_select_group_created', { name }))
+        } catch (e: any) {
+            toast.error(t('toast.action_failed', { error: e }))
+        }
+    }
+
     const totalCountries = useMemo(() => {
         const s = new Set(servers.map(x => x.country))
         return s.size
     }, [servers])
+
+    const isAutoActive = React.useMemo(() => {
+        if (!activeServerId?.startsWith("auto_")) return false
+        if (selectedCountry) {
+            return activeServerId.includes(selectedCountry.toLowerCase().replace(/[^a-z0-9]/g, ''))
+        }
+        return activeServerId.includes("all")
+    }, [activeServerId, selectedCountry])
+
+    const activeAutoNode = useMemo(() => {
+        if (!activeAutoNodeId) return null
+        return servers.find(s => s.id === activeAutoNodeId || s.name === activeAutoNodeId)
+    }, [servers, activeAutoNodeId])
 
     return (
         <div className={cn(
@@ -202,13 +265,30 @@ export function LocationsView({
                                 <GlobeIcon size={20} />
                             </div>
                             <div className="flex flex-col">
-                                <span className="text-sm font-black text-text-primary uppercase tracking-tight">
+                                <span className="text-sm font-black text-text-primary uppercase tracking-tight flex items-center gap-2">
                                     {selectedCountry || t('locations.drawer.region_nodes')}
+                                    {activeAutoNode && (
+                                        <span className="text-[9px] font-normal normal-case bg-accent-green/10 text-accent-green px-1.5 py-0.5 rounded opacity-80">
+                                            {activeAutoNode.name}
+                                        </span>
+                                    )}
                                 </span>
                                 <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest">
                                     {t('locations.drawer.nodes_ready', { count: filteredServersForList.length })}
                                 </span>
                             </div>
+                            <button
+                                onClick={handleAutoSelect}
+                                className={cn(
+                                    "size-10 flex items-center justify-center rounded-full transition-all active:scale-95",
+                                    isAutoActive
+                                        ? "bg-accent-green/10 text-accent-green"
+                                        : "hover:bg-accent-green/10 text-text-secondary hover:text-accent-green"
+                                )}
+                                title={t('auto_select_tooltip')}
+                            >
+                                <Zap size={20} fill={isAutoActive ? "currentColor" : "none"} />
+                            </button>
                         </div>
                         <button
                             onClick={() => { setShowListValues(false); setSelectedCountry(null); }}

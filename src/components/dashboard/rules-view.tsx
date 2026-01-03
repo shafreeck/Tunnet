@@ -6,12 +6,13 @@ import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
+import { Group } from "./groups-view"
 
 interface Rule {
     id: string
     type: "DOMAIN" | "DOMAIN_SUFFIX" | "DOMAIN_KEYWORD" | "IP_CIDR" | "GEOIP" | "FINAL"
     value: string
-    policy: "PROXY" | "DIRECT" | "REJECT"
+    policy: string // Changed from strict literal to string to support group IDs
     enabled: boolean
     description?: string
 }
@@ -68,6 +69,7 @@ const getPresetName = (name: string, t: any) => {
 export function RulesView() {
     const { t } = useTranslation()
     const [rules, setRules] = useState<Rule[]>([])
+    const [groups, setGroups] = useState<Group[]>([])
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedPolicy, setSelectedPolicy] = useState<"ALL" | "PROXY" | "DIRECT" | "REJECT">("ALL")
     const [defaultPolicy, setDefaultPolicy] = useState<"PROXY" | "DIRECT" | "REJECT">("PROXY")
@@ -81,6 +83,8 @@ export function RulesView() {
     const [loadingDefaultPolicy, setLoadingDefaultPolicy] = useState(false)
     const [isSavingRule, setIsSavingRule] = useState(false)
     const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null)
+    const [openRuleMenuId, setOpenRuleMenuId] = useState<string | null>(null)
+    const [ruleMenuPos, setRuleMenuPos] = useState<{ top?: number, bottom?: number, right: number } | null>(null)
     const [dialogData, setDialogData] = useState<Partial<Rule>>({
         type: "DOMAIN",
         value: "",
@@ -93,7 +97,19 @@ export function RulesView() {
         const savedPreset = localStorage.getItem("tunnet_rules_preset")
         if (savedPreset) setCurrentPreset(savedPreset)
         fetchRules()
+        if (savedPreset) setCurrentPreset(savedPreset)
+        fetchRules()
+        fetchGroups()
     }, [])
+
+    const fetchGroups = async () => {
+        try {
+            const data = await invoke<Group[]>("get_groups")
+            setGroups(data)
+        } catch (e) {
+            console.error("Failed to fetch groups", e)
+        }
+    }
 
     const fetchRules = async () => {
         try {
@@ -112,7 +128,7 @@ export function RulesView() {
             })
 
             if (hasChanges) {
-                const finalPolicy = finalRule ? finalRule.policy as "PROXY" | "DIRECT" | "REJECT" : "PROXY"
+                const finalPolicy = finalRule ? finalRule.policy : "PROXY"
                 const payload = [...normalRules]
                 if (finalRule) payload.push(finalRule)
                 await invoke("save_rules", { rules: payload })
@@ -120,13 +136,13 @@ export function RulesView() {
             }
 
             setRules(normalRules)
-            if (finalRule) setDefaultPolicy(finalRule.policy as "PROXY" | "DIRECT" | "REJECT")
+            if (finalRule) setDefaultPolicy(finalRule.policy as any)
         } catch (error) {
             console.error("Failed to fetch rules:", error)
         }
     }
 
-    const saveRulesToBackend = async (rulesToSave: Rule[], policy: "PROXY" | "DIRECT" | "REJECT") => {
+    const saveRulesToBackend = async (rulesToSave: Rule[], policy: string) => {
         const finalRule: Rule = {
             id: "final-policy",
             type: "FINAL",
@@ -174,7 +190,7 @@ export function RulesView() {
                 // But `save_rules` doesn't care much about IDs except for identifying.
                 // If we restore custom, we probably want the exact same state.
                 const newRules = preset.rules // Keep original IDs if possible
-                const newPolicy = preset.defaultPolicy as "PROXY" | "DIRECT" | "REJECT"
+                const newPolicy = preset.defaultPolicy
                 await saveRulesToBackend(newRules, newPolicy)
                 setRules(newRules)
                 setDefaultPolicy(newPolicy)
@@ -190,7 +206,7 @@ export function RulesView() {
         }
     }
 
-    const switchToCustom = (updatedRules: Rule[], updatedPolicy: "PROXY" | "DIRECT" | "REJECT") => {
+    const switchToCustom = (updatedRules: Rule[], updatedPolicy: string) => {
         setCurrentPreset("Custom")
         localStorage.setItem("tunnet_rules_preset", "Custom")
         localStorage.setItem("tunnet_rules_custom", JSON.stringify({
@@ -244,28 +260,28 @@ export function RulesView() {
         }
     }
 
-    const getNextPolicy = (current: "PROXY" | "DIRECT" | "REJECT") => {
-        const sequence: ("PROXY" | "DIRECT" | "REJECT")[] = ["PROXY", "DIRECT", "REJECT"]
+    const getNextPolicy = (current: string) => {
+        const standard: string[] = ["PROXY", "DIRECT", "REJECT"]
+        const groupIds = groups.map(g => g.id)
+        const sequence = [...standard, ...groupIds]
         const nextIndex = (sequence.indexOf(current) + 1) % sequence.length
         return sequence[nextIndex]
     }
 
-    const handleCycleRulePolicy = async (rule: Rule, e: React.MouseEvent) => {
-        e.stopPropagation()
+    const handleUpdateRulePolicy = async (ruleId: string, newPolicy: string) => {
         if (loadingRuleId) return
-        setLoadingRuleId(rule.id)
-        const nextPolicy = getNextPolicy(rule.policy)
+        setLoadingRuleId(ruleId)
         try {
-            const newRules = rules.map(r => r.id === rule.id ? { ...r, policy: nextPolicy } as Rule : r)
+            const newRules = rules.map(r => r.id === ruleId ? { ...r, policy: newPolicy } as Rule : r)
             await saveRulesToBackend(newRules, defaultPolicy)
             switchToCustom(newRules, defaultPolicy)
+            setRules(newRules) // Update local state immediately
             toast.success(t('rules.toast.rule_updated'))
         } catch (err) {
-            // Revert on failure
-            setRules(rules)
             toast.error(t('rules.toast.save_failed'))
         } finally {
             setLoadingRuleId(null)
+            setOpenRuleMenuId(null)
         }
     }
 
@@ -295,12 +311,22 @@ export function RulesView() {
     })
 
     const getPolicyColor = (policy: string) => {
+        if (groups.some(g => g.id === policy)) {
+            return "text-blue-400 bg-blue-400/10 border-blue-400/20"
+        }
         switch (policy) {
             case "PROXY": return "text-purple-400 bg-purple-400/10 border-purple-400/20"
             case "DIRECT": return "text-emerald-400 bg-emerald-400/10 border-emerald-400/20"
             case "REJECT": return "text-red-400 bg-red-400/10 border-red-400/20"
             default: return "text-gray-400"
         }
+    }
+
+    const getPolicyLabel = (policy: string) => {
+        const group = groups.find(g => g.id === policy)
+        if (group) return group.name
+        // @ts-ignore
+        return t(`rules.policies.${policy.toLowerCase()}`)
     }
 
     return (
@@ -374,6 +400,8 @@ export function RulesView() {
                             />
                         </div>
                         <div className="flex bg-card-bg p-1 rounded-xl border border-border-color">
+                            {/* Filter bar - maybe just standard policies for filter? or all? */}
+                            {/* For now let's just keep standard filters to avoid clutter, as groups are dynamic */}
                             {(["ALL", "PROXY", "DIRECT", "REJECT"] as const).map(policy => (
                                 <button
                                     key={policy}
@@ -419,17 +447,40 @@ export function RulesView() {
                                 </div>
                                 <div className="flex items-center gap-8">
                                     <button
-                                        onClick={(e) => handleCycleRulePolicy(rule, e)}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (openRuleMenuId === rule.id) {
+                                                setOpenRuleMenuId(null);
+                                                return;
+                                            }
+                                            const rect = e.currentTarget.getBoundingClientRect();
+                                            const MENU_HEIGHT = 280; // Approximate max height
+                                            const right = window.innerWidth - rect.right;
+
+                                            // Check collision with bottom
+                                            if (rect.bottom + MENU_HEIGHT > window.innerHeight) {
+                                                setRuleMenuPos({
+                                                    bottom: window.innerHeight - rect.top + 8,
+                                                    right
+                                                });
+                                            } else {
+                                                setRuleMenuPos({
+                                                    top: rect.bottom + 8,
+                                                    right
+                                                });
+                                            }
+                                            setOpenRuleMenuId(rule.id);
+                                        }}
                                         disabled={loadingRuleId === rule.id}
                                         className={cn(
-                                            "px-3 py-1 rounded-full text-[10px] font-bold border tracking-widest uppercase w-20 text-center cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center",
+                                            "px-3 py-1 rounded-full text-[10px] font-bold border tracking-widest uppercase w-20 text-center cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center relative z-0",
                                             getPolicyColor(rule.policy),
                                             loadingRuleId === rule.id ? "opacity-70 cursor-wait" : ""
                                         )}>
                                         {loadingRuleId === rule.id ? (
                                             <Loader2 size={12} className="animate-spin" />
                                         ) : (
-                                            t(`rules.policies.${rule.policy.toLowerCase()}` as any)
+                                            getPolicyLabel(rule.policy)
                                         )}
                                     </button>
                                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
@@ -461,10 +512,83 @@ export function RulesView() {
             {/* Bottom Default Status */}
             <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
                 <div
-                    onClick={() => setIsFallbackOpen(!isFallbackOpen)}
-                    className="pointer-events-auto glass-card flex items-center gap-4 px-6 py-3 rounded-2xl border-border-color shadow-2xl hover:bg-black/5 dark:hover:bg-white/10 transition-all active:scale-95 group cursor-pointer"
+                    className="pointer-events-auto glass-card flex items-center gap-4 px-6 py-3 rounded-2xl border-border-color shadow-2xl hover:bg-black/5 dark:hover:bg-white/10 transition-all active:scale-95 group cursor-pointer relative"
                 >
-                    <div className="flex flex-col items-start">
+                    {isFallbackOpen && (
+                        <>
+                            <div className="fixed inset-0 z-0" onClick={() => setIsFallbackOpen(false)} />
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-64 bg-white/90 dark:bg-black/80 backdrop-blur-xl border border-border-color rounded-2xl shadow-2xl z-20 py-2 overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-2 duration-200">
+                                <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                                    <div className="px-4 py-2 text-[10px] font-bold text-text-tertiary uppercase tracking-widest border-b border-border-color/50 mb-1">{t('rules.dialog.policy')}</div>
+                                    {(["PROXY", "DIRECT", "REJECT"] as const).map(policy => (
+                                        <button
+                                            key={policy}
+                                            onClick={() => {
+                                                if (loadingDefaultPolicy) return
+                                                setLoadingDefaultPolicy(true)
+                                                saveRulesToBackend(rules, policy)
+                                                    .then(() => {
+                                                        setDefaultPolicy(policy)
+                                                        switchToCustom(rules, policy)
+                                                        toast.success(t('rules.toast.rule_updated'))
+                                                    })
+                                                    .catch(() => {
+                                                        toast.error(t('rules.toast.save_failed'))
+                                                    })
+                                                    .finally(() => {
+                                                        setLoadingDefaultPolicy(false)
+                                                        setIsFallbackOpen(false)
+                                                    })
+                                            }}
+                                            className={cn(
+                                                "w-full text-left px-4 py-2.5 text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex items-center justify-between font-bold",
+                                                defaultPolicy === policy ? "text-primary bg-primary/5" : "text-text-secondary"
+                                            )}
+                                        >
+                                            {t(`rules.policies.${policy.toLowerCase()}` as any)}
+                                            {defaultPolicy === policy && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                                        </button>
+                                    ))}
+
+                                    {groups.length > 0 && (
+                                        <>
+                                            <div className="px-4 py-2 text-[10px] font-bold text-text-tertiary uppercase tracking-widest border-b border-border-color/50 mt-2 mb-1 border-t">{t('groups.title')}</div>
+                                            {groups.map(group => (
+                                                <button
+                                                    key={group.id}
+                                                    onClick={() => {
+                                                        if (loadingDefaultPolicy) return
+                                                        setLoadingDefaultPolicy(true)
+                                                        saveRulesToBackend(rules, group.id)
+                                                            .then(() => {
+                                                                setDefaultPolicy(group.id as any)
+                                                                switchToCustom(rules, group.id)
+                                                                toast.success(t('rules.toast.rule_updated'))
+                                                            })
+                                                            .catch(() => {
+                                                                toast.error(t('rules.toast.save_failed'))
+                                                            })
+                                                            .finally(() => {
+                                                                setLoadingDefaultPolicy(false)
+                                                                setIsFallbackOpen(false)
+                                                            })
+                                                    }}
+                                                    className={cn(
+                                                        "w-full text-left px-4 py-2.5 text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex items-center justify-between font-bold",
+                                                        defaultPolicy === group.id ? "text-primary bg-primary/5" : "text-text-secondary"
+                                                    )}
+                                                >
+                                                    <span className="truncate">{group.name}</span>
+                                                    {defaultPolicy === group.id && <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
+                                                </button>
+                                            ))}
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </>
+                    )}
+                    <div className="flex flex-col items-start" onClick={() => setIsFallbackOpen(!isFallbackOpen)}>
                         <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest leading-none mb-1">{t('rules.default_policy')}</span>
                         <div className="flex items-center gap-2">
                             <span className="text-sm font-bold text-text-primary">{t('rules.all_other_traffic')}</span>
@@ -473,7 +597,7 @@ export function RulesView() {
                     </div>
                     <div className="h-8 w-px bg-white/10 mx-2" />
                     <button
-                        onClick={handleCycleDefaultPolicy}
+                        onClick={() => setIsFallbackOpen(!isFallbackOpen)}
                         disabled={loadingDefaultPolicy}
                         className={cn(
                             "px-4 py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase border cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md min-w-[80px] flex items-center justify-center",
@@ -483,7 +607,7 @@ export function RulesView() {
                         {loadingDefaultPolicy ? (
                             <Loader2 size={14} className="animate-spin" />
                         ) : (
-                            t(`rules.policies.${defaultPolicy.toLowerCase()}` as any)
+                            getPolicyLabel(defaultPolicy)
                         )}
                     </button>
                 </div>
@@ -512,10 +636,32 @@ export function RulesView() {
                             </div>
                             <div className="space-y-3">
                                 <label className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest pl-1">{t('rules.dialog.policy')}</label>
-                                <div className="flex bg-card-bg p-1.5 rounded-[1.25rem] border border-border-color">
-                                    {(["PROXY", "DIRECT", "REJECT"] as const).map(policy => (
-                                        <button key={policy} onClick={() => setDialogData({ ...dialogData, policy })} className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-bold transition-all uppercase tracking-widest", dialogData.policy === policy ? (policy === "PROXY" ? "bg-purple-500 text-white shadow-lg" : policy === "DIRECT" ? "bg-emerald-500 text-white shadow-lg" : "bg-red-500 text-white shadow-lg") : "text-text-secondary hover:text-text-primary")}>{t(`rules.policies.${policy.toLowerCase()}` as any)}</button>
-                                    ))}
+                                <div className="flex flex-wrap gap-2">
+                                    {/* Standard Policies */}
+                                    <div className="flex bg-card-bg p-1.5 rounded-[1.25rem] border border-border-color flex-1 min-w-[200px]">
+                                        {(["PROXY", "DIRECT", "REJECT"] as const).map(policy => (
+                                            <button key={policy} onClick={() => setDialogData({ ...dialogData, policy })} className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-bold transition-all uppercase tracking-widest", dialogData.policy === policy ? (policy === "PROXY" ? "bg-purple-500 text-white shadow-lg" : policy === "DIRECT" ? "bg-emerald-500 text-white shadow-lg" : "bg-red-500 text-white shadow-lg") : "text-text-secondary hover:text-text-primary")}>{t(`rules.policies.${policy.toLowerCase()}` as any)}</button>
+                                        ))}
+                                    </div>
+                                    {/* Groups */}
+                                    {groups.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 w-full">
+                                            {groups.map(group => (
+                                                <button
+                                                    key={group.id}
+                                                    onClick={() => setDialogData({ ...dialogData, policy: group.id })}
+                                                    className={cn(
+                                                        "px-4 py-2 rounded-xl text-[10px] font-bold transition-all border",
+                                                        dialogData.policy === group.id
+                                                            ? "bg-blue-500 text-white border-blue-500 shadow-lg"
+                                                            : "bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10"
+                                                    )}
+                                                >
+                                                    {group.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -535,6 +681,68 @@ export function RulesView() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Rule Policy Context Menu (Fixed Position) */}
+            {openRuleMenuId && ruleMenuPos && (
+                <>
+                    <div className="fixed inset-0 z-[100]" onClick={() => setOpenRuleMenuId(null)} />
+                    <div
+                        className={cn(
+                            "fixed z-[101] w-48 bg-white/90 dark:bg-black/90 backdrop-blur-xl border border-border-color rounded-2xl shadow-xl py-2 overflow-hidden animate-in zoom-in-95 duration-200",
+                            ruleMenuPos.bottom ? "origin-bottom-right slide-in-from-bottom-2" : "origin-top-right slide-in-from-top-2"
+                        )}
+                        style={{
+                            top: ruleMenuPos.top,
+                            bottom: ruleMenuPos.bottom,
+                            right: ruleMenuPos.right
+                        }}
+                    >
+                        <div className="max-h-[240px] overflow-y-auto custom-scrollbar">
+                            <div className="px-4 py-2 text-[10px] font-bold text-text-tertiary uppercase tracking-widest border-b border-border-color/50 mb-1">{t('rules.dialog.policy')}</div>
+                            {(["PROXY", "DIRECT", "REJECT"] as const).map(policy => {
+                                const currentRule = rules.find(r => r.id === openRuleMenuId);
+                                if (!currentRule) return null;
+                                return (
+                                    <button
+                                        key={policy}
+                                        onClick={() => handleUpdateRulePolicy(openRuleMenuId, policy)}
+                                        className={cn(
+                                            "w-full text-left px-4 py-2.5 text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex items-center justify-between font-bold",
+                                            currentRule.policy === policy ? "text-primary bg-primary/5" : "text-text-secondary"
+                                        )}
+                                    >
+                                        {t(`rules.policies.${policy.toLowerCase()}` as any)}
+                                        {currentRule.policy === policy && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                                    </button>
+                                )
+                            })}
+
+                            {groups.length > 0 && (
+                                <>
+                                    <div className="px-4 py-2 text-[10px] font-bold text-text-tertiary uppercase tracking-widest border-b border-border-color/50 mt-2 mb-1 border-t">{t('groups.title')}</div>
+                                    {groups.map(group => {
+                                        const currentRule = rules.find(r => r.id === openRuleMenuId);
+                                        if (!currentRule) return null;
+                                        return (
+                                            <button
+                                                key={group.id}
+                                                onClick={() => handleUpdateRulePolicy(openRuleMenuId, group.id)}
+                                                className={cn(
+                                                    "w-full text-left px-4 py-2.5 text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex items-center justify-between font-bold",
+                                                    currentRule.policy === group.id ? "text-primary bg-primary/5" : "text-text-secondary"
+                                                )}
+                                            >
+                                                <span className="truncate">{group.name}</span>
+                                                {currentRule.policy === group.id && <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
+                                            </button>
+                                        )
+                                    })}
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </>
             )}
         </div>
     )

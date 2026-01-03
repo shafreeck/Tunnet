@@ -230,6 +230,80 @@ async fn check_singbox_update(
 }
 
 #[tauri::command]
+async fn get_groups(
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<Vec<crate::profile::Group>, String> {
+    service.get_groups()
+}
+
+#[tauri::command]
+async fn save_groups(
+    groups: Vec<crate::profile::Group>,
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<(), String> {
+    service.save_groups(groups).await
+}
+
+#[tauri::command]
+async fn add_group(
+    group: crate::profile::Group,
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<(), String> {
+    service.add_group(group).await
+}
+
+#[tauri::command]
+async fn update_group(
+    group: crate::profile::Group,
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<(), String> {
+    service.update_group(group).await
+}
+
+#[tauri::command]
+async fn delete_group(
+    id: String,
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<(), String> {
+    service.delete_group(&id).await
+}
+
+#[tauri::command]
+async fn ensure_auto_group(
+    service: State<'_, ProxyService<tauri::Wry>>,
+    name: String,
+    references: Vec<String>,
+    group_type: String, // "selector" or "url-test"
+) -> Result<String, String> {
+    let gt = match group_type.as_str() {
+        "url-test" => crate::profile::GroupType::UrlTest {
+            interval: 600, // Default 10 min
+            tolerance: 50,
+        },
+        "selector" => crate::profile::GroupType::Selector,
+        _ => return Err("Invalid group type".to_string()),
+    };
+    service.ensure_auto_group(name, references, gt)
+}
+
+#[tauri::command]
+async fn get_group_alive_nodes(
+    service: State<'_, ProxyService<tauri::Wry>>,
+    group_id: String,
+) -> Result<Vec<service::ProxyNodeStatus>, String> {
+    service.get_group_nodes(&group_id).await
+}
+
+#[tauri::command]
+async fn select_group_node(
+    service: State<'_, ProxyService<tauri::Wry>>,
+    group_id: String,
+    node_name: String,
+) -> Result<(), String> {
+    service.select_group_node(&group_id, &node_name).await
+}
+
+#[tauri::command]
 async fn update_singbox_core(service: State<'_, ProxyService<tauri::Wry>>) -> Result<(), String> {
     let was_running = service.is_proxy_running();
     if was_running {
@@ -426,6 +500,15 @@ pub fn run() {
             save_app_settings,
             check_singbox_update,
             update_singbox_core,
+            // Group Commands
+            ensure_auto_group,
+            get_groups,
+            save_groups,
+            add_group,
+            update_group,
+            delete_group,
+            get_group_alive_nodes,
+            select_group_node,
             // New commands
             open_main_window,
             quit_app,
@@ -433,7 +516,8 @@ pub fn run() {
             set_routing_mode_command,
             get_proxy_status,
             rename_profile,
-            check_node_pings
+            check_node_pings,
+            get_group_status
         ]);
     builder
         .build(tauri::generate_context!())
@@ -483,6 +567,14 @@ async fn check_node_pings(
     node_ids: Vec<String>,
 ) -> Result<(), String> {
     service.probe_nodes_latency(node_ids).await
+}
+
+#[tauri::command]
+async fn get_group_status(
+    service: State<'_, ProxyService<tauri::Wry>>,
+    group_id: String,
+) -> Result<String, String> {
+    service.get_group_status(&group_id).await
 }
 
 pub mod parsing_test_mod;

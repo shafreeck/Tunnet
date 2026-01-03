@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
-import { ArrowUpDown, Filter, Play, Square, Plus, Pencil, Trash2, Globe, RotateCw, Search, Scroll, Pause, Copy } from "lucide-react"
+import { ArrowUpDown, Filter, Play, Square, Plus, Pencil, Trash2, Globe, RotateCw, Search, Scroll, Pause, Copy, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
 import { useTranslation } from "react-i18next"
@@ -34,6 +34,7 @@ const initialServers: Server[] = [
 ]
 
 import { LogViewer } from "./log-viewer"
+import { ServerCard } from "./server-card"
 
 interface ServerListProps {
     servers: Server[]
@@ -50,6 +51,8 @@ interface ServerListProps {
     onClearLogs: () => void
     onPing?: (id: string) => Promise<void>
     hideHeader?: boolean
+    onAutoSelect?: () => void
+    activeAutoNodeId?: string | null
 }
 
 export function ServerList({
@@ -66,7 +69,9 @@ export function ServerList({
     logs,
     onClearLogs,
     onPing,
-    hideHeader = false
+    hideHeader = false,
+    onAutoSelect,
+    activeAutoNodeId
 }: ServerListProps) {
     const { t } = useTranslation()
     const [loading, setLoading] = useState(false)
@@ -174,6 +179,75 @@ export function ServerList({
         return result
     }, [servers, pinnedServerId, filterText, sortBy])
 
+    const internalAutoSelect = async () => {
+        // Use all visible filtered servers
+        const currentList = filteredAndSortedServers
+
+        if (currentList.length === 0) {
+            toast.error(t('auto_select_empty'))
+            return
+        }
+
+        const ids = currentList.map(s => s.id)
+        // Name usually "Auto - All" or based on filter?
+        // If filtering, "Auto - Filtered", if not, "Auto - Global"
+        const nameSuffix = filterText ? t('auto_select_filtered', { defaultValue: 'Custom' }) : t('auto_select_global', { defaultValue: 'Global' })
+        const name = `${t('auto_select_prefix', { defaultValue: 'Auto' })} - ${nameSuffix}`
+
+        // Check if this specific auto group is already active
+        // Ideally we compare IDs, but we don't know the ID yet (it's generated).
+        // Since we are creating/updating "Auto - Global" (or similar),
+        // we can guess if activeServerId starts with "auto_" and we want to toggle OFF.
+        // User wants to "cancel" activate state.
+        // If activeServerId starts with "auto_", we assume we are in SOME auto mode.
+        // If we click the button again, we switch to Manual (First Node).
+
+        if (activeServerId?.startsWith("auto_")) {
+            // Switch to first manual node
+            const firstManual = currentList[0]
+            if (firstManual) {
+                if (isConnected) {
+                    onToggle(firstManual.id)
+                } else {
+                    onSelect(firstManual.id)
+                }
+                toast.info(t('auto_select_cancelled', { defaultValue: 'Switched to manual selection' }))
+                return
+            }
+        }
+
+        try {
+            const groupId: string = await invoke("ensure_auto_group", {
+                name,
+                references: ids,
+                groupType: "url-test"
+            })
+
+            onSelect(groupId)
+            // If already connected, we switch to this group immediately (restart proxy via onToggle)
+            // If not connected, we just select it (user must click Connect to start)
+            if (isConnected) {
+                onToggle(groupId)
+            } else {
+                if (activeServerId === groupId) {
+                    // Already selected, do nothing or show toast
+                }
+                // Just selected.
+            }
+            toast.success(t('auto_select_group_created', { name }))
+        } catch (e: any) {
+            toast.error(t('toast.action_failed', { error: e }))
+        }
+    }
+
+
+
+    // We use activeAutoNodeId from props for consistency and better sync
+    const activeAutoNode = React.useMemo(() => {
+        if (!activeAutoNodeId) return null
+        return servers.find(s => s.id === activeAutoNodeId || s.name === activeAutoNodeId)
+    }, [servers, activeAutoNodeId])
+
     const [showSortMenu, setShowSortMenu] = useState(false)
     const [isSearchOpen, setIsSearchOpen] = useState(false)
     const searchInputRef = React.useRef<HTMLInputElement>(null)
@@ -202,7 +276,13 @@ export function ServerList({
                                 !showLogs ? "text-text-primary" : "text-text-tertiary hover:text-text-primary"
                             )}
                         >
-                            {t('server_list', { defaultValue: 'Server List' })} {loading && `(${t('loading', { defaultValue: 'Loading...' })})`}
+                            {t('server_list', { defaultValue: 'Server List' })}
+                            {loading && !activeAutoNodeId && ` (${t('loading', { defaultValue: 'Loading...' })})`}
+                            {activeAutoNode && activeServerId?.startsWith("auto_") && (
+                                <span className="ml-2 text-[9px] font-normal opacity-70 normal-case bg-accent-green/10 text-accent-green px-1.5 py-0.5 rounded">
+                                    {activeAutoNode.name}
+                                </span>
+                            )}
                         </button>
                         <button
                             onClick={() => setShowLogs(true)}
@@ -251,6 +331,20 @@ export function ServerList({
                                     <RotateCw size={16} className={cn(isPinging && "animate-spin")} />
                                 </button>
                             )}
+
+                            {/* Auto Select Best */}
+                            <button
+                                onClick={onAutoSelect || internalAutoSelect}
+                                className={cn(
+                                    "p-1.5 transition-all rounded hover:bg-black/5 dark:hover:bg-white/5",
+                                    activeServerId?.startsWith("auto_")
+                                        ? "bg-accent-green/10 text-accent-green hover:bg-accent-green/20"
+                                        : "text-text-secondary hover:text-accent-green"
+                                )}
+                                title={t('auto_select_tooltip')}
+                            >
+                                <Zap size={16} fill={activeServerId?.startsWith("auto_") ? "currentColor" : "none"} />
+                            </button>
 
                             {/* Search Trigger */}
                             {!isSearchOpen && (
@@ -385,6 +479,7 @@ export function ServerList({
                                     onEdit={onEdit}
                                     onDelete={onDelete}
                                     onPing={onPing}
+                                    isAutoSelected={activeAutoNodeId === server.id || activeAutoNodeId === server.name}
                                     t={t}
                                 />
                             )
@@ -396,19 +491,22 @@ export function ServerList({
     )
 }
 
+
+
 interface ServerItemProps {
     server: Server
     isSelected: boolean
     isRunning: boolean
     onClick: () => void
-    onToggle: () => Promise<void> | void
-    onEdit: (node: Server) => void
+    onToggle: () => void
+    onEdit: (server: Server) => void
     onDelete: (id: string) => void
     onPing?: (id: string) => void
+    isAutoSelected?: boolean
     t: any // Using specific type TFunction is better but 'any' works for quick fix to match immediate error context, or import TFunction. Let's use 'any' to avoid import hassle or `ReturnType<typeof useTranslation>['t']`.
 }
 
-function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, onDelete, onPing, t }: ServerItemProps) {
+function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, onDelete, onPing, isAutoSelected, t }: ServerItemProps) {
     return (
         <div
             onClick={onClick}
@@ -441,6 +539,11 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
                         {server.name}
                     </h4>
                     {/* Show "Connected" tag if running, otherwise show Type or nothing */}
+                    {isAutoSelected && (
+                        <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-accent-green text-black tracking-widest shadow-[0_0_8px_rgba(34,197,94,0.4)] animate-pulse border border-transparent">
+                            AUTO
+                        </span>
+                    )}
                     {isRunning ? (
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold border bg-accent-green/20 text-accent-green border-accent-green/20 animate-pulse">
                             {t('status.connected')}
@@ -471,7 +574,6 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
                         )}>
                             {server.ping > 0 ? `${server.ping}ms` : '-'}
                         </span>
-                        {isSelected && <span className="text-[10px] text-text-secondary">Ping</span>}
                     </div>
 
                     {/* Action Buttons - Visible on hover, replaces Latency */}
@@ -527,7 +629,7 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
                         <Play size={16} fill="currentColor" className="text-text-secondary group-hover:text-text-primary opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all" />
                     )}
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     )
 }

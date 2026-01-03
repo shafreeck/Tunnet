@@ -13,6 +13,18 @@ pub struct ProxyStatus {
     pub routing_mode: String,
     pub clash_api_port: Option<u16>,
 }
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct ProxyNodeStatus {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub node_type: String,
+    pub alive: bool,
+    pub udp: bool,
+    pub xudp: bool,
+    pub tfo: bool,
+    pub delay: Option<u16>,
+    pub now: Option<String>, // currently selected node name for selector
+}
 
 pub struct ProxyService<R: Runtime> {
     app: AppHandle<R>,
@@ -23,11 +35,18 @@ pub struct ProxyService<R: Runtime> {
     latest_routing_mode: Mutex<String>,
     clash_api_port: Mutex<Option<u16>>,
     start_lock: tokio::sync::Mutex<()>, // Ensure serialized start operations
+    internal_client: reqwest::Client,
 }
 
 impl<R: Runtime> ProxyService<R> {
     pub fn new(app: AppHandle<R>) -> Self {
         let manager = CoreManager::new(app.clone());
+        let internal_client = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(std::time::Duration::from_secs(3))
+            .build()
+            .unwrap_or_default();
+
         Self {
             app,
             manager,
@@ -37,6 +56,7 @@ impl<R: Runtime> ProxyService<R> {
             latest_routing_mode: Mutex::new("rule".to_string()),
             clash_api_port: Mutex::new(None),
             start_lock: tokio::sync::Mutex::new(()),
+            internal_client,
         }
     }
 
@@ -92,11 +112,23 @@ impl<R: Runtime> ProxyService<R> {
             }
         };
 
-        // Allocate a dynamic port for Clash API
-        // We bind to port 0, get the assigned port, and then drop the listener
-        let clash_port = std::net::TcpListener::bind("127.0.0.1:0")
-            .map(|l| l.local_addr().ok().map(|a| a.port()))
-            .unwrap_or(None);
+        // Allocate a dynamic port for Clash API with retries
+        let mut clash_port = None;
+        for _ in 0..3 {
+            if let Ok(l) = std::net::TcpListener::bind("127.0.0.1:0") {
+                if let Ok(addr) = l.local_addr() {
+                    clash_port = Some(addr.port());
+                    break;
+                }
+            }
+        }
+
+        if clash_port.is_none() {
+            warn!(
+                "Failed to allocate Clash API port using dynamic bind, using default fallback 9090"
+            );
+            clash_port = Some(9090);
+        }
 
         if let Some(port) = clash_port {
             info!("Allocated Clash API port: {}", port);
@@ -131,10 +163,25 @@ impl<R: Runtime> ProxyService<R> {
                         .to_string(),
                 )
                 .map_err(|e| e.to_string());
-
             if result.is_ok() {
                 if settings.system_proxy {
                     self.enable_system_proxy(settings.mixed_port);
+                }
+
+                // Wait for services to be ready
+                if !self.wait_for_port(settings.mixed_port, 2000).await {
+                    return Err(format!(
+                        "Proxy port {} is not responding after startup. Check logs for details.",
+                        settings.mixed_port
+                    ));
+                }
+                if let Some(p) = clash_port {
+                    if !self.wait_for_port(p, 2000).await {
+                        return Err(format!(
+                            "Clash API port {} is not responding after startup.",
+                            p
+                        ));
+                    }
                 }
                 let _ = self.app.emit("proxy-status-change", self.get_status());
             }
@@ -210,6 +257,22 @@ impl<R: Runtime> ProxyService<R> {
                     self.enable_system_proxy(settings.mixed_port);
                 }
 
+                // Wait for services to be ready locally too
+                if !self.wait_for_port(settings.mixed_port, 2000).await {
+                    return Err(format!(
+                        "Proxy port {} is not responding after startup locally.",
+                        settings.mixed_port
+                    ));
+                }
+                if let Some(p) = clash_port {
+                    if !self.wait_for_port(p, 2000).await {
+                        return Err(format!(
+                            "Clash API port {} is not responding after startup locally.",
+                            p
+                        ));
+                    }
+                }
+
                 info!("Proxy core started successfully");
                 *self.child_process.lock().unwrap() = Some(child);
                 let _ = self.app.emit("proxy-status-change", self.get_status());
@@ -220,6 +283,302 @@ impl<R: Runtime> ProxyService<R> {
                 Err(e.to_string())
             }
         }
+    }
+
+    pub async fn get_group_nodes(&self, group_id: &str) -> Result<Vec<ProxyNodeStatus>, String> {
+        let _lock = self.start_lock.lock().await;
+        if !self.is_proxy_running() {
+            // Fallback: Calculate members from config without live status
+            let groups = self.manager.load_groups().map_err(|e| e.to_string())?;
+            let group = groups
+                .iter()
+                .find(|g| g.id == group_id)
+                .ok_or("Group not found")?;
+
+            let profiles = self.manager.load_profiles().map_err(|e| e.to_string())?;
+            let mut all_nodes = Vec::new();
+            for p in profiles {
+                all_nodes.extend(p.nodes);
+            }
+
+            let member_ids = match &group.source {
+                crate::profile::GroupSource::Static { node_ids } => node_ids.clone(),
+                crate::profile::GroupSource::Filter { criteria } => {
+                    let keywords = criteria.keywords.as_deref().unwrap_or(&[]);
+                    all_nodes
+                        .iter()
+                        .filter(|n| {
+                            if keywords.is_empty() {
+                                return true;
+                            }
+                            keywords.iter().any(|k| n.name.contains(k))
+                        })
+                        .map(|n| n.id.clone())
+                        .collect()
+                }
+            };
+
+            let status_list = member_ids
+                .into_iter()
+                .filter_map(|id| {
+                    // Try to find node to get name/type
+                    all_nodes
+                        .iter()
+                        .find(|n| n.id == id)
+                        .map(|n| ProxyNodeStatus {
+                            name: n.id.clone(), // ID is used as name in backend status logic usually?
+                            // Wait, previous logic uses `all_resp` keys which are IDs (from config generation).
+                            // In `generate_singbox_config`, nodes are keyed by their IDs (uuid or generated).
+                            // So name here should be ID.
+                            node_type: n.protocol.clone(),
+                            alive: false,
+                            udp: true, // assumption
+                            xudp: false,
+                            tfo: false,
+                            delay: None,
+                            now: None,
+                        })
+                })
+                .collect();
+            return Ok(status_list);
+        }
+
+        let port = self
+            .ensure_clash_port()
+            .ok_or("Clash API port not available")?;
+
+        // Optimization: Just get all proxies once to map statuses
+        let all_url = format!("http://127.0.0.1:{}/proxies", port);
+        let all_resp = self
+            .internal_client
+            .get(&all_url)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to fetch group nodes from Clash API: {}", e))?
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| format!("Failed to parse Clash API response: {}", e))?;
+
+        let proxies = all_resp
+            .get("proxies")
+            .and_then(|v| v.as_object())
+            .ok_or("Invalid response")?;
+
+        let group_info = proxies.get(group_id).ok_or("Group not found")?;
+        let all_members = group_info
+            .get("all")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let current_selected = group_info.get("now").and_then(|v| v.as_str()).unwrap_or("");
+
+        let mut status_list = Vec::new();
+        for member_name in all_members {
+            if let Some(node_info) = proxies.get(&member_name) {
+                // Try to parse delay history or last delay
+                let history = node_info.get("history").and_then(|v| v.as_array());
+                let last_delay = history
+                    .and_then(|h| h.last())
+                    .and_then(|entry| entry.get("delay").and_then(|d| d.as_u64()))
+                    .map(|d| d as u16);
+
+                status_list.push(ProxyNodeStatus {
+                    name: member_name.clone(),
+                    node_type: node_info
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Unknown")
+                        .to_string(),
+                    alive: last_delay.map(|_| true).unwrap_or(false), // Rough estimation
+                    udp: node_info
+                        .get("udp")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
+                    xudp: node_info
+                        .get("xudp")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
+                    tfo: node_info
+                        .get("tfo")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
+                    delay: last_delay,
+                    now: if member_name == current_selected {
+                        Some(member_name.clone())
+                    } else {
+                        None
+                    },
+                });
+            }
+        }
+
+        Ok(status_list)
+    }
+
+    pub async fn select_group_node(&self, group_id: &str, node_name: &str) -> Result<(), String> {
+        let _lock = self.start_lock.lock().await;
+        if !self.is_proxy_running() {
+            return Err("Proxy is not running. Start proxy to select nodes.".to_string());
+        }
+        let port = self
+            .ensure_clash_port()
+            .ok_or("Clash API port not available")?;
+
+        let payload = serde_json::json!({
+            "name": node_name
+        });
+
+        let mut last_err = String::new();
+        for _ in 0..3 {
+            let url = format!(
+                "http://127.0.0.1:{}/proxies/{}",
+                port,
+                urlencoding::encode(group_id)
+            );
+            let resp = self.internal_client.put(&url).json(&payload).send().await;
+
+            match resp {
+                Ok(res) if res.status().is_success() => return Ok(()),
+                Ok(res) => {
+                    last_err = format!(
+                        "Failed to select node (HTTP {}): {:?}",
+                        res.status(),
+                        res.text().await.ok()
+                    );
+                }
+                Err(e) => {
+                    last_err = format!("Network error connecting to Clash API: {}", e);
+                }
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        }
+
+        Err(last_err)
+    }
+
+    pub async fn get_group_status(&self, group_id: &str) -> Result<String, String> {
+        let _lock = self.start_lock.lock().await;
+        let port = self
+            .ensure_clash_port()
+            .ok_or("Clash API port not available")?;
+
+        // URL encode the group_id (tag)
+        let url = format!(
+            "http://127.0.0.1:{}/proxies/{}",
+            port,
+            urlencoding::encode(group_id)
+        );
+
+        let mut last_err = String::new();
+        for _ in 0..3 {
+            let resp = self.internal_client.get(&url).send().await;
+            match resp {
+                Ok(res) if res.status().is_success() => {
+                    if let Ok(json) = res.json::<serde_json::Value>().await {
+                        if let Some(now) = json.get("now").and_then(|v| v.as_str()) {
+                            return Ok(now.to_string());
+                        }
+                    }
+                    last_err = "Status missing 'now' field".to_string();
+                }
+                Ok(res) => {
+                    last_err = format!(
+                        "Failed to get status (HTTP {}): {:?}",
+                        res.status(),
+                        res.text().await.ok()
+                    );
+                }
+                Err(e) => {
+                    last_err = format!("Network error: {}", e);
+                }
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        }
+
+        Err(last_err)
+    }
+
+    fn ensure_clash_port(&self) -> Option<u16> {
+        let mut port_lock = self.clash_api_port.lock().unwrap();
+        if let Some(port) = *port_lock {
+            return Some(port);
+        }
+
+        // Try to recover from config.json if the proxy is actually running
+        if !self.is_proxy_running() {
+            debug!("ensure_clash_port: proxy not running, cannot recover port");
+            return None;
+        }
+
+        let config_file_path = self
+            .app
+            .path()
+            .app_local_data_dir()
+            .unwrap()
+            .join("config.json");
+
+        if let Ok(content) = std::fs::read_to_string(&config_file_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(controller) = json
+                    .get("experimental")
+                    .and_then(|e| e.get("clash_api"))
+                    .and_then(|c| c.get("external_controller"))
+                    .and_then(|v| v.as_str())
+                {
+                    if let Some(port_str) = controller.split(':').last() {
+                        if let Ok(port) = port_str.parse::<u16>() {
+                            debug!("ensure_clash_port: recovered port {} from config", port);
+                            *port_lock = Some(port);
+                            return Some(port);
+                        }
+                    }
+                } else {
+                    debug!("ensure_clash_port: 'experimental.clash_api.external_controller' not found in config.json");
+                }
+            } else {
+                debug!("ensure_clash_port: failed to parse config.json as JSON");
+            }
+        } else {
+            debug!(
+                "ensure_clash_port: failed to read config.json at {:?}",
+                config_file_path
+            );
+        }
+        None
+    }
+
+    async fn wait_for_port(&self, port: u16, timeout_ms: u64) -> bool {
+        let addr = format!("127.0.0.1:{}", port);
+        debug!(
+            "wait_for_port: waiting for {} to be ready (timeout {}ms)",
+            addr, timeout_ms
+        );
+        let start = std::time::Instant::now();
+        while start.elapsed().as_millis() < timeout_ms as u128 {
+            match tokio::net::TcpStream::connect(&addr).await {
+                Ok(_) => {
+                    debug!(
+                        "wait_for_port: {} is ready after {}ms",
+                        addr,
+                        start.elapsed().as_millis()
+                    );
+                    return true;
+                }
+                Err(_) => {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                }
+            }
+        }
+        debug!(
+            "wait_for_port: timeout waiting for {} after {}ms",
+            addr, timeout_ms
+        );
+        false
     }
 
     fn write_config(
@@ -293,30 +652,226 @@ impl<R: Runtime> ProxyService<R> {
             ]);
         }
 
-        // Apply Node (Outbound)
-        if let Some(node) = node_opt {
-            if node.protocol == "vmess" {
-                cfg = cfg.with_vmess_outbound(
-                    "proxy",
-                    node.server,
-                    node.port,
-                    node.uuid.unwrap_or_default(),
-                    node.cipher.unwrap_or("auto".to_string()),
-                    0,
-                    node.network,
-                    node.path,
-                    node.host,
-                    node.tls,
-                );
-            } else {
-                // Unknown protocol or not yet implemented
-                // Fallback to direct but KEEP the 'proxy' tag so routing doesn't crash
-                cfg = cfg.with_direct_tag("proxy");
+        // 2. Load Resources (Profiles/Groups)
+        let profiles = self.manager.load_profiles().unwrap_or_default();
+        let groups = self.manager.load_groups().unwrap_or_default();
+
+        // 3. Add ALL Nodes as Outbounds
+        // We iterate all profiles and their nodes
+        for profile in &profiles {
+            for node in &profile.nodes {
+                let tag = node.id.clone(); // Use UUID as tag
+
+                // Helper closure or inline to add node
+                match node.protocol.as_str() {
+                    "vmess" => {
+                        cfg = cfg.with_vmess_outbound(
+                            &tag,
+                            node.server.clone(),
+                            node.port,
+                            node.uuid.clone().unwrap_or_default(),
+                            node.cipher.clone().unwrap_or("auto".to_string()),
+                            0,
+                            node.network.clone(),
+                            node.path.clone(),
+                            node.host.clone(),
+                            node.tls,
+                        );
+                    }
+                    "shadowsocks" | "ss" => {
+                        cfg = cfg.with_shadowsocks_outbound(
+                            &tag,
+                            node.server.clone(),
+                            node.port,
+                            node.cipher
+                                .clone()
+                                .unwrap_or("chacha20-ietf-poly1305".to_string()),
+                            node.password.clone().unwrap_or_default(),
+                        );
+                    }
+                    "trojan" => {
+                        cfg = cfg.with_trojan_outbound(
+                            &tag,
+                            node.server.clone(),
+                            node.port,
+                            node.password.clone().unwrap_or_default(),
+                            node.network.clone(),
+                            node.path.clone(),
+                            node.host.clone(),
+                            node.sni.clone(),
+                            node.insecure,
+                        );
+                    }
+                    "vless" => {
+                        cfg = cfg.with_vless_outbound(
+                            &tag,
+                            node.server.clone(),
+                            node.port,
+                            node.uuid.clone().unwrap_or_default(),
+                            node.flow.clone(),
+                            node.network.clone(),
+                            node.path.clone(),
+                            node.host.clone(),
+                            node.tls,
+                            node.insecure,
+                            node.sni.clone(),
+                            node.alpn.clone(),
+                        );
+                    }
+                    "hysteria2" | "hy2" => {
+                        let up_mbps = node.up.as_ref().and_then(|s| s.parse().ok());
+                        let down_mbps = node.down.as_ref().and_then(|s| s.parse().ok());
+                        cfg = cfg.with_hysteria2_outbound(
+                            &tag,
+                            node.server.clone(),
+                            node.port,
+                            node.password.clone().unwrap_or_default(),
+                            node.sni.clone(),
+                            node.insecure,
+                            node.alpn.clone(),
+                            up_mbps,
+                            down_mbps,
+                            node.obfs.clone(),
+                            node.obfs_password.clone(),
+                        );
+                    }
+                    "tuic" => {
+                        cfg = cfg.with_tuic_outbound(
+                            &tag,
+                            node.server.clone(),
+                            node.port,
+                            node.uuid.clone().unwrap_or_default(),
+                            node.password.clone(),
+                            node.sni.clone(),
+                            node.insecure,
+                            node.alpn.clone(),
+                            None,
+                            None,
+                        );
+                    }
+                    _ => {
+                        // Skip unsupported
+                        continue;
+                    }
+                }
             }
-        } else {
-            // No node selected: ensure 'proxy' tag exists as a 'direct' fallback
-            cfg = cfg.with_direct_tag("proxy");
         }
+
+        // 4. Add Group Outbounds
+        for group in &groups {
+            let mut member_tags = Vec::new();
+
+            match &group.source {
+                crate::profile::GroupSource::Static { node_ids } => {
+                    // Filter valid nodes
+                    for pid in node_ids {
+                        member_tags.push(pid.clone());
+                    }
+                }
+                crate::profile::GroupSource::Filter { criteria } => {
+                    // Logic: Iterate all nodes, check match
+                    for profile in &profiles {
+                        for node in &profile.nodes {
+                            let mut matched = true;
+                            // 1. Keyword match
+                            if let Some(keywords) = &criteria.keywords {
+                                let name_lower = node.name.to_lowercase();
+                                let any_match = keywords
+                                    .iter()
+                                    .any(|k| name_lower.contains(&k.to_lowercase()));
+                                if !any_match {
+                                    matched = false;
+                                }
+                            }
+                            // Future: Sub ID match, etc.
+
+                            if matched {
+                                member_tags.push(node.id.clone());
+                            }
+                        }
+                    }
+                }
+            }
+
+            // If group is empty, we must handle it. Singbox fails with empty selector?
+            // Let's add 'block' if empty to prevent crash
+            if member_tags.is_empty() {
+                // warn!("Group {} is empty", group.name);
+                // continue; // Or add placeholder?
+                // If we skip, rules referencing it will crash. Better to add a valid selector to 'block'.
+                // But we don't have block tag exposed easily, usually 'reject' rule action.
+                // Let's assume we have a 'direct' fallback or just warn.
+            }
+
+            match group.group_type {
+                crate::profile::GroupType::Selector => {
+                    cfg = cfg.with_selector_outbound(&group.id, member_tags);
+                }
+                crate::profile::GroupType::UrlTest {
+                    interval,
+                    tolerance,
+                } => {
+                    // Default url/interval for now, can be added to Group struct later
+                    cfg = cfg.with_urltest_outbound(
+                        &group.id,
+                        member_tags,
+                        None,
+                        Some(format!("{}s", interval)),
+                        Some(tolerance as u16),
+                    );
+                }
+            }
+        }
+
+        // 5. Add MAIN 'proxy' outbound
+        // This is what the dashboard "Select Server" controls.
+        // For backward compatibility and immediate effect, 'proxy' tag should point to the selected node.
+        // We create a Selector `proxy` that contains [selected_node_id].
+        // This acts as an alias.
+
+        let mut proxy_target = "direct".to_string(); // Fallback
+        if let Some(node) = &node_opt {
+            // Verify this node ID exists in our generated outbounds (it should)
+            // But 'node_opt' might be a standalone object if not from profile?
+            // Usually it's from the list.
+            // We can just use node.id
+            proxy_target = node.id.clone();
+
+            // Ensure the node outbound exists (e.g. if 'Local' import not in profiles list? Add it!)
+            // TODO: Make sure 'Local' imports are in profiles list. safe_profiles usually ensures this?
+            // If not, we might miss it.
+            // As a safety net, if node_opt is not in profiles, we should add it?
+            // For now, assume it's in profiles.
+
+            // Check if we already added a vmess/etc outbound for this ID.
+            let exists = cfg.outbounds.iter().any(|o| o.tag == proxy_target);
+            if !exists {
+                // It might be a temp node? Add it manually (legacy behavior fallback)
+                match node.protocol.as_str() {
+                    "vmess" => {
+                        cfg = cfg.with_vmess_outbound(
+                            &proxy_target,
+                            node.server.clone(),
+                            node.port,
+                            node.uuid.clone().unwrap_or_default(),
+                            node.cipher.clone().unwrap_or("auto".to_string()),
+                            0,
+                            node.network.clone(),
+                            node.path.clone(),
+                            node.host.clone(),
+                            node.tls,
+                        );
+                    }
+                    _ => {} // Fallback
+                }
+            }
+        }
+
+        // Define 'proxy' as a Selector wrapping the target, or just direct alias?
+        // Singbox doesn't have "Alias".
+        // We use a Selector with 1 item.
+        // This allows 'proxy' to be used in rules.
+        cfg = cfg.with_selector_outbound("proxy", vec![proxy_target]);
 
         // Apply Rules and Routing Mode
         let mut final_rules = Vec::new();
@@ -356,11 +911,11 @@ impl<R: Runtime> ProxyService<R> {
             );
         }
 
-        let mut default_policy = "proxy"; // Default fallback
+        let mut default_policy = "proxy".to_string(); // Default fallback
 
         match _routing_mode {
             "global" => {
-                default_policy = "proxy";
+                default_policy = "proxy".to_string();
                 // In Global mode, also make DNS go through proxy for safety
                 if let Some(dns) = &mut cfg.dns {
                     for server in &mut dns.servers {
@@ -371,7 +926,7 @@ impl<R: Runtime> ProxyService<R> {
                 }
             }
             "direct" => {
-                default_policy = "direct";
+                default_policy = "direct".to_string();
                 // In Direct mode, also make DNS direct
                 if let Some(dns) = &mut cfg.dns {
                     for server in &mut dns.servers {
@@ -395,10 +950,10 @@ impl<R: Runtime> ProxyService<R> {
 
                         if rule.rule_type == "FINAL" {
                             default_policy = match rule.policy.as_str() {
-                                "PROXY" => "proxy",
-                                "DIRECT" => "direct",
-                                "REJECT" => "reject",
-                                _ => "proxy",
+                                "PROXY" => "proxy".to_string(),
+                                "DIRECT" => "direct".to_string(),
+                                "REJECT" => "reject".to_string(),
+                                _ => rule.policy.clone(), // Likely a Group ID
                             };
                             continue;
                         }
@@ -407,7 +962,7 @@ impl<R: Runtime> ProxyService<R> {
                             "PROXY" => (Some("proxy".to_string()), None),
                             "DIRECT" => (Some("direct".to_string()), None),
                             "REJECT" => (None, Some("reject".to_string())),
-                            _ => (Some("proxy".to_string()), None),
+                            _ => (Some(rule.policy.clone()), None), // Assume it's a Group ID or Valid Tag
                         };
 
                         let (
@@ -694,6 +1249,7 @@ impl<R: Runtime> ProxyService<R> {
 
         // 5. Cleanup system proxy
         self.disable_system_proxy();
+        *self.clash_api_port.lock().unwrap() = None;
         if broadcast {
             let _ = self.app.emit("proxy-status-change", self.get_status());
         }
@@ -959,16 +1515,24 @@ impl<R: Runtime> ProxyService<R> {
 
     pub async fn save_rules(&self, rules: Vec<crate::profile::Rule>) -> Result<(), String> {
         self.manager.save_rules(&rules)?;
-        let tun = *self.tun_mode.lock().unwrap();
-        self.restart_proxy_by_config(tun).await
+        if self.is_proxy_running() {
+            let tun = *self.tun_mode.lock().unwrap();
+            self.restart_proxy_by_config(tun).await
+        } else {
+            Ok(())
+        }
     }
 
     pub async fn add_rule(&self, rule: crate::profile::Rule) -> Result<(), String> {
         let mut rules = self.manager.load_rules()?;
         rules.push(rule);
         self.manager.save_rules(&rules)?;
-        let tun = *self.tun_mode.lock().unwrap();
-        self.restart_proxy_by_config(tun).await
+        if self.is_proxy_running() {
+            let tun = *self.tun_mode.lock().unwrap();
+            self.restart_proxy_by_config(tun).await
+        } else {
+            Ok(())
+        }
     }
 
     pub async fn update_rule(&self, rule: crate::profile::Rule) -> Result<(), String> {
@@ -976,8 +1540,12 @@ impl<R: Runtime> ProxyService<R> {
         if let Some(pos) = rules.iter().position(|r| r.id == rule.id) {
             rules[pos] = rule;
             self.manager.save_rules(&rules)?;
-            let tun = *self.tun_mode.lock().unwrap();
-            self.restart_proxy_by_config(tun).await
+            if self.is_proxy_running() {
+                let tun = *self.tun_mode.lock().unwrap();
+                self.restart_proxy_by_config(tun).await
+            } else {
+                Ok(())
+            }
         } else {
             Err("Rule not found".to_string())
         }
@@ -987,15 +1555,129 @@ impl<R: Runtime> ProxyService<R> {
         let mut rules = self.manager.load_rules()?;
         rules.retain(|r| r.id != id);
         self.manager.save_rules(&rules)?;
-        let tun = *self.tun_mode.lock().unwrap();
-        self.restart_proxy_by_config(tun).await
+        if self.is_proxy_running() {
+            let tun = *self.tun_mode.lock().unwrap();
+            self.restart_proxy_by_config(tun).await
+        } else {
+            Ok(())
+        }
     }
 
     pub fn get_rules(&self) -> Result<Vec<crate::profile::Rule>, String> {
         self.manager.load_rules()
     }
+
+    // Group Management
+    pub fn get_groups(&self) -> Result<Vec<crate::profile::Group>, String> {
+        self.manager.load_groups()
+    }
+
+    pub async fn save_groups(&self, groups: Vec<crate::profile::Group>) -> Result<(), String> {
+        self.manager.save_groups(&groups)?;
+        if self.is_proxy_running() {
+            let tun = *self.tun_mode.lock().unwrap();
+            self.restart_proxy_by_config(tun).await
+        } else {
+            Ok(())
+        }
+    }
+
+    pub async fn add_group(&self, group: crate::profile::Group) -> Result<(), String> {
+        let mut groups = self.manager.load_groups().unwrap_or_default();
+        groups.push(group);
+        self.manager.save_groups(&groups)?;
+        if self.is_proxy_running() {
+            let tun = *self.tun_mode.lock().unwrap();
+            self.restart_proxy_by_config(tun).await
+        } else {
+            Ok(())
+        }
+    }
+
+    pub async fn update_group(&self, group: crate::profile::Group) -> Result<(), String> {
+        let mut groups = self.manager.load_groups().unwrap_or_default();
+        if let Some(pos) = groups.iter().position(|g| g.id == group.id) {
+            groups[pos] = group;
+            self.manager.save_groups(&groups)?;
+            if self.is_proxy_running() {
+                let tun = *self.tun_mode.lock().unwrap();
+                self.restart_proxy_by_config(tun).await
+            } else {
+                Ok(())
+            }
+        } else {
+            Err("Group not found".to_string())
+        }
+    }
+
+    pub async fn delete_group(&self, id: &str) -> Result<(), String> {
+        let mut groups = self.manager.load_groups().unwrap_or_default();
+        groups.retain(|g| g.id != id);
+        self.manager.save_groups(&groups)?;
+        if self.is_proxy_running() {
+            let tun = *self.tun_mode.lock().unwrap();
+            self.restart_proxy_by_config(tun).await
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn get_app_settings(&self) -> Result<crate::settings::AppSettings, String> {
         self.manager.load_settings()
+    }
+
+    pub fn ensure_auto_group(
+        &self,
+        name: String,
+        references: Vec<String>,
+        group_type: crate::profile::GroupType,
+    ) -> Result<String, String> {
+        let mut groups = self.manager.load_groups().map_err(|e| e.to_string())?;
+
+        // Format an ID from name (e.g. "Auto - US" -> "auto_us") but use UUID to avoid collision?
+        // User wants stable ID for the same "Auto - US" concept.
+        // Let's sanitize name to make ID.
+        let safe_id = format!(
+            "auto_{}",
+            name.to_lowercase()
+                .chars()
+                .filter(|c| c.is_alphanumeric())
+                .collect::<String>()
+        );
+        let id = if safe_id.is_empty() {
+            uuid::Uuid::new_v4().to_string()
+        } else {
+            safe_id
+        };
+
+        // Check if exists
+        if let Some(existing) = groups.iter_mut().find(|g| g.id == id) {
+            existing.name = name;
+            existing.group_type = group_type;
+            existing.source = crate::profile::GroupSource::Static {
+                node_ids: references,
+            };
+        } else {
+            groups.push(crate::profile::Group {
+                id: id.clone(),
+                name,
+                group_type,
+                source: crate::profile::GroupSource::Static {
+                    node_ids: references,
+                },
+                icon: Some("zap".to_string()), // Default icon for auto groups
+            });
+        }
+
+        self.manager
+            .save_groups(&groups)
+            .map_err(|e| e.to_string())?;
+
+        // If proxy is running, we should reload groups to make this effective immediately?
+        // start_proxy usually regenerates config.
+        // If we are about to call start_proxy, we are fine.
+
+        Ok(id)
     }
 
     pub async fn save_app_settings(
@@ -1011,10 +1693,8 @@ impl<R: Runtime> ProxyService<R> {
         if settings.launch_at_login != old_settings.launch_at_login {
             use tauri_plugin_autostart::ManagerExt;
             if settings.launch_at_login {
-                info!("Enabling launch at login...");
                 let _ = self.app.autolaunch().enable();
             } else {
-                info!("Disabling launch at login...");
                 let _ = self.app.autolaunch().disable();
             }
         }
@@ -1022,13 +1702,12 @@ impl<R: Runtime> ProxyService<R> {
         // Check if proxy is running (Local OR Helper)
         let is_running = self.is_proxy_running();
         if !is_running {
+            // Just emit update if not running
+            let _ = self.app.emit("settings-update", &settings);
             return Ok(());
         }
 
         // Check if we need a full restart
-        // A full restart is needed if any config affects the Core Config (mtu, mixed_port, dns, etc)
-        // EXCEPT: system_proxy (now handled manually) and UI-only settings (theme, etc - handled by frontend/manager)
-
         let need_restart = settings.mixed_port != old_settings.mixed_port
             || settings.tun_stack != old_settings.tun_stack
             || settings.tun_mtu != old_settings.tun_mtu
@@ -1862,7 +2541,9 @@ impl<R: Runtime> ProxyService<R> {
         let url = "http://www.gstatic.com/generate_204";
         let proxy_url = format!("http://127.0.0.1:{}", port);
 
-        let client_builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(5));
+        let client_builder = reqwest::Client::builder()
+            .no_proxy()
+            .timeout(std::time::Duration::from_secs(5));
 
         let client = match reqwest::Proxy::all(&proxy_url) {
             Ok(p) => client_builder.proxy(p).build(),

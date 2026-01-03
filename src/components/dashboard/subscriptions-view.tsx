@@ -27,9 +27,13 @@ interface SubscriptionsViewProps {
     onSelect?: (id: string) => void
     onUpdateAll?: () => void
     isImporting?: boolean
+    onNodeSelect?: (id: string, selectOnly?: boolean) => void
+    isConnected?: boolean
+    activeServerId?: string
+    activeAutoNodeId?: string | null
 }
 
-export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelect, onUpdateAll, isImporting }: SubscriptionsViewProps) {
+export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelect, onUpdateAll, isImporting, onNodeSelect, isConnected, activeServerId, activeAutoNodeId }: SubscriptionsViewProps) {
     const { t } = useTranslation()
 
     // Helper formats
@@ -47,7 +51,27 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
 
     const [renamingId, setRenamingId] = useState<string | null>(null)
     const [renamingName, setRenamingName] = useState("")
+    const [profileToDelete, setProfileToDelete] = useState<{ id: string, name: string } | null>(null)
 
+    const handleDeleteClick = (id: string, name: string, e: React.MouseEvent) => {
+        e.stopPropagation()
+        setProfileToDelete({ id, name })
+    }
+
+    const activeAutoNode = React.useMemo(() => {
+        if (!activeAutoNodeId) return null
+        // Search through all nodes in all profiles
+        for (const p of profiles) {
+            const found = p.nodes.find((n: any) => n.id === activeAutoNodeId || n.name === activeAutoNodeId)
+            if (found) return found
+        }
+        return null
+    }, [profiles, activeAutoNodeId])
+
+    // Helper to check if a specific profile is the active auto one
+    const isProfileAutoActive = (profileName: string) => {
+        return activeServerId?.startsWith("auto_") && activeServerId.includes(profileName.toLowerCase().replace(/[^a-z0-9]/g, ''))
+    }
     const handleRenameClick = (id: string, currentName: string, e: React.MouseEvent) => {
         e.stopPropagation()
         setRenamingId(id)
@@ -64,6 +88,91 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
             toast.error(String(error))
         } finally {
             setRenamingId(null)
+        }
+    }
+
+    const handleAutoSelect = async (profile: Subscription, e: React.MouseEvent) => {
+        e.stopPropagation()
+        if (!onNodeSelect) return
+
+        const candidates = profile.nodes
+
+        if (candidates.length === 0) {
+            toast.error(t('auto_select_empty'))
+            return
+        }
+
+        const ids = candidates.map((n: any) => n.id)
+        const name = `${t('auto_select_prefix', { defaultValue: 'Auto' })} - ${getDisplayName(profile.name)}`
+
+        // Handle Toggle (Deactivate)
+        // Uses same heuristic as styling
+        const isAutoActive = activeServerId?.startsWith("auto_") && activeServerId.includes(profile.name.toLowerCase().replace(/[^a-z0-9]/g, ''))
+
+        if (isAutoActive) {
+            const firstManual = candidates[0]
+            if (firstManual) {
+                if (isConnected) {
+                    // We need to support toggle. 
+                    // But onNodeSelect here only supports switching to an ID.
+                    // The parent (page.tsx) handleServerToggle handles logic.
+                    // We just pass the ID.
+                    // Wait, `onNodeSelect` maps to `handleServerToggle`.
+                    // If we pass an ID that is DIFFERENT from current active, it switches.
+                    onNodeSelect(firstManual.id)
+                } else {
+                    onNodeSelect(firstManual.id)
+                }
+                toast.info(t('auto_select_cancelled', { defaultValue: 'Switched to manual selection' }))
+                return
+            }
+        }
+
+        try {
+            const groupId: string = await invoke("ensure_auto_group", {
+                name,
+                references: ids,
+                groupType: "url-test"
+            })
+
+            // If proxy is connected, we force a switch (which implies restart/reconfigure)
+            // If proxy is NOT connected, we pass selectOnly=true (or handle it in parent, but SubscriptionsView doesn't know parent logic deeply)
+            // Actually, if we pass `selectOnly` flag to onNodeSelect, assuming parent handles it?
+            // page.tsx `handleServerToggle` usually Toggles.
+            // Let's modify onNodeSelect signature above to accept optional boolean?
+            // Better: We check `isConnected` here.
+
+            if (isConnected) {
+                onNodeSelect(groupId)
+            } else {
+                if (activeServerId === groupId) {
+                    // Do nothing?
+                }
+                // We want to "Just Select". But onNodeSelect maps to `handleServerToggle`.
+                // We need to tell `handleServerToggle` NOT to connect?
+                // `handleServerToggle(id, forceConnect?)`
+                // This requires updating page.tsx signature OR passing a different callback.
+                // Alternatively, `page.tsx` can pass `setActiveServerId` as a separate prop?
+                // But `onNodeSelect` is already "Select Node".
+                // Let's assume onNodeSelect receives a second arg `shouldConnect`?
+                // Updating `onNodeSelect` inside SubscriptionsView to pass `!isConnected` as `noConnect`?
+                // Let's try passing `false` as second arg for "auto-connect"?
+
+                // Ideally: onNodeSelect(groupId, isConnected)
+                // But page.tsx `handleServerToggle` takes `(id: string)`.
+                // Modifying `handleServerToggle` is invasive.
+
+                // Simpler: If not connected, we assume selecting the group is enough for "Active Server" state?
+                // But `SubscriptionsView` cannot set global active server ID directly unless passed a setter?
+                // `onNodeSelect` IS the setter/toggler.
+
+                // Let's modify `SubscriptionsViewProps` to accept `onSetActive`? No.
+                // Let's update `onNodeSelect` to `(id: string, connect: boolean) => void`.
+                onNodeSelect(groupId, isConnected ?? false)
+            }
+            toast.success(t('auto_select_group_created', { name }))
+        } catch (err: any) {
+            toast.error(t('toast.action_failed', { error: err }))
         }
     }
 
@@ -217,6 +326,32 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                                         <RefreshCw size={16} />
                                                     </button>
                                                 )}
+                                                <button
+                                                    onClick={(e) => handleAutoSelect(profile, e)}
+                                                    className={cn(
+                                                        "size-8 flex items-center justify-center rounded-full transition-all active:scale-95",
+                                                        // Check if activeServerId matches expected "Auto - SubscriptionName"
+                                                        // We don't have the auto-generated ID easily available locally unless we reconstruct it.
+                                                        // Heuristic: If activeServerId starts with "auto_" and current profile nodes contain the active node?
+                                                        // No, activeServerId maps to the GROUP, not a node.
+                                                        // Heuristic: If activeServerId starts with "auto_" and we click?
+                                                        // Better: Just check if activeServerId starts with "auto_".
+                                                        // Since we are in subscription view, this is acceptable feedback.
+                                                        // Ideally we check if `activeServerId` matches the group ID we would generate for this profile.
+                                                        // Group name = "Auto - " + profile.name.
+                                                        // ID = "auto_" + sanitized(profile.name).
+                                                        // Let's rely on simple `startsWith("auto_")` + maybe exact match if we can sanitize.
+                                                        // For now, simpler visual feedback:
+                                                        // If activeServerId is truthy and startsWith("auto_"), we assume it MIGHT be this one if we just clicked it.
+                                                        // But to be precise:
+                                                        activeServerId?.startsWith("auto_") && activeServerId.includes(profile.name.toLowerCase().replace(/[^a-z0-9]/g, ''))
+                                                            ? "bg-accent-green/10 text-accent-green"
+                                                            : "hover:bg-accent-green/10 text-text-tertiary hover:text-accent-green"
+                                                    )}
+                                                    title={t('auto_select_tooltip')}
+                                                >
+                                                    <Zap size={16} fill={activeServerId?.startsWith("auto_") && activeServerId.includes(profile.name.toLowerCase().replace(/[^a-z0-9]/g, '')) ? "currentColor" : "none"} />
+                                                </button>
                                                 <button
                                                     onClick={(e) => handleRenameClick(profile.id, profile.name, e)}
                                                     className="p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-90"
