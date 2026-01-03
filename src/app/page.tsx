@@ -69,8 +69,20 @@ export default function Home() {
     setForceShowAll(false)
   }, [activeServerId])
 
-  const [proxyMode, setProxyMode] = useState<'global' | 'rule' | 'direct'>('rule')
-  const [tunEnabled, setTunEnabled] = useState(false)
+  const [proxyMode, setProxyMode] = useState<'global' | 'rule' | 'direct'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem("proxyMode");
+      return (saved as any) || 'rule';
+    }
+    return 'rule';
+  });
+  const [tunEnabled, setTunEnabled] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem("tunEnabled");
+      return saved === "true";
+    }
+    return false;
+  });
   const [ipRefreshKey, setIpRefreshKey] = useState(0)
 
   // Settings State
@@ -308,16 +320,6 @@ export default function Home() {
         return newLogs
       })
     })
-
-    // Init: Load stored preferences
-    const savedTun = localStorage.getItem("tunEnabled")
-    if (savedTun !== null) {
-      setTunEnabled(savedTun === "true")
-    }
-    const savedMode = localStorage.getItem("proxyMode")
-    if (savedMode) {
-      setProxyMode(savedMode as any)
-    }
 
     // Init: Load App Settings (including System Proxy)
     getAppSettings().then(setSettings)

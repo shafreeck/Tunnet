@@ -117,6 +117,7 @@ pub struct Group {
     pub group_type: GroupType,
     pub source: GroupSource,
     pub icon: Option<String>,
+    pub selected: Option<String>,
 }
 
 fn deserialize_group_type<'de, D>(deserializer: D) -> Result<GroupType, D::Error>

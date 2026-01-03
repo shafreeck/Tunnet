@@ -51,15 +51,45 @@ impl<R: Runtime> ProxyService<R> {
             .unwrap_or_default();
 
         Self {
-            app,
-            manager,
+            app: app.clone(),
             child_process: Mutex::new(None),
-            tun_mode: Mutex::new(false),
+            tun_mode: Mutex::new(false), // Init as false, restore later if needed
             latest_node: Mutex::new(None),
             latest_routing_mode: Mutex::new("rule".to_string()),
             clash_api_port: Mutex::new(None),
             start_lock: tokio::sync::Mutex::new(()),
-            internal_client,
+            manager,
+            internal_client: reqwest::Client::new(),
+        }
+    }
+
+    fn kill_all_singbox_processes(&self) {
+        info!("Performing startup cleanup of orphan sing-box processes...");
+        let core_path = self.manager.get_core_path();
+        let core_canon = std::fs::canonicalize(&core_path).unwrap_or(core_path.clone());
+        let core_name = core_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("sing-box");
+
+        let mut sys = System::new_all();
+        sys.refresh_all();
+
+        for process in sys.processes().values() {
+            let exe_matches = process
+                .exe()
+                .map(|e| std::fs::canonicalize(e).unwrap_or(e.to_path_buf()) == core_canon)
+                .unwrap_or(false);
+            let name_matches = process.name() == core_name;
+
+            if exe_matches || name_matches {
+                info!(
+                    "Startup Cleanup: Killing found process (pid: {}, name: {})",
+                    process.pid(),
+                    process.name()
+                );
+                process.kill_with(sysinfo::Signal::Kill);
+            }
         }
     }
 
@@ -446,7 +476,77 @@ impl<R: Runtime> ProxyService<R> {
             let resp = self.internal_client.put(&url).json(&payload).send().await;
 
             match resp {
-                Ok(res) if res.status().is_success() => return Ok(()),
+                Ok(res) if res.status().is_success() => {
+                    // Persistence Logic: Update 'selected' field for ANY group.
+                    // We load persisted groups first.
+                    let mut groups = self.manager.load_groups().unwrap_or_default();
+
+                    if let Some(g) = groups.iter_mut().find(|g| g.id == group_id) {
+                        // Case A: User-defined group or already persisted implicit group
+                        g.selected = Some(node_name.to_string());
+                        if let Err(e) = self.manager.save_groups(&groups) {
+                            warn!("Failed to persist group selection: {}", e);
+                        } else {
+                            info!(
+                                "Persisted selection '{}' for group '{}'",
+                                node_name, group_id
+                            );
+                        }
+                    } else {
+                        // Case B: Implicit group not yet persisted (first time selection)
+                        // We need to fetch the full group definition from get_groups() which generates implicit ones
+                        if let Ok(all_groups) = self.get_groups() {
+                            if let Some(implicit_g) =
+                                all_groups.into_iter().find(|g| g.id == group_id)
+                            {
+                                // Add to persisted list with new selection
+                                let mut new_g = implicit_g.clone();
+                                new_g.selected = Some(node_name.to_string());
+
+                                // We only really need to save strict fields for implicit groups if we want to support overriding them fully?
+                                // But saving the whole object is fine, get_groups merges it later or we just trust the saved one if it exists?
+                                // Our get_groups logic:
+                                // 1. Loads persisted.
+                                // 2. Generates implicit.
+                                // 3. Merges selected FROM persisted TO implicit.
+                                // Wait, if we save it to groups.json, get_groups will load it as "persisted".
+                                // But get_groups ALSO generates it as "implicit".
+                                // We need to make sure we don't duplicate it in get_groups output.
+                                //
+                                // Let's check get_groups again.
+                                // It loads groups (unwrap_or_default).
+                                // Then it inserts Global/Sub/Region.
+                                // If the ID already exists in loaded groups (because we saved it here),
+                                // then we have a Duplicate ID problem unless get_groups handles it.
+                                //
+                                // Correct approach for Implicit Persist:
+                                // We should probably NOT save the whole group to groups.json if it is implicit system group,
+                                // OR we update get_groups to NOT generate implicit group if it exists in persisted list.
+                                //
+                                // Let's modify get_groups to dedup:
+                                // implicit groups are added via push/insert.
+                                //
+                                // Ideally, valid groups.json should only contain User Defined groups + "Overlay" state for system groups.
+                                // But our Group persistence is simple list.
+                                //
+                                // Let's stick to the current "Overlay" plan:
+                                // 1. We SAVE the implicit group to groups.json (effectively converting it to persisted).
+                                // 2. We MUST Fix get_groups to favor the persisted version or avoiding dupes.
+
+                                groups.push(new_g);
+                                if let Err(e) = self.manager.save_groups(&groups) {
+                                    warn!("Failed to persist implicit group selection: {}", e);
+                                } else {
+                                    info!(
+                                        "Persisted implicit group '{}' with selection '{}'",
+                                        group_id, node_name
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    return Ok(());
+                }
                 Ok(res) => {
                     last_err = format!(
                         "Failed to select node (HTTP {}): {:?}",
@@ -805,7 +905,15 @@ impl<R: Runtime> ProxyService<R> {
 
             match group.group_type {
                 crate::profile::GroupType::Selector => {
-                    cfg = cfg.with_selector_outbound(&group.id, member_tags);
+                    // move selected to front
+                    let mut tags = member_tags.clone();
+                    if let Some(selected) = &group.selected {
+                        if let Some(pos) = tags.iter().position(|x| x == selected) {
+                            let val = tags.remove(pos);
+                            tags.insert(0, val);
+                        }
+                    }
+                    cfg = cfg.with_selector_outbound(&group.id, tags);
                 }
                 crate::profile::GroupType::UrlTest {
                     interval,
@@ -1086,11 +1194,24 @@ impl<R: Runtime> ProxyService<R> {
 
     pub fn is_proxy_running(&self) -> bool {
         // 1. Check local child
-        if let Some(child) = self.child_process.lock().unwrap().as_mut() {
-            if let Ok(None) = child.try_wait() {
-                return true;
+        let mut child_guard = self.child_process.lock().unwrap();
+        if let Some(child) = child_guard.as_mut() {
+            match child.try_wait() {
+                Ok(Some(_)) => {
+                    // Process has exited
+                    return false;
+                }
+                Ok(None) => {
+                    // Still running
+                    return true;
+                }
+                Err(e) => {
+                    error!("Error checking child process status: {}", e);
+                    return false;
+                }
             }
         }
+        drop(child_guard); // Release lock
 
         // 2. Check helper (if tun)
         let client = crate::helper_client::HelperClient::new();
@@ -1110,6 +1231,19 @@ impl<R: Runtime> ProxyService<R> {
             if let Some(exe) = process.exe() {
                 let exe_canon = std::fs::canonicalize(exe).unwrap_or(exe.to_path_buf());
                 if exe_canon == core_canon {
+                    // Critical Fix: Ignore Zombie processes (defunct)
+                    if process.status() == sysinfo::ProcessStatus::Zombie {
+                        debug!(
+                            "is_proxy_running: Found zombie process (pid: {}), ignoring.",
+                            process.pid()
+                        );
+                        continue;
+                    }
+
+                    info!(
+                        "is_proxy_running: Found orphan process (pid: {}).",
+                        process.pid()
+                    );
                     return true;
                 }
             }
@@ -1587,9 +1721,16 @@ impl<R: Runtime> ProxyService<R> {
 
     // Group Management
     pub fn get_groups(&self) -> Result<Vec<crate::profile::Group>, String> {
-        let mut groups = self.manager.load_groups().unwrap_or_default();
+        let saved_groups = self.manager.load_groups().unwrap_or_default();
 
-        // Add Implicit Groups
+        // Filter out system/implicit groups from saved list to avoid duplicates/staleness.
+        // We will regenerate them fresh and re-apply the 'selected' state.
+        let mut final_groups: Vec<crate::profile::Group> = saved_groups
+            .into_iter()
+            .filter(|g| !g.id.starts_with("system:"))
+            .collect();
+
+        // Add Implicit Groups (Freshly generated)
         let profiles = self.manager.load_profiles().unwrap_or_default();
         let mut all_node_ids = Vec::new();
 
@@ -1599,29 +1740,54 @@ impl<R: Runtime> ProxyService<R> {
                 all_node_ids.push(n.id.clone());
             }
         }
-        groups.insert(
-            0,
-            crate::profile::Group {
-                id: "system:global".to_string(),
-                name: "GLOBAL".to_string(),
-                group_type: crate::profile::GroupType::Selector,
-                source: crate::profile::GroupSource::Static {
-                    node_ids: all_node_ids,
-                },
-                icon: Some("globe".to_string()),
+
+        let mut global_group = crate::profile::Group {
+            id: "system:global".to_string(),
+            name: "GLOBAL".to_string(),
+            group_type: crate::profile::GroupType::Selector,
+            source: crate::profile::GroupSource::Static {
+                node_ids: all_node_ids,
             },
-        );
+            icon: Some("globe".to_string()),
+            selected: None,
+        };
+        // Restore selection if saved
+        if let Some(saved) = self
+            .manager
+            .load_groups()
+            .unwrap_or_default()
+            .iter()
+            .find(|g| g.id == global_group.id)
+        {
+            global_group.selected = saved.selected.clone();
+        }
+        // Insert Global at start of list (index 0 relative to user groups? or absolute?)
+        // Usually Global is first.
+        final_groups.insert(0, global_group);
 
         // 2. Subscription Groups
         for p in &profiles {
             let node_ids = p.nodes.iter().map(|n| n.id.clone()).collect();
-            groups.push(crate::profile::Group {
+            let mut sub_group = crate::profile::Group {
                 id: format!("system:sub:{}", p.id),
                 name: p.name.clone(),
                 group_type: crate::profile::GroupType::Selector,
                 source: crate::profile::GroupSource::Static { node_ids },
                 icon: Some("layers".to_string()),
-            });
+                selected: None,
+            };
+
+            // Restore selection
+            if let Some(saved) = self
+                .manager
+                .load_groups()
+                .unwrap_or_default()
+                .iter()
+                .find(|g| g.id == sub_group.id)
+            {
+                sub_group.selected = saved.selected.clone();
+            }
+            final_groups.push(sub_group);
         }
 
         // 3. Region Groups
@@ -1641,7 +1807,7 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         for (country, node_ids) in region_map {
-            groups.push(crate::profile::Group {
+            let mut region_group = crate::profile::Group {
                 id: format!("system:region:{}", country),
                 name: country.clone(),
                 group_type: crate::profile::GroupType::UrlTest {
@@ -1650,10 +1816,23 @@ impl<R: Runtime> ProxyService<R> {
                 },
                 source: crate::profile::GroupSource::Static { node_ids },
                 icon: Some("map-pin".to_string()),
-            });
+                selected: None,
+            };
+
+            // Restore selection
+            if let Some(saved) = self
+                .manager
+                .load_groups()
+                .unwrap_or_default()
+                .iter()
+                .find(|g| g.id == region_group.id)
+            {
+                region_group.selected = saved.selected.clone();
+            }
+            final_groups.push(region_group);
         }
 
-        Ok(groups)
+        Ok(final_groups)
     }
 
     pub async fn save_groups(&self, groups: Vec<crate::profile::Group>) -> Result<(), String> {
@@ -1750,6 +1929,7 @@ impl<R: Runtime> ProxyService<R> {
                     node_ids: references,
                 },
                 icon: Some("zap".to_string()), // Default icon for auto groups
+                selected: None,
             });
         }
 
