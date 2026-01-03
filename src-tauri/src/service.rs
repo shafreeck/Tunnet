@@ -1,5 +1,5 @@
 use crate::manager::CoreManager;
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use sysinfo::System;
@@ -656,16 +656,40 @@ impl<R: Runtime> ProxyService<R> {
             }
         }
 
-        // 4. Emergency Port Clearance (Optional but helpful for port 8804 squatters)
+        // 4. Robust Port Release Check (Loop up to 3 seconds)
         if let Ok(settings) = self.manager.load_settings() {
-            if self.kill_port_owner(settings.mixed_port) {
-                cleanup_performed = true;
+            let port = settings.mixed_port;
+            let start = std::time::Instant::now();
+            let mut attempt = 0;
+
+            loop {
+                // kill_port_owner returns true if it found and attempted to kill a process
+                let found_and_killed = self.kill_port_owner(port);
+
+                if !found_and_killed {
+                    // Double check if port is actually free by trying to bind to it briefly?
+                    // Or trust lsof. Trusting lsof for now as binding might have side effects or race conditions.
+                    // If lsof found nothing, we assume it's free.
+                    break;
+                }
+
+                if start.elapsed().as_secs() >= 5 {
+                    warn!("Timeout waiting for port {} to be released after 5s", port);
+                    break;
+                }
+
+                attempt += 1;
+                debug!(
+                    "Port {} still in use (attempt {}), waiting...",
+                    port, attempt
+                );
+                tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
             }
         }
 
         if cleanup_performed {
-            // Mandatory OS port release delay
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            // Minimal safety delay after cleanup
+            tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
         }
 
         // 5. Cleanup system proxy

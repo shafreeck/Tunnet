@@ -89,6 +89,12 @@ export default function Home() {
       toast.error(t('toast.save_failed', { error: e }))
       // Revert
       setSettings(settings)
+    } finally {
+      if (newSettings.system_proxy) {
+        toast.success(t('toast.system_proxy_enabled'))
+      } else {
+        toast.success(t('toast.system_proxy_disabled'))
+      }
     }
   }
 
@@ -186,15 +192,31 @@ export default function Home() {
       setIsLoading(true)
       console.log("Syncing proxy config...", { proxyMode, tunEnabled, node: node.name })
 
+      const isOnlyTunUpdate = lastAppliedConfigRef.current &&
+        currentConfigKey &&
+        lastAppliedConfigRef.current.split(':').slice(0, 2).join(':') === currentConfigKey.split(':').slice(0, 2).join(':');
+
       const promise = invoke("start_proxy", {
         node,
         tun: tunEnabled,
         routing: proxyMode
       })
 
+      const getLoadingMsg = () => {
+        if (isOnlyTunUpdate) return t('toast.updating_tun');
+        if (lastAppliedConfigRef.current) return t('toast.updating_to', { mode: proxyMode });
+        return t('toast.connecting_to', { server: node.name });
+      }
+
+      const getSuccessMsg = () => {
+        if (isOnlyTunUpdate) return tunEnabled ? t('toast.tun_mode_enabled') : t('toast.tun_mode_disabled');
+        if (lastAppliedConfigRef.current) return t('toast.updated_to', { mode: proxyMode });
+        return t('toast.connected_to', { server: node.name });
+      }
+
       toast.promise(promise, {
-        loading: lastAppliedConfigRef.current ? t('toast.updating_to', { mode: proxyMode }) : t('toast.connecting_to', { server: node.name }),
-        success: lastAppliedConfigRef.current ? t('toast.updated_to', { mode: proxyMode }) : t('toast.connected_to', { server: node.name }),
+        loading: getLoadingMsg(),
+        success: getSuccessMsg(),
         error: (err: any) => t('toast.action_failed', { error: err })
       })
 
@@ -601,7 +623,8 @@ export default function Home() {
     emit("tun-mode-updated", nextState)
 
     if (isConnected) {
-      toast.success(t(nextState ? 'toast.tun_mode_enabled' : 'toast.tun_mode_disabled'))
+      // toast.success(t(nextState ? 'toast.tun_mode_enabled' : 'toast.tun_mode_disabled'))
+      // No redundant toast here, let syncProxy handle it
     }
   }
 

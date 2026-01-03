@@ -213,7 +213,10 @@
         "updating_to": "正在更新为 {{mode}}...",
         "connected_to": "已连接到 {{server}}",
         "updated_to": "已更新为 {{mode}}",
-        "action_failed": "失败: {{error}}"
+        "action_failed": "失败: {{error}}",
+        "updating_tun": "正在更新 TUN 模式...",
+        "system_proxy_enabled": "系统代理已启用",
+        "system_proxy_disabled": "系统代理已禁用"
     },
     "locations": {
         "title": "节点地区",
