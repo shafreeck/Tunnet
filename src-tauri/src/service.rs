@@ -1,5 +1,5 @@
 use crate::manager::CoreManager;
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use sysinfo::System;
@@ -277,6 +277,7 @@ impl<R: Runtime> ProxyService<R> {
         cmd.arg("run")
             .arg("-c")
             .arg(&config_file_path)
+            .arg("--disable-color")
             .arg("-D")
             .arg(&app_local_data);
 
@@ -298,10 +299,63 @@ impl<R: Runtime> ProxyService<R> {
                 std::thread::spawn(move || {
                     use std::io::{BufRead, BufReader};
                     let reader = BufReader::new(stdout);
+
                     for line in reader.lines() {
                         if let Ok(l) = line {
-                            info!("[Core] {}", l);
-                            let _ = app_handle.emit("proxy-log", l);
+                            // ANSI Colors
+                            const ANSI_RESET: &str = "\x1b[0m";
+                            const ANSI_RED: &str = "\x1b[31m";
+                            const ANSI_GREEN: &str = "\x1b[32m";
+                            const ANSI_YELLOW: &str = "\x1b[33m";
+                            const ANSI_CYAN: &str = "\x1b[36m";
+                            const ANSI_GRAY: &str = "\x1b[90m";
+
+                            if l.starts_with("INFO") {
+                                let rest = l.strip_prefix("INFO").unwrap_or("");
+                                let msg = rest.trim_start();
+                                info!("[Core] {}", msg);
+                                let colored = format!("{}INFO{}{}", ANSI_GREEN, ANSI_RESET, rest);
+                                let _ = app_handle.emit("proxy-log", colored);
+                            } else if l.starts_with("WARN") {
+                                let rest = l.strip_prefix("WARN").unwrap_or("");
+                                let msg = rest.trim_start();
+                                warn!("[Core] {}", msg);
+                                let colored = format!("{}WARN{}{}", ANSI_YELLOW, ANSI_RESET, rest);
+                                let _ = app_handle.emit("proxy-log", colored);
+                            } else if l.starts_with("ERROR") {
+                                let rest = l.strip_prefix("ERROR").unwrap_or("");
+                                let msg = rest.trim_start();
+                                error!("[Core] {}", msg);
+                                let colored = format!("{}ERROR{}{}", ANSI_RED, ANSI_RESET, rest);
+                                let _ = app_handle.emit("proxy-log", colored);
+                            } else if l.starts_with("FATAL") {
+                                let rest = l.strip_prefix("FATAL").unwrap_or("");
+                                let msg = rest.trim_start();
+                                error!("[Core] {}", msg);
+                                let colored = format!("{}FATAL{}{}", ANSI_RED, ANSI_RESET, rest);
+                                let _ = app_handle.emit("proxy-log", colored);
+                            } else if l.starts_with("PANIC") {
+                                let rest = l.strip_prefix("PANIC").unwrap_or("");
+                                let msg = rest.trim_start();
+                                error!("[Core] {}", msg);
+                                let colored = format!("{}PANIC{}{}", ANSI_RED, ANSI_RESET, rest);
+                                let _ = app_handle.emit("proxy-log", colored);
+                            } else if l.starts_with("DEBUG") {
+                                let rest = l.strip_prefix("DEBUG").unwrap_or("");
+                                let msg = rest.trim_start();
+                                debug!("[Core] {}", msg);
+                                let colored = format!("{}DEBUG{}{}", ANSI_CYAN, ANSI_RESET, rest);
+                                let _ = app_handle.emit("proxy-log", colored);
+                            } else if l.starts_with("TRACE") {
+                                let rest = l.strip_prefix("TRACE").unwrap_or("");
+                                let msg = rest.trim_start();
+                                trace!("[Core] {}", msg);
+                                let colored = format!("{}TRACE{}{}", ANSI_GRAY, ANSI_RESET, rest);
+                                let _ = app_handle.emit("proxy-log", colored);
+                            } else {
+                                info!("[Core] {}", l);
+                                let _ = app_handle.emit("proxy-log", l);
+                            }
                         }
                     }
                 });
@@ -309,10 +363,66 @@ impl<R: Runtime> ProxyService<R> {
                 std::thread::spawn(move || {
                     use std::io::{BufRead, BufReader};
                     let reader = BufReader::new(stderr);
+
                     for line in reader.lines() {
                         if let Ok(l) = line {
-                            error!("[Core] {}", l);
-                            let _ = app_handle_err.emit("proxy-log", l.clone());
+                            // ANSI Colors
+                            const ANSI_RESET: &str = "\x1b[0m";
+                            const ANSI_RED: &str = "\x1b[31m";
+                            const ANSI_GREEN: &str = "\x1b[32m";
+                            const ANSI_YELLOW: &str = "\x1b[33m";
+                            const ANSI_CYAN: &str = "\x1b[36m";
+                            const ANSI_GRAY: &str = "\x1b[90m";
+
+                            // Apply same parsing to stderr as sing-box often writes logs there
+                            if l.starts_with("INFO") {
+                                let rest = l.strip_prefix("INFO").unwrap_or("");
+                                let msg = rest.trim_start();
+                                info!("[Core] {}", msg);
+                                let colored = format!("{}INFO{}{}", ANSI_GREEN, ANSI_RESET, rest);
+                                let _ = app_handle_err.emit("proxy-log", colored);
+                            } else if l.starts_with("WARN") {
+                                let rest = l.strip_prefix("WARN").unwrap_or("");
+                                let msg = rest.trim_start();
+                                warn!("[Core] {}", msg);
+                                let colored = format!("{}WARN{}{}", ANSI_YELLOW, ANSI_RESET, rest);
+                                let _ = app_handle_err.emit("proxy-log", colored);
+                            } else if l.starts_with("ERROR") {
+                                let rest = l.strip_prefix("ERROR").unwrap_or("");
+                                let msg = rest.trim_start();
+                                error!("[Core] {}", msg);
+                                let colored = format!("{}ERROR{}{}", ANSI_RED, ANSI_RESET, rest);
+                                let _ = app_handle_err.emit("proxy-log", colored);
+                            } else if l.starts_with("FATAL") {
+                                let rest = l.strip_prefix("FATAL").unwrap_or("");
+                                let msg = rest.trim_start();
+                                error!("[Core] {}", msg);
+                                let colored = format!("{}FATAL{}{}", ANSI_RED, ANSI_RESET, rest);
+                                let _ = app_handle_err.emit("proxy-log", colored);
+                            } else if l.starts_with("PANIC") {
+                                let rest = l.strip_prefix("PANIC").unwrap_or("");
+                                let msg = rest.trim_start();
+                                error!("[Core] {}", msg);
+                                let colored = format!("{}PANIC{}{}", ANSI_RED, ANSI_RESET, rest);
+                                let _ = app_handle_err.emit("proxy-log", colored);
+                            } else if l.starts_with("DEBUG") {
+                                let rest = l.strip_prefix("DEBUG").unwrap_or("");
+                                let msg = rest.trim_start();
+                                debug!("[Core] {}", msg);
+                                let colored = format!("{}DEBUG{}{}", ANSI_CYAN, ANSI_RESET, rest);
+                                let _ = app_handle_err.emit("proxy-log", colored);
+                            } else if l.starts_with("TRACE") {
+                                let rest = l.strip_prefix("TRACE").unwrap_or("");
+                                let msg = rest.trim_start();
+                                trace!("[Core] {}", msg);
+                                let colored = format!("{}TRACE{}{}", ANSI_GRAY, ANSI_RESET, rest);
+                                let _ = app_handle_err.emit("proxy-log", colored);
+                            } else {
+                                // Default stderr without level usually means error or raw msg
+                                info!("[Core] {}", l);
+                                let _ = app_handle_err.emit("proxy-log", l.clone());
+                            }
+
                             // Capture first 10 lines
                             let mut cap = stderr_capture.lock().unwrap();
                             if cap.len() < 10 {
@@ -747,6 +857,10 @@ impl<R: Runtime> ProxyService<R> {
     ) -> Result<(), String> {
         let app_local_data = self.app.path().app_local_data_dir().unwrap();
         let mut cfg = crate::config::SingBoxConfig::new(clash_api_port);
+        // Synchronize log level with app settings
+        if let Some(log) = &mut cfg.log {
+            log.level = Some(settings.log_level.clone());
+        }
 
         if tun_mode {
             cfg = cfg.with_tun_inbound(settings.tun_mtu);
@@ -2851,6 +2965,7 @@ impl<R: Runtime> ProxyService<R> {
         cfg.log = Some(crate::config::LogConfig {
             level: Some("trace".to_string()),
             output: None, // Print to stdout/stderr
+            timestamp: Some(false),
         });
 
         let config_file_path = app_local_data.join(format!("url_test_{}.json", node.id));

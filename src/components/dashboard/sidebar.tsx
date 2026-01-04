@@ -11,6 +11,7 @@ interface SidebarProps {
     currentView: ViewType
     onViewChange: (view: ViewType) => void
     subscription: {
+        name: string
         upload: number
         download: number
         total: number

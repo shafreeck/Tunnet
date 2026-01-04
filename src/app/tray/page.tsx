@@ -134,11 +134,11 @@ export default function TrayPage() {
             setIpInfo(null)
             setCheckingIp(false)
         }
-    }, [status.is_running, settings.active_node_id, status.tun_mode, settings.system_proxy])
+    }, [status.is_running, settings.active_target_id, status.tun_mode, settings.system_proxy])
 
     // Check latency for active node
     const checkLatency = useCallback(() => {
-        const nodeId = settings.active_node_id
+        const nodeId = settings.active_target_id
         if (!nodeId) {
             setLatency(null)
             return
@@ -150,7 +150,7 @@ export default function TrayPage() {
         invoke<number>("url_test", { nodeId })
             .then(lat => setLatency(lat))
             .catch(e => console.error("Latency test failed", e))
-    }, [settings.active_node_id])
+    }, [settings.active_target_id])
 
     useEffect(() => {
         checkLatency()
@@ -213,7 +213,7 @@ export default function TrayPage() {
                 await invoke("stop_proxy")
             } else {
                 // Determine which node to connect to
-                const nodeId = settings.active_node_id
+                const nodeId = settings.active_target_id
                 const node = nodes.find(n => n.id === nodeId) || nodes[0]
 
                 if (!node) {
@@ -264,7 +264,7 @@ export default function TrayPage() {
         try {
             if (status.is_running) {
                 // If running, restart with new mode
-                const activeNode = nodes.find(n => n.id === settings.active_node_id) || nodes[0]
+                const activeNode = nodes.find(n => n.id === settings.active_target_id) || nodes[0]
                 await invoke("start_proxy", {
                     node: activeNode,
                     tun: newTunMode,
@@ -297,7 +297,7 @@ export default function TrayPage() {
     // 1. Try finding by ID from full list (Best for display details if list is fresh)
     // 2. Fallback to status.node (Reliable if running/last used, but might be missing if cold start)
     // 3. Fallback to first node
-    const activeNode = nodes.find(n => n.id === settings.active_node_id) || status.node || nodes[0]
+    const activeNode = nodes.find(n => n.id === settings.active_target_id) || status.node || nodes[0]
 
     const isDark = mounted && resolvedTheme === "dark"
 

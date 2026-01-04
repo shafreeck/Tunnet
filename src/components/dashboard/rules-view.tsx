@@ -193,7 +193,7 @@ export function RulesView() {
                 const newPolicy = preset.defaultPolicy
                 await saveRulesToBackend(newRules, newPolicy)
                 setRules(newRules)
-                setDefaultPolicy(newPolicy)
+                setDefaultPolicy(newPolicy as any)
                 setCurrentPreset(name)
                 localStorage.setItem("tunnet_rules_preset", name)
                 setIsPresetOpen(false)
@@ -292,7 +292,7 @@ export function RulesView() {
         const nextPolicy = getNextPolicy(defaultPolicy)
         try {
             await saveRulesToBackend(rules, nextPolicy)
-            setDefaultPolicy(nextPolicy)
+            setDefaultPolicy(nextPolicy as any)
             switchToCustom(rules, nextPolicy)
             toast.success(t('rules.toast.rule_updated'))
         } catch (err) {

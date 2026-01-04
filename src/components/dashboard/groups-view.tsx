@@ -29,9 +29,9 @@ export interface ProxyNodeStatus {
     name: string
     type: string
     alive: boolean
-    udp: bool
-    xudp: bool
-    tfo: bool
+    udp: boolean
+    xudp: boolean
+    tfo: boolean
     delay?: number
     now?: string // "Name" if selected, or null
 }

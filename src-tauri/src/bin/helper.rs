@@ -166,6 +166,7 @@ fn start_sing_box(payload: StartPayload, state: &Arc<AppState>) -> Response {
                 "run",
                 "-c",
                 config_path.to_str().unwrap(),
+                "--disable-color",
                 "-D",
                 &payload.working_dir,
             ])

@@ -11,7 +11,7 @@ interface ServerCardProps {
     providerName?: string
     ping?: number
     onClick: () => void
-    onClick: () => void
+
     isHovered?: boolean
     isAutoSelected?: boolean
 }

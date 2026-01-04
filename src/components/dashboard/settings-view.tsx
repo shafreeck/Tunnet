@@ -269,9 +269,6 @@ function GeneralSettings({ settings, update }: CommonProps) {
                     title={t('settings.general.launch_at_login.title')}
                     description={t('settings.general.launch_at_login.desc')}
                     icon={<Power size={20} />}
-                    title={t('settings.general.launch_at_login.title')}
-                    description={t('settings.general.launch_at_login.desc')}
-                    icon={<Power size={20} />}
                 >
                     <Switch checked={settings.launch_at_login} onCheckedChange={(v) => update("launch_at_login", v)} />
                 </SettingItem>

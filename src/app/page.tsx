@@ -20,6 +20,7 @@ import { getFlagUrl, getCountryName, getFlagUrlFromCode, getCountryCode } from "
 import { NodeEditor, Node } from "@/components/dashboard/node-editor"
 import { ConfirmationModal } from "@/components/ui/confirmation-modal"
 import { AddNodeModal } from "@/components/dashboard/add-node-modal"
+import { InputModal } from "@/components/ui/input-modal"
 
 export default function Home() {
   const { t } = useTranslation()
@@ -58,6 +59,7 @@ export default function Home() {
   // Logs State
   const [logs, setLogs] = useState<string[]>([])
   const [showLogs, setShowLogs] = useState(false)
+  const [showAddSubscription, setShowAddSubscription] = useState(false)
 
   // Connection Details State (Real IP)
   const [connectionDetails, setConnectionDetails] = useState<{ ip: string; country: string; countryCode: string } | null>(null)
@@ -952,7 +954,7 @@ export default function Home() {
           isImporting={false}
           onNodeSelect={(id, selectOnly) => handleServerToggle(id, !selectOnly)}
           isConnected={isConnected}
-          activeServerId={activeServerId}
+          activeServerId={activeServerId || undefined}
           activeAutoNodeId={activeAutoNodeId}
         />
       case "subscription_detail" as any:
@@ -1177,6 +1179,18 @@ export default function Home() {
             setEditorOpen(true)
           }}
           onImport={handleImport}
+        />
+        <InputModal
+          isOpen={showAddSubscription}
+          title={t('subscriptions.import')}
+          message={t('subscriptions.enter_url')}
+          confirmText={t('common.confirm', { defaultValue: 'Import' })}
+          cancelText={t('common.cancel', { defaultValue: 'Cancel' })}
+          onConfirm={(url) => {
+            handleImport(url)
+            setShowAddSubscription(false)
+          }}
+          onCancel={() => setShowAddSubscription(false)}
         />
       </main>
     </div>

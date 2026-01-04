@@ -21,6 +21,8 @@ pub struct LogConfig {
     pub level: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -321,6 +323,7 @@ impl SingBoxConfig {
             log: Some(LogConfig {
                 level: Some("debug".to_string()),
                 output: None,
+                timestamp: Some(false),
             }),
             dns: Some(dns),
             inbounds: vec![],
