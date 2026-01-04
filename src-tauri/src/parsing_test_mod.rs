@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
     use crate::profile::parser::parse_subscription;
-    use crate::profile::Node;
 
     #[test]
     fn test_parse_vless() {

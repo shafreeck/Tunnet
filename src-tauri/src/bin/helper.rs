@@ -2,13 +2,12 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs;
 use std::io::{Read, Write};
-use std::os::unix::fs::PermissionsExt;
+
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
 
 const SOCKET_PATH: &str = "/var/run/tunnet.sock";
 

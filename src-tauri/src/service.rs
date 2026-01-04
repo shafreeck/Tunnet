@@ -62,7 +62,7 @@ impl<R: Runtime> ProxyService<R> {
             clash_api_port: Mutex::new(None),
             start_lock: tokio::sync::Mutex::new(()),
             manager,
-            internal_client: reqwest::Client::new(),
+            internal_client,
             active_network_services: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         }
     }
@@ -924,7 +924,7 @@ impl<R: Runtime> ProxyService<R> {
 
         // 2. Load Resources (Profiles/Groups)
         let profiles = self.manager.load_profiles().unwrap_or_default();
-        let mut groups = self.get_groups().unwrap_or_default(); // Uses the new dynamic get_groups
+        let groups = self.get_groups().unwrap_or_default(); // Uses the new dynamic get_groups
 
         // 3. Add ALL Nodes as Outbounds
         // We iterate all profiles and their nodes
@@ -2300,7 +2300,7 @@ impl<R: Runtime> ProxyService<R> {
                     // Alloc port
                     match std::net::TcpListener::bind("127.0.0.1:0") {
                         Ok(l) => {
-                            if let Ok(addr) = l.local_addr() {
+                            if let Ok(_) = l.local_addr() {
                                 probe_plan.push((node.clone(), 0));
                             }
                         }
@@ -2501,8 +2501,6 @@ impl<R: Runtime> ProxyService<R> {
         // Wait for startup
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-        let mut updates: std::collections::HashMap<String, crate::profile::LocationInfo> =
-            std::collections::HashMap::new();
         // Parse logs for ports
         let stdout_logs = output_log_clone2.lock().unwrap().clone();
         let stderr_logs = output_log_clone.lock().unwrap().clone();
@@ -2633,7 +2631,7 @@ impl<R: Runtime> ProxyService<R> {
                     // Alloc port
                     match std::net::TcpListener::bind("127.0.0.1:0") {
                         Ok(l) => {
-                            if let Ok(addr) = l.local_addr() {
+                            if let Ok(_) = l.local_addr() {
                                 probe_plan.push((node.clone(), 0));
                             }
                         }
@@ -3151,7 +3149,7 @@ impl<R: Runtime> ProxyService<R> {
         let stdout = child.stdout.take().unwrap();
         let output_log = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
         let output_log_clone = output_log.clone();
-        let output_log_clone2 = output_log.clone();
+
         let output_log_clone3 = output_log.clone();
         let output_log_clone4 = output_log.clone();
 
@@ -3343,27 +3341,6 @@ impl<R: Runtime> ProxyService<R> {
     }
 
     // --- Tray Helpers ---
-
-    pub async fn toggle_system_proxy(&self) -> Result<bool, String> {
-        let mut settings = self.manager.load_settings()?;
-        settings.system_proxy = !settings.system_proxy;
-        self.manager.save_settings(&settings)?;
-
-        let _ = self.app.emit("settings-update", &settings);
-
-        let is_running = self.is_proxy_running();
-
-        // If running, apply changes
-        if is_running {
-            if settings.system_proxy {
-                self.enable_system_proxy(settings.mixed_port);
-            } else {
-                self.disable_system_proxy();
-            }
-        }
-
-        Ok(settings.system_proxy)
-    }
 
     pub async fn set_routing_mode(&self, mode: &str) -> Result<(), String> {
         // Mode: "rule", "global", "direct"

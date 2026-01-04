@@ -164,25 +164,6 @@ impl<R: Runtime> CoreManager<R> {
         Ok(())
     }
 
-    async fn download_generic_file(&self, url: &str, path: &Path) -> Result<(), String> {
-        let client = Client::new();
-        let res = client.get(url).send().await.map_err(|e| e.to_string())?;
-
-        if !res.status().is_success() {
-            return Err(format!("Download failed: {}", res.status()));
-        }
-
-        let mut stream = res.bytes_stream();
-        let mut file = fs::File::create(path).map_err(|e| e.to_string())?;
-
-        while let Some(item) = stream.next().await {
-            let chunk = item.map_err(|e| e.to_string())?;
-            file.write_all(&chunk).map_err(|e| e.to_string())?;
-        }
-
-        Ok(())
-    }
-
     async fn download_core(&self) -> Result<(), String> {
         let client = Client::new();
         let res = client

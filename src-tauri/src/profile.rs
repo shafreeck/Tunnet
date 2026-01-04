@@ -69,14 +69,6 @@ pub struct Node {
     pub ping: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SubscriptionInfo {
-    pub upload: u64,
-    pub download: u64,
-    pub total: u64,
-    pub expire: u64,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum GroupType {
     Selector,

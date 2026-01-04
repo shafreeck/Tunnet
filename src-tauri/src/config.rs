@@ -132,16 +132,6 @@ pub struct OutboundTls {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct GeoIPConfig {
-    pub path: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct GeoSiteConfig {
-    pub path: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Route {
     pub rules: Vec<RouteRule>,
     #[serde(skip_serializing_if = "Option::is_none")]
