@@ -255,13 +255,21 @@ export default function Home() {
 
       const getLoadingMsg = () => {
         if (isOnlyTunUpdate) return t('toast.updating_tun');
-        if (lastAppliedConfigRef.current) return t('toast.updating_to', { mode: proxyMode });
+        if (lastAppliedConfigRef.current) {
+          const [prevId] = lastAppliedConfigRef.current.split(':');
+          if (prevId !== node.id) return t('toast.connecting_to', { server: node.name });
+          return t('toast.updating_to', { mode: proxyMode });
+        }
         return t('toast.connecting_to', { server: node.name });
       }
 
       const getSuccessMsg = () => {
         if (isOnlyTunUpdate) return tunEnabled ? t('toast.tun_mode_enabled') : t('toast.tun_mode_disabled');
-        if (lastAppliedConfigRef.current) return t('toast.updated_to', { mode: proxyMode });
+        if (lastAppliedConfigRef.current) {
+          const [prevId] = lastAppliedConfigRef.current.split(':');
+          if (prevId !== node.id) return t('toast.connected_to', { server: node.name });
+          return t('toast.updated_to', { mode: proxyMode });
+        }
         return t('toast.connected_to', { server: node.name });
       }
 
@@ -296,7 +304,7 @@ export default function Home() {
     }
 
     syncProxy()
-  }, [isConnected, proxyMode, tunEnabled])
+  }, [isConnected, proxyMode, tunEnabled, activeServerId, groups, servers])
 
   // Watch and persist active node ID
   useEffect(() => {
@@ -927,7 +935,7 @@ export default function Home() {
           <GroupsView
             allNodes={servers}
             activeTargetId={activeServerId}
-            onSelectTarget={(id) => setActiveServerId(id)}
+            onSelectTarget={(id) => handleServerToggle(id)}
           />
         )
       case "proxies": // Mapped to Subscriptions
