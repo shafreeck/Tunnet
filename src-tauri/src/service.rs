@@ -66,6 +66,8 @@ impl<R: Runtime> ProxyService<R> {
     }
 
     pub fn init(&self) {
+        // Ensure helper cleans up too (in case of previous crash/TUN mode residue)
+        crate::helper_client::HelperClient::new().stop_proxy().ok();
         self.kill_all_singbox_processes();
         self.warmup_network_cache();
     }
@@ -1280,10 +1282,12 @@ impl<R: Runtime> ProxyService<R> {
                     }
 
                     info!(
-                        "is_proxy_running: Found orphan process (pid: {}).",
+                        "is_proxy_running: Found orphan process (pid: {}), ignoring as requested.",
                         process.pid()
                     );
-                    return true;
+                    // Critical Change: User requested to ignore orphan processes for status check.
+                    // This prevents false "Connected" state if previous cleanup failed.
+                    continue;
                 }
             }
         }
@@ -1361,7 +1365,11 @@ impl<R: Runtime> ProxyService<R> {
             }
         }
 
-        // 2. Disable System Proxy
+        // 2. Stop Helper managed process (if any)
+        info!("Notifying helper to stop proxy...");
+        crate::helper_client::HelperClient::new().stop_proxy().ok();
+
+        // 3. Disable System Proxy
         // We call disable_system_proxy which uses synchronous Command
         self.disable_system_proxy();
 
@@ -1376,16 +1384,10 @@ impl<R: Runtime> ProxyService<R> {
             cleanup_performed = true;
             let pid = child.id();
             info!("Stopping local proxy core (pid: {})...", pid);
-            let _ = std::process::Command::new("kill")
-                .arg(pid.to_string())
-                .output();
-
-            // Wait a bit, if not dead, SIGKILL will be handled by the scan below
-            let _ = tokio::time::timeout(
-                tokio::time::Duration::from_millis(300),
-                tokio::task::spawn_blocking(move || child.wait()),
-            )
-            .await;
+            let _ = child.kill();
+            // Simplify wait logic: Just wait synchronously.
+            // It prevents zombies/orphans and is reliable.
+            let _ = child.wait();
         }
 
         // 2. Stop Helper Process
