@@ -39,6 +39,7 @@ pub struct ProxyService<R: Runtime> {
     clash_api_port: Mutex<Option<u16>>,
     start_lock: tokio::sync::Mutex<()>, // Ensure serialized start operations
     internal_client: reqwest::Client,
+    active_network_services: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 }
 
 impl<R: Runtime> ProxyService<R> {
@@ -60,7 +61,13 @@ impl<R: Runtime> ProxyService<R> {
             start_lock: tokio::sync::Mutex::new(()),
             manager,
             internal_client: reqwest::Client::new(),
+            active_network_services: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
         }
+    }
+
+    pub fn init(&self) {
+        self.kill_all_singbox_processes();
+        self.warmup_network_cache();
     }
 
     fn kill_all_singbox_processes(&self) {
@@ -72,8 +79,8 @@ impl<R: Runtime> ProxyService<R> {
             .and_then(|n| n.to_str())
             .unwrap_or("sing-box");
 
-        let mut sys = System::new_all();
-        sys.refresh_all();
+        let mut sys = System::new();
+        sys.refresh_processes();
 
         for process in sys.processes().values() {
             let exe_matches = process
@@ -123,11 +130,7 @@ impl<R: Runtime> ProxyService<R> {
             info!("Restarting proxy to apply changes...");
         }
 
-        // Full restart required (e.g., switched TUN mode or not running)
-        self.stop_proxy_internal(false).await;
-
-        // Give OS a small grace period to release TUN interface resources
-        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        // Moved stop_proxy_internal call down to allow retention decision
 
         // Update state
         *self.latest_node.lock().unwrap() = node_opt.clone();
@@ -137,6 +140,8 @@ impl<R: Runtime> ProxyService<R> {
         // 4. Generate & Write Config
         self.stage_databases()?;
 
+        // Generate Config
+        // Note: We need settings for port allocation and system proxy retention checks
         let settings = match self.manager.load_settings() {
             Ok(s) => s,
             Err(e) => {
@@ -144,6 +149,32 @@ impl<R: Runtime> ProxyService<R> {
                 crate::settings::AppSettings::default()
             }
         };
+
+        // Decision: Retain System Proxy?
+        // We retain if:
+        // 1. Proxy was running
+        // 2. TUN mode matches previous state (switching modes might need clean slate)
+        // 3. Mixed Port matches previous state (technically we can overwrite, but let's be safe)
+        // Note: For now, we assume if is_running is true, we can retain.
+        // enable_system_proxy will overwrite settings anyway if they changed.
+        // The important part is avoiding 'disable'.
+        // Retain only if tun_mode hasn't changed severely.
+        let prev_tun = *self.tun_mode.lock().unwrap();
+        let retain_system_proxy = is_running && (prev_tun == tun_mode);
+
+        if is_running {
+            info!(
+                "Restarting proxy (retain_system_proxy={})...",
+                retain_system_proxy
+            );
+        }
+
+        // Full restart required (e.g., switched TUN mode or not running)
+        self.stop_proxy_internal(false, retain_system_proxy).await;
+
+        // Give OS a small grace period to release TUN interface resources
+        // Reduced from 200ms to 50ms for optimization
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
         // Allocate a dynamic port for Clash API with retries
         let mut clash_port = None;
@@ -198,7 +229,11 @@ impl<R: Runtime> ProxyService<R> {
                 .map_err(|e| e.to_string());
             if result.is_ok() {
                 if settings.system_proxy {
-                    self.enable_system_proxy(settings.mixed_port);
+                    if !retain_system_proxy {
+                        self.enable_system_proxy(settings.mixed_port);
+                    } else {
+                        info!("System proxy retention active, skipping redundant enable call.");
+                    }
                 }
 
                 // Wait for services to be ready
@@ -287,7 +322,11 @@ impl<R: Runtime> ProxyService<R> {
                 }
 
                 if settings.system_proxy {
-                    self.enable_system_proxy(settings.mixed_port);
+                    if !retain_system_proxy {
+                        self.enable_system_proxy(settings.mixed_port);
+                    } else {
+                        info!("System proxy retention active, skipping redundant enable call.");
+                    }
                 }
 
                 // Wait for services to be ready locally too
@@ -1305,10 +1344,31 @@ impl<R: Runtime> ProxyService<R> {
 
     pub async fn stop_proxy(&self, broadcast: bool) {
         let _lock = self.start_lock.lock().await;
-        self.stop_proxy_internal(broadcast).await;
+        self.stop_proxy_internal(broadcast, false).await;
     }
 
-    async fn stop_proxy_internal(&self, broadcast: bool) {
+    /// Synchronous cleanup for application exit (Cmd+Q)
+    /// Skips locks and async waits to ensure execution before process termination.
+    pub fn emergency_cleanup(&self) {
+        info!("Emergency cleanup triggered...");
+
+        // 1. Kill Child Process
+        if let Ok(mut lock) = self.child_process.lock() {
+            if let Some(mut child) = lock.take() {
+                info!("Killing process {}", child.id());
+                let _ = child.kill();
+                let _ = child.wait(); // Synchronous wait
+            }
+        }
+
+        // 2. Disable System Proxy
+        // We call disable_system_proxy which uses synchronous Command
+        self.disable_system_proxy();
+
+        info!("Emergency cleanup finished.");
+    }
+
+    async fn stop_proxy_internal(&self, broadcast: bool, retain_system_proxy: bool) {
         let mut cleanup_performed = false;
         let child_to_wait = { self.child_process.lock().unwrap().take() };
 
@@ -1335,62 +1395,79 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         // 3. Exhaustive Kill by Executable Path AND Name
-        let core_path = self.manager.get_core_path();
-        let core_canon = std::fs::canonicalize(&core_path).unwrap_or(core_path.clone());
-        let core_name = core_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("sing-box");
+        // Optimization: If we cleaned up the child process successfully, skip this expensive scan.
+        // We assume 'cleanup_performed' means we had a child handle.
+        // However, we want to be safe. Let's only skip if we are sure.
+        // For now, let's keep it but maybe optimize `start_proxy` to be cleaner.
+        // Actually, sys.refresh_all() is very slow (can be 500ms+ on loaded mac).
+        // If cleanup_performed is true, we likely got the main process.
+        // Let's skip exhaustive scan if cleanup_performed is true AND retain_system_proxy is true (fast restart).
+        // If we are strictly stopping (quit), we might want to be thorough.
 
-        let mut sys = System::new_all();
-        sys.refresh_all();
+        let should_scan = !cleanup_performed;
 
-        for process in sys.processes().values() {
-            let exe_matches = process
-                .exe()
-                .map(|e| std::fs::canonicalize(e).unwrap_or(e.to_path_buf()) == core_canon)
-                .unwrap_or(false);
-            let name_matches = process.name() == core_name;
+        if should_scan {
+            let core_path = self.manager.get_core_path();
+            let core_canon = std::fs::canonicalize(&core_path).unwrap_or(core_path.clone());
+            let core_name = core_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("sing-box");
 
-            if exe_matches || name_matches {
-                info!(
-                    "Killing remaining proxy process (pid: {}, name: {})",
-                    process.pid(),
-                    process.name()
-                );
-                process.kill_with(sysinfo::Signal::Kill);
-                cleanup_performed = true;
+            let mut sys = System::new_all();
+            sys.refresh_all();
+
+            for process in sys.processes().values() {
+                let exe_matches = process
+                    .exe()
+                    .map(|e| std::fs::canonicalize(e).unwrap_or(e.to_path_buf()) == core_canon)
+                    .unwrap_or(false);
+                let name_matches = process.name() == core_name;
+
+                if exe_matches || name_matches {
+                    info!(
+                        "Killing remaining proxy process (pid: {}, name: {})",
+                        process.pid(),
+                        process.name()
+                    );
+                    process.kill_with(sysinfo::Signal::Kill);
+                    cleanup_performed = true;
+                }
             }
         }
 
         // 4. Robust Port Release Check (Loop up to 3 seconds)
-        if let Ok(settings) = self.manager.load_settings() {
-            let port = settings.mixed_port;
-            let start = std::time::Instant::now();
-            let mut attempt = 0;
+        // Optimization: usage of kill_port_owner loop is a fallback.
+        // If we already performed cleanup (killed child), we trust it died.
+        // We only enter this fallback loop if we DIDN'T control the process (cleanup_performed = false).
+        // This fixes the 5s timeout issue where kill_port_owner might be returning false positives (e.g. via helper).
 
-            loop {
-                // kill_port_owner returns true if it found and attempted to kill a process
-                let found_and_killed = self.kill_port_owner(port);
+        if (!cleanup_performed) && self.manager.load_settings().is_ok() {
+            if let Ok(settings) = self.manager.load_settings() {
+                let port = settings.mixed_port;
+                let start = std::time::Instant::now();
+                let mut attempt = 0;
 
-                if !found_and_killed {
-                    // Double check if port is actually free by trying to bind to it briefly?
-                    // Or trust lsof. Trusting lsof for now as binding might have side effects or race conditions.
-                    // If lsof found nothing, we assume it's free.
-                    break;
+                loop {
+                    // kill_port_owner returns true if it found and attempted to kill a process
+                    let found_and_killed = self.kill_port_owner(port);
+
+                    if !found_and_killed {
+                        break;
+                    }
+
+                    if start.elapsed().as_secs() >= 5 {
+                        warn!("Timeout waiting for port {} to be released after 5s", port);
+                        break;
+                    }
+
+                    attempt += 1;
+                    debug!(
+                        "Port {} still in use (attempt {}), waiting...",
+                        port, attempt
+                    );
+                    tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
                 }
-
-                if start.elapsed().as_secs() >= 5 {
-                    warn!("Timeout waiting for port {} to be released after 5s", port);
-                    break;
-                }
-
-                attempt += 1;
-                debug!(
-                    "Port {} still in use (attempt {}), waiting...",
-                    port, attempt
-                );
-                tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
             }
         }
 
@@ -1400,7 +1477,9 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         // 5. Cleanup system proxy
-        self.disable_system_proxy();
+        if !retain_system_proxy {
+            self.disable_system_proxy();
+        }
         *self.clash_api_port.lock().unwrap() = None;
         if broadcast {
             let _ = self.app.emit("proxy-status-change", self.get_status());
@@ -1435,70 +1514,90 @@ impl<R: Runtime> ProxyService<R> {
         killed
     }
 
-    fn disable_system_proxy(&self) {
-        info!("Disabling system proxy (targeted)...");
-        // We only really care about Wi-Fi and Ethernet in most cases,
-        // but to be safe we list and check states first to avoid redundant 'off' commands.
-        if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
-            .arg("-listallnetworkservices")
-            .output()
-        {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for service in stdout.lines() {
-                if service.contains('*') || service.is_empty() {
-                    continue;
-                }
-                let s = service.trim();
+    pub fn warmup_network_cache(&self) {
+        if !self.active_network_services.lock().unwrap().is_empty() {
+            return; // Already populated
+        }
 
-                // Only try to disable if it's actually enabled to save time
-                // Check HTTP proxy status
-                if let Ok(out) = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-getwebproxy", s])
-                    .output()
-                {
-                    let res = String::from_utf8_lossy(&out.stdout);
-                    if res.contains("Enabled: Yes") {
-                        info!("Turning off Web Proxy for {}", s);
-                        let _ = std::process::Command::new("/usr/sbin/networksetup")
-                            .args(["-setwebproxystate", s, "off"])
-                            .output();
-                    }
+        // Spawn background thread to avoid blocking startup
+        let services_lock = self.active_network_services.clone();
+        std::thread::spawn(move || {
+            // info!("Warming up network service cache in background...");
+            if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
+                .arg("-listallnetworkservices")
+                .output()
+            {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let mut lock = services_lock.lock().unwrap();
+                // Check again in case populated while waiting
+                if !lock.is_empty() {
+                    return;
                 }
 
-                // Check HTTPS proxy status
-                if let Ok(out) = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-getsecurewebproxy", s])
-                    .output()
-                {
-                    let res = String::from_utf8_lossy(&out.stdout);
-                    if res.contains("Enabled: Yes") {
-                        info!("Turning off Secure Web Proxy for {}", s);
-                        let _ = std::process::Command::new("/usr/sbin/networksetup")
-                            .args(["-setsecurewebproxystate", s, "off"])
-                            .output();
+                for service in stdout.lines() {
+                    if service.contains('*') || service.is_empty() {
+                        continue;
                     }
-                }
-
-                // Check SOCKS status
-                if let Ok(out) = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-getsocksfirewallproxy", s])
-                    .output()
-                {
-                    let res = String::from_utf8_lossy(&out.stdout);
-                    if res.contains("Enabled: Yes") {
-                        info!("Turning off SOCKS Proxy for {}", s);
-                        let _ = std::process::Command::new("/usr/sbin/networksetup")
-                            .args(["-setsocksfirewallproxystate", s, "off"])
-                            .output();
-                    }
+                    lock.push(service.trim().to_string());
                 }
             }
+        });
+    }
+
+    fn disable_system_proxy(&self) {
+        // Optimization: Use cached services if available
+        let mut services_to_disable = self.active_network_services.lock().unwrap().clone();
+
+        // If cache is empty, we must fallback to scanning all (safety for first run / crash recovery)
+        if services_to_disable.is_empty() {
+            info!("Disabling system proxy (scanning all)...");
+            if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
+                .arg("-listallnetworkservices")
+                .output()
+            {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for service in stdout.lines() {
+                    if service.contains('*') || service.is_empty() {
+                        continue;
+                    }
+                    services_to_disable.push(service.trim().to_string());
+                }
+            }
+        } else {
+            info!("Disabling system proxy (targeted via cache)...");
         }
+
+        for s in services_to_disable {
+            // Optimization: Blind Disable.
+            // Checking "is enabled" takes 3 extra exec calls per service.
+            // Just running "off" is faster and harmless (idempotent).
+
+            // Web Proxy
+            let _ = std::process::Command::new("/usr/sbin/networksetup")
+                .args(["-setwebproxystate", &s, "off"])
+                .output();
+
+            // Secure Web Proxy
+            let _ = std::process::Command::new("/usr/sbin/networksetup")
+                .args(["-setsecurewebproxystate", &s, "off"])
+                .output();
+
+            // SOCKS Proxy
+            let _ = std::process::Command::new("/usr/sbin/networksetup")
+                .args(["-setsocksfirewallproxystate", &s, "off"])
+                .output();
+        }
+
+        // Clear cache
+        self.active_network_services.lock().unwrap().clear();
         info!("disable_system_proxy finished");
     }
 
     fn enable_system_proxy(&self, port: u16) {
         info!("Enabling system proxy on port {}...", port);
+        // Clean cache before refilling
+        self.active_network_services.lock().unwrap().clear();
+
         if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
             .arg("-listallnetworkservices")
             .output()
@@ -1513,12 +1612,15 @@ impl<R: Runtime> ProxyService<R> {
                     continue;
                 }
 
+                let mut success = true;
+
                 // HTTP
                 if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
                     .args(["-setwebproxy", s, "127.0.0.1", &port.to_string()])
                     .output()
                 {
                     if !o.status.success() {
+                        success = false;
                         error!(
                             "Failed to set web proxy for {}: {}",
                             s,
@@ -1526,17 +1628,12 @@ impl<R: Runtime> ProxyService<R> {
                         );
                     }
                 }
-                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-setwebproxystate", s, "on"])
-                    .output()
-                {
-                    if !o.status.success() {
-                        error!(
-                            "Failed to enable web proxy for {}: {}",
-                            s,
-                            String::from_utf8_lossy(&o.stderr)
-                        );
-                    }
+
+                // Enable HTTP
+                if success {
+                    let _ = std::process::Command::new("/usr/sbin/networksetup")
+                        .args(["-setwebproxystate", s, "on"])
+                        .output();
                 }
 
                 // HTTPS
@@ -1545,6 +1642,7 @@ impl<R: Runtime> ProxyService<R> {
                     .output()
                 {
                     if !o.status.success() {
+                        success = false;
                         error!(
                             "Failed to set secure web proxy for {}: {}",
                             s,
@@ -1552,17 +1650,12 @@ impl<R: Runtime> ProxyService<R> {
                         );
                     }
                 }
-                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-setsecurewebproxystate", s, "on"])
-                    .output()
-                {
-                    if !o.status.success() {
-                        error!(
-                            "Failed to enable secure web proxy for {}: {}",
-                            s,
-                            String::from_utf8_lossy(&o.stderr)
-                        );
-                    }
+
+                // Enable HTTPS
+                if success {
+                    let _ = std::process::Command::new("/usr/sbin/networksetup")
+                        .args(["-setsecurewebproxystate", s, "on"])
+                        .output();
                 }
 
                 // SOCKS
@@ -1571,6 +1664,7 @@ impl<R: Runtime> ProxyService<R> {
                     .output()
                 {
                     if !o.status.success() {
+                        success = false;
                         error!(
                             "Failed to set socks proxy for {}: {}",
                             s,
@@ -1578,22 +1672,23 @@ impl<R: Runtime> ProxyService<R> {
                         );
                     }
                 }
-                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-setsocksfirewallproxystate", s, "on"])
-                    .output()
-                {
-                    if !o.status.success() {
-                        error!(
-                            "Failed to enable socks proxy for {}: {}",
-                            s,
-                            String::from_utf8_lossy(&o.stderr)
-                        );
-                    }
+
+                // Enable SOCKS
+                if success {
+                    let _ = std::process::Command::new("/usr/sbin/networksetup")
+                        .args(["-setsocksfirewallproxystate", s, "on"])
+                        .output();
+                }
+
+                if success {
+                    self.active_network_services
+                        .lock()
+                        .unwrap()
+                        .push(s.to_string());
                 }
             }
         } else {
             error!("Failed to list network services");
-            println!("DEBUG: Failed to list network services");
         }
     }
 

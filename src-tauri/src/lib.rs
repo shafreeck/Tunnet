@@ -373,6 +373,14 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .on_menu_event(|app, event| {
+            if event.id() == "quit" {
+                log::info!("Menu Item 'Quit' clicked. Performing emergency cleanup...");
+                let service = app.state::<ProxyService<tauri::Wry>>();
+                service.emergency_cleanup();
+                std::process::exit(0);
+            }
+        })
         .on_window_event(|window, event| {
             let label = window.label();
             match event {
@@ -404,7 +412,20 @@ pub fn run() {
                 )?;
             }
 
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::menu::{Menu, MenuItem, Submenu};
+                let app_handle = app.handle();
+                let quit_i =
+                    MenuItem::with_id(app_handle, "quit", "Quit Tunnet", true, Some("Cmd+Q"))
+                        .unwrap();
+                let submenu = Submenu::with_items(app_handle, "Tunnet", true, &[&quit_i]).unwrap();
+                let menu = Menu::with_items(app_handle, &[&submenu]).unwrap();
+                app_handle.set_menu(menu).unwrap();
+            }
+
             let proxy_service = ProxyService::new(app.handle().clone());
+            proxy_service.init(); // Clean up orphans and warmup cache
             app.manage(proxy_service);
 
             // System Tray Setup
@@ -525,6 +546,14 @@ pub fn run() {
         .run(|_app_handle, event| {
             if let tauri::RunEvent::ExitRequested { api, .. } = event {
                 api.prevent_exit();
+                log::info!("Exit requested (System signal), performing emergency cleanup...");
+
+                let app = _app_handle.clone();
+                let service = app.state::<ProxyService<tauri::Wry>>();
+                service.emergency_cleanup();
+
+                log::info!("Exiting process now.");
+                std::process::exit(0);
             }
         });
 }

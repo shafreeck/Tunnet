@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { listen, emit } from "@tauri-apps/api/event"
 import { AppSettings, defaultSettings, getAppSettings, saveAppSettings } from "@/lib/settings"
-import { Power, Settings, Globe, Shield, Zap, LayoutDashboard, Server } from "lucide-react"
+import { Power, Settings, Globe, Shield, Zap, LayoutDashboard, Server, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "next-themes"
 import { useCallback } from "react"
@@ -29,6 +29,7 @@ export default function TrayPage() {
     const [latency, setLatency] = useState<number | null>(null)
     const [traffic, setTraffic] = useState({ up: 0, down: 0 })
     const [trafficHistory, setTrafficHistory] = useState<{ up: number, down: number }[]>(new Array(30).fill({ up: 0, down: 0 }))
+    const [isQuitting, setIsQuitting] = useState(false)
 
     const ipInfoRef = useRef(ipInfo)
     useEffect(() => { ipInfoRef.current = ipInfo }, [ipInfo])
@@ -280,6 +281,17 @@ export default function TrayPage() {
             setIsTransitioning(false)
         }
     }
+
+    const handleQuit = useCallback(async () => {
+        if (isQuitting) return
+        setIsQuitting(true)
+        try {
+            await invoke("quit_app")
+        } catch (e) {
+            console.error("Quit failed", e)
+            setIsQuitting(false)
+        }
+    }, [isQuitting])
 
     // Determine active node:
     // 1. Try finding by ID from full list (Best for display details if list is fresh)
@@ -542,10 +554,16 @@ export default function TrayPage() {
             <div className="mt-auto px-4 py-3 border-t border-white/[0.03] flex items-center justify-between bg-black/5 dark:bg-white/5">
                 <span className="text-[10px] font-mono opacity-20 whitespace-nowrap overflow-hidden max-w-[80px]">V0.1.0</span>
                 <button
-                    onClick={() => invoke("quit_app")}
-                    className="text-[10px] font-bold tracking-widest px-4 py-1.5 rounded-xl transition-all bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white active:scale-95 shadow-lg shadow-red-500/20 border border-red-500/20 hover:border-red-500"
+                    onClick={handleQuit}
+                    disabled={isQuitting}
+                    className={cn(
+                        "text-[10px] font-bold tracking-widest px-4 py-1.5 rounded-xl transition-all shadow-lg shadow-red-500/20 border border-red-500/20",
+                        isQuitting
+                            ? "bg-red-500 text-white opacity-80 cursor-wait min-w-[60px] flex justify-center"
+                            : "bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white hover:border-red-500 active:scale-95"
+                    )}
                 >
-                    {t('tray.exit')}
+                    {isQuitting ? <Loader2 size={12} className="animate-spin" /> : t('tray.exit')}
                 </button>
             </div>
         </div >
