@@ -136,9 +136,15 @@ export default function TrayPage() {
         }
     }, [status.is_running, settings.active_target_id, status.tun_mode, settings.system_proxy])
 
+    // Determine active node:
+    // 1. Try finding by ID from full list (Best for display details if list is fresh)
+    // 2. Fallback to status.node (Reliable if running/last used, but might be missing if cold start)
+    // 3. Fallback to first node
+    const activeNode = nodes.find(n => n.id === settings.active_target_id) || status.node || nodes[0]
+
     // Check latency for active node
     const checkLatency = useCallback(() => {
-        const nodeId = settings.active_target_id
+        const nodeId = activeNode?.id
         if (!nodeId) {
             setLatency(null)
             return
@@ -150,7 +156,7 @@ export default function TrayPage() {
         invoke<number>("url_test", { nodeId })
             .then(lat => setLatency(lat))
             .catch(e => console.error("Latency test failed", e))
-    }, [settings.active_target_id])
+    }, [activeNode])
 
     useEffect(() => {
         checkLatency()
@@ -293,11 +299,7 @@ export default function TrayPage() {
         }
     }, [isQuitting])
 
-    // Determine active node:
-    // 1. Try finding by ID from full list (Best for display details if list is fresh)
-    // 2. Fallback to status.node (Reliable if running/last used, but might be missing if cold start)
-    // 3. Fallback to first node
-    const activeNode = nodes.find(n => n.id === settings.active_target_id) || status.node || nodes[0]
+
 
     const isDark = mounted && resolvedTheme === "dark"
 

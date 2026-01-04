@@ -2301,7 +2301,7 @@ impl<R: Runtime> ProxyService<R> {
                     match std::net::TcpListener::bind("127.0.0.1:0") {
                         Ok(l) => {
                             if let Ok(addr) = l.local_addr() {
-                                probe_plan.push((node.clone(), addr.port()));
+                                probe_plan.push((node.clone(), 0));
                             }
                         }
                         Err(e) => warn!("Failed to bind ephemeral port: {}", e),
@@ -2457,76 +2457,146 @@ impl<R: Runtime> ProxyService<R> {
         cmd.arg("run")
             .arg("-c")
             .arg(&config_file_path)
+            .arg("--disable-color")
             .arg("-D")
             .arg(&app_local_data);
 
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
         let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+
+        let stderr = child.stderr.take().unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let output_log = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        let output_log_clone = output_log.clone();
+        let output_log_clone2 = output_log.clone();
+        let output_log_clone3 = output_log.clone();
+        let output_log_clone4 = output_log.clone();
+
+        std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader};
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(l) = line {
+                    if let Ok(mut g) = output_log_clone3.lock() {
+                        g.push_str(&l);
+                        g.push('\n');
+                    }
+                }
+            }
+        });
+
+        std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader};
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(l) = line {
+                    if let Ok(mut g) = output_log_clone4.lock() {
+                        g.push_str(&l);
+                        g.push('\n');
+                    }
+                }
+            }
+        });
 
         // Wait for startup
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-        let mut futures = Vec::new();
-        // Client usage: Since we need distinct proxies, we create a new client for each request
-        // or reconfigure? reqwest::Client cannot change proxy after build.
-        // But we can create many clients.
+        let mut updates: std::collections::HashMap<String, crate::profile::LocationInfo> =
+            std::collections::HashMap::new();
+        // Parse logs for ports
+        let stdout_logs = output_log_clone2.lock().unwrap().clone();
+        let stderr_logs = output_log_clone.lock().unwrap().clone();
 
-        for (node, port) in probe_plan {
-            let url = "http://ip-api.com/json";
-            let proxy_url = format!("http://127.0.0.1:{}", port);
+        let all_logs = format!("{}\n{}", stdout_logs, stderr_logs);
+        let mut port_map = std::collections::HashMap::new();
 
-            futures.push(tokio::spawn(async move {
-                let proxy = match reqwest::Proxy::all(&proxy_url) {
-                    Ok(p) => p,
-                    Err(_) => return None,
-                };
-                let client = match reqwest::Client::builder()
-                    .proxy(proxy)
-                    .timeout(std::time::Duration::from_secs(10))
-                    .build()
-                {
-                    Ok(c) => c,
-                    Err(_) => return None,
-                };
-
-                let start_time = std::time::Instant::now();
-
-                match client.get(url).send().await {
-                    Ok(res) => {
-                        let duration = start_time.elapsed().as_millis() as u64;
-                        if let Ok(json) = res.json::<serde_json::Value>().await {
-                            let info = crate::profile::LocationInfo {
-                                ip: json
-                                    .get("query")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                country: json
-                                    .get("country")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                city: json
-                                    .get("city")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                lat: json.get("lat").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                                lon: json.get("lon").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                                isp: json
-                                    .get("isp")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string(),
-                                latency: duration,
-                            };
-                            Some((node.id, info))
-                        } else {
-                            None
+        for line in all_logs.lines() {
+            // Pattern 1: inbound/mixed[tag]: listen tcp 127.0.0.1:xxx
+            // Pattern 2: inbound/mixed[tag]: tcp server started at 127.0.0.1:xxx
+            if line.contains("inbound/mixed[")
+                && (line.contains("]: listen tcp 127.0.0.1:")
+                    || line.contains("]: tcp server started at 127.0.0.1:"))
+            {
+                // Extract tag
+                if let Some(start) = line.find("inbound/mixed[") {
+                    let rest = &line[start + 14..];
+                    if let Some(end) = rest.find("]:") {
+                        let tag = &rest[..end];
+                        // Extract port
+                        if let Some(port_start) = line.rfind(":") {
+                            if let Ok(port) = line[port_start + 1..].trim().parse::<u16>() {
+                                port_map.insert(tag.to_string(), port);
+                            }
                         }
                     }
-                    Err(_) => None,
                 }
-            }));
+            }
+        }
+
+        let mut futures: Vec<
+            tokio::task::JoinHandle<Option<(String, crate::profile::LocationInfo)>>,
+        > = Vec::new();
+        // Client usage
+        for (node, _) in probe_plan {
+            let tag = format!("in_{}", node.id);
+            if let Some(port) = port_map.get(&tag) {
+                let proxy_url = format!("http://127.0.0.1:{}", port);
+                let node_id = node.id.clone();
+                futures.push(tokio::spawn(async move {
+                    let proxy = match reqwest::Proxy::all(&proxy_url) {
+                        Ok(p) => p,
+                        Err(_) => return None,
+                    };
+                    let client = match reqwest::Client::builder()
+                        .proxy(proxy)
+                        .timeout(std::time::Duration::from_secs(10))
+                        .build()
+                    {
+                        Ok(c) => c,
+                        Err(_) => return None,
+                    };
+
+                    let url = "http://ip-api.com/json";
+                    let start_time = std::time::Instant::now();
+
+                    match client.get(url).send().await {
+                        Ok(res) => {
+                            let duration = start_time.elapsed().as_millis() as u64;
+                            if let Ok(json) = res.json::<serde_json::Value>().await {
+                                let info = crate::profile::LocationInfo {
+                                    ip: json
+                                        .get("query")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    country: json
+                                        .get("country")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    city: json
+                                        .get("city")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    lat: json.get("lat").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                    lon: json.get("lon").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                                    isp: json
+                                        .get("isp")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    latency: duration,
+                                };
+                                Some((node_id, info))
+                            } else {
+                                None
+                            }
+                        }
+                        Err(_) => None,
+                    }
+                }));
+            }
         }
 
         let results = futures_util::future::join_all(futures).await;
@@ -2564,7 +2634,7 @@ impl<R: Runtime> ProxyService<R> {
                     match std::net::TcpListener::bind("127.0.0.1:0") {
                         Ok(l) => {
                             if let Ok(addr) = l.local_addr() {
-                                probe_plan.push((node.clone(), addr.port()));
+                                probe_plan.push((node.clone(), 0));
                             }
                         }
                         Err(e) => warn!("Failed to bind ephemeral port: {}", e),
@@ -2716,58 +2786,123 @@ impl<R: Runtime> ProxyService<R> {
         cmd.arg("run")
             .arg("-c")
             .arg(&config_file_path)
+            .arg("--disable-color")
             .arg("-D")
             .arg(&app_local_data);
 
-        cmd.stdout(Stdio::null()).stderr(Stdio::null());
-
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
         let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+
+        let stderr = child.stderr.take().unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let output_log = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        let output_log_clone = output_log.clone();
+        let output_log_clone2 = output_log.clone();
+        let output_log_clone3 = output_log.clone();
+        let output_log_clone4 = output_log.clone();
+
+        std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader};
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(l) = line {
+                    if let Ok(mut g) = output_log_clone3.lock() {
+                        g.push_str(&l);
+                        g.push('\n');
+                    }
+                }
+            }
+        });
+
+        std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader};
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(l) = line {
+                    if let Ok(mut g) = output_log_clone4.lock() {
+                        g.push_str(&l);
+                        g.push('\n');
+                    }
+                }
+            }
+        });
 
         // Wait for startup
         tokio::time::sleep(std::time::Duration::from_millis(800)).await;
 
-        let mut futures = Vec::new();
+        let mut futures: Vec<tokio::task::JoinHandle<Option<(String, u64)>>> = Vec::new();
 
-        for (node, port) in probe_plan {
-            let url = "http://www.gstatic.com/generate_204";
-            let proxy_url = format!("http://127.0.0.1:{}", port);
+        let mut updates: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+        // Parse logs for ports
+        let stdout_logs = output_log_clone2.lock().unwrap().clone();
+        let stderr_logs = output_log_clone.lock().unwrap().clone();
 
-            futures.push(tokio::spawn(async move {
-                let proxy = match reqwest::Proxy::all(&proxy_url) {
-                    Ok(p) => p,
-                    Err(_) => return None,
-                };
-                let client = match reqwest::Client::builder()
-                    .proxy(proxy)
-                    .timeout(std::time::Duration::from_secs(5))
-                    .build()
-                {
-                    Ok(c) => c,
-                    Err(_) => return None,
-                };
+        let all_logs = format!("{}\n{}", stdout_logs, stderr_logs);
+        let mut port_map = std::collections::HashMap::new();
 
-                let start_time = std::time::Instant::now();
-
-                match client.get(url).send().await {
-                    Ok(res) => {
-                        let duration = start_time.elapsed().as_millis() as u64;
-                        // Accept 204 or success (some captive portals return 200)
-                        if res.status().is_success() {
-                            Some((node.id, duration))
-                        } else {
-                            None
+        for line in all_logs.lines() {
+            if line.contains("inbound/mixed[")
+                && (line.contains("]: listen tcp 127.0.0.1:")
+                    || line.contains("]: tcp server started at 127.0.0.1:"))
+            {
+                // Extract tag
+                if let Some(start) = line.find("inbound/mixed[") {
+                    let rest = &line[start + 14..];
+                    if let Some(end) = rest.find("]:") {
+                        let tag = &rest[..end];
+                        // Extract port
+                        if let Some(port_start) = line.rfind(":") {
+                            if let Ok(port) = line[port_start + 1..].trim().parse::<u16>() {
+                                port_map.insert(tag.to_string(), port);
+                            }
                         }
                     }
-                    Err(_) => None,
                 }
-            }));
+            }
+        }
+
+        for (node, _) in probe_plan {
+            let url = "http://www.gstatic.com/generate_204";
+            let tag = format!("in_{}", node.id);
+            if let Some(port) = port_map.get(&tag) {
+                let proxy_url = format!("http://127.0.0.1:{}", port);
+                let node_id = node.id.clone();
+                futures.push(tokio::spawn(async move {
+                    let proxy = match reqwest::Proxy::all(&proxy_url) {
+                        Ok(p) => p,
+                        Err(_) => return None,
+                    };
+                    let client = match reqwest::Client::builder()
+                        .proxy(proxy)
+                        .timeout(std::time::Duration::from_secs(5))
+                        .build()
+                    {
+                        Ok(c) => c,
+                        Err(_) => return None,
+                    };
+
+                    let start_time = std::time::Instant::now();
+
+                    match client.get(url).send().await {
+                        Ok(res) => {
+                            let duration = start_time.elapsed().as_millis() as u64;
+                            // Accept 204 or success (some captive portals return 200)
+                            if res.status().is_success() {
+                                Some((node_id, duration))
+                            } else {
+                                None
+                            }
+                        }
+                        Err(_) => None,
+                    }
+                }));
+            }
         }
 
         let results = futures_util::future::join_all(futures).await;
 
         let _ = child.kill();
 
-        let mut updates = std::collections::HashMap::new();
         for res in results {
             if let Ok(Some((id, latency))) = res {
                 updates.insert(id, latency);
@@ -2827,11 +2962,37 @@ impl<R: Runtime> ProxyService<R> {
             }
         }
 
-        // Alloc port
-        let port = match std::net::TcpListener::bind("127.0.0.1:0") {
-            Ok(l) => l.local_addr().map_err(|e| e.to_string())?.port(),
-            Err(e) => return Err(format!("Failed to bind port: {}", e)),
-        };
+        // Check if we are testing the currently active node WHILE proxy is running
+        // Optimization: Avoid spawning new process
+        if self.is_proxy_running() {
+            let status = self.get_status();
+            if let Some(active_node) = &status.node {
+                if active_node.id == node.id {
+                    // Use mixed port from settings
+                    if let Ok(settings) = self.manager.load_settings() {
+                        let port = settings.mixed_port;
+                        // Perform test directly
+                        let proxy_url = format!("http://127.0.0.1:{}", port);
+                        let url = "http://www.gstatic.com/generate_204";
+                        let proxy = reqwest::Proxy::all(&proxy_url).map_err(|e| e.to_string())?;
+                        let client = reqwest::Client::builder()
+                            .proxy(proxy)
+                            .timeout(std::time::Duration::from_secs(5))
+                            .build()
+                            .map_err(|e| e.to_string())?;
+
+                        let start_time = std::time::Instant::now();
+                        let res = client.get(url).send().await.map_err(|e| e.to_string())?;
+
+                        if res.status().is_success() {
+                            return Ok(start_time.elapsed().as_millis() as u64);
+                        } else {
+                            return Err(format!("Check failed with status: {}", res.status()));
+                        }
+                    }
+                }
+            }
+        }
 
         // Gen Config
         let mut cfg = crate::config::SingBoxConfig::new(None);
@@ -2851,7 +3012,7 @@ impl<R: Runtime> ProxyService<R> {
         let inbound_tag = "in_temp";
         let outbound_tag = "out_temp";
 
-        cfg = cfg.with_mixed_inbound(port, inbound_tag, false);
+        cfg = cfg.with_mixed_inbound(0, inbound_tag, false); // Port 0 for dynamic
 
         match node.protocol.as_str() {
             "vmess" => {
@@ -2977,6 +3138,7 @@ impl<R: Runtime> ProxyService<R> {
         cmd.arg("run")
             .arg("-c")
             .arg(&config_file_path)
+            .arg("--disable-color")
             .arg("-D")
             .arg(&app_local_data);
 
@@ -2990,13 +3152,15 @@ impl<R: Runtime> ProxyService<R> {
         let output_log = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
         let output_log_clone = output_log.clone();
         let output_log_clone2 = output_log.clone();
+        let output_log_clone3 = output_log.clone();
+        let output_log_clone4 = output_log.clone();
 
         std::thread::spawn(move || {
             use std::io::{BufRead, BufReader};
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
                 if let Ok(l) = line {
-                    if let Ok(mut g) = output_log_clone.lock() {
+                    if let Ok(mut g) = output_log_clone3.lock() {
                         g.push_str(&l);
                         g.push('\n');
                     }
@@ -3009,7 +3173,7 @@ impl<R: Runtime> ProxyService<R> {
             let reader = BufReader::new(stdout);
             for line in reader.lines() {
                 if let Ok(l) = line {
-                    if let Ok(mut g) = output_log_clone2.lock() {
+                    if let Ok(mut g) = output_log_clone4.lock() {
                         g.push_str(&l);
                         g.push('\n');
                     }
@@ -3029,6 +3193,44 @@ impl<R: Runtime> ProxyService<R> {
                 core_path.display(),
                 output_content,
                 config_file_path.display()
+            ));
+        }
+
+        // Parse port from logs
+        let mut port = 0;
+        let mut loop_count = 0;
+        // Wait up to 3 seconds for port allocation
+        loop {
+            if loop_count > 30 {
+                break;
+            }
+
+            let logs = output_log.lock().unwrap().clone();
+            for line in logs.lines() {
+                if line.contains("inbound/mixed[in_temp]: listen tcp 127.0.0.1:")
+                    || line.contains("inbound/mixed[in_temp]: tcp server started at 127.0.0.1:")
+                {
+                    if let Some(idx) = line.rfind(":") {
+                        if let Ok(p) = line[idx + 1..].trim().parse::<u16>() {
+                            port = p;
+                            break;
+                        }
+                    }
+                }
+            }
+            if port > 0 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            loop_count += 1;
+        }
+
+        if port == 0 {
+            let _ = child.kill();
+            let output = output_log_clone.lock().unwrap().clone();
+            return Err(format!(
+                "Failed to parse port from sing-box log. Output: {}",
+                output
             ));
         }
 
