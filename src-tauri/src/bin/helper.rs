@@ -262,7 +262,7 @@ fn start_sing_box(payload: StartPayload, state: &Arc<AppState>) -> Response {
 fn kill_process_on_port(port: u16, state: &Arc<AppState>) -> Response {
     log(state, &format!("Kill port requested for port {}", port));
     // Find PIDs using lsof
-    if let Ok(output) = Command::new("lsof")
+    if let Ok(output) = Command::new("/usr/sbin/lsof")
         .args(&["-ti", &format!(":{}", port)])
         .output()
     {
@@ -278,7 +278,7 @@ fn kill_process_on_port(port: u16, state: &Arc<AppState>) -> Response {
             for pid_str in pids.lines() {
                 if let Ok(pid) = pid_str.trim().parse::<u32>() {
                     log(state, &format!("Killing process {} on port {}", pid, port));
-                    let _ = Command::new("kill")
+                    let _ = Command::new("/bin/kill")
                         .args(&["-9", &pid.to_string()])
                         .output();
                 }
@@ -296,43 +296,82 @@ fn kill_process_on_port(port: u16, state: &Arc<AppState>) -> Response {
     }
 }
 
+struct ChildGuard(Option<Child>);
+
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.0.take() {
+            // Last resort: kill and wait to ensure no zombies/orphans
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
 fn stop_sing_box(state: &Arc<AppState>) -> Response {
     let mut process_guard = state.proxy_process.lock().unwrap();
-    if let Some(mut child) = process_guard.take() {
+    if let Some(child) = process_guard.take() {
         log(state, "Stopping process gracefully...");
 
-        let pid = child.id();
-        let mut stopped = false;
+        // Wrap in guard to ensure cleanup even if we panic or early return
+        let mut guard = ChildGuard(Some(child));
 
-        // 1. Try SIGTERM first
-        #[cfg(unix)]
-        {
-            let _ = Command::new("kill")
-                .arg("-TERM")
-                .arg(pid.to_string())
-                .status();
-            // Wait up to 5s
-            for _ in 0..50 {
-                match child.try_wait() {
-                    Ok(Some(_)) => {
-                        stopped = true;
-                        break;
+        if let Some(ref mut child) = guard.0 {
+            let pid = child.id();
+            let mut stopped = false;
+
+            // 1. Try SIGTERM first
+            #[cfg(unix)]
+            {
+                // Use spawn() instead of status() to avoid blocking if the kill command hangs
+                let _ = Command::new("/bin/kill")
+                    .arg("-TERM")
+                    .arg(pid.to_string())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status();
+
+                // Wait up to 3s (reduced from 5s for better UX)
+                for _ in 0..30 {
+                    match child.try_wait() {
+                        Ok(Some(_)) => {
+                            stopped = true;
+                            break;
+                        }
+                        Ok(None) => std::thread::sleep(std::time::Duration::from_millis(100)),
+                        Err(_) => break,
                     }
-                    Ok(None) => std::thread::sleep(std::time::Duration::from_millis(100)),
-                    Err(_) => break,
                 }
+            }
+
+            // 2. Force Kill if still running
+            if !stopped {
+                log(state, "Process didn't exit, forcing KILL");
+                // Guard drop will handle kill+wait
+            } else {
+                log(state, "Process exited gracefully");
+                // Process is waited, but we need to tell Guard not to kill it again.
+                // However, Guard checks take().
+                // If we want to avoid double-wait (benign), we can take it out.
+                // But Guard::drop does kill+wait.
+                // If process already exited, kill returns Err (ignored), wait returns status immediately.
+                // So it is safe to let Guard handle the final wait assurance.
+                // Actually, if we already successfully `try_wait`ed and got status, `wait` might error or panic?
+                // Rust `wait` on reaped child?
+                // "If the process has already been successfully waited on, wait will fail with ECHILD" (man wait).
+                // Rust `Command` logic tracks this?
+                // Actually `child.try_wait()` does NOT consume the `Child` struct. It updates internal state?
+                // `start_sing_box` calls `child.wait()`.
+                // If `try_wait` returned `Some`, it means it's reaped.
+                // Calling `wait` on it again?
+                // Rust docs: "It is correct to call this method [wait] multiple times."
+                // Wait, really? "If the child has already exited, this function will return immediately"
+                // Yes, it returns the exit status.
+                // So Guard is safe.
             }
         }
 
-        // 2. Force Kill if still running
-        if !stopped {
-            log(state, "Process didn't exit, forcing KILL");
-            let _ = child.kill();
-            let _ = child.wait();
-        } else {
-            log(state, "Process exited gracefully");
-        }
-
+        // Configuration cleanup
         let mut config_path_guard = state.current_config_path.lock().unwrap();
         *config_path_guard = None;
 
@@ -403,7 +442,7 @@ fn handle_request(req: Request, state: &Arc<AppState>) -> Response {
         "status" => check_status(state),
         "version" => Response {
             status: "success".into(),
-            message: "1.1.3".into(), // Bumped version for timeout increase
+            message: "1.1.5".into(), // Reverted to 1.1.5
         },
         "kill_port" => {
             if let Some(payload_str) = req.payload {

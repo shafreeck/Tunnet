@@ -38,6 +38,11 @@ pub struct Inbound {
     // Mixed specific
     #[serde(skip_serializing_if = "Option::is_none")]
     pub set_system_proxy: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tcp_fast_open: Option<bool>,
+    // Added based on user feedback to solve TIME_WAIT
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reuse_addr: Option<bool>,
     // TUN specific
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_route: Option<bool>,
@@ -361,6 +366,8 @@ impl SingBoxConfig {
             listen: Some("127.0.0.1".to_string()),
             listen_port: Some(port),
             set_system_proxy: Some(set_system_proxy),
+            tcp_fast_open: None,
+            reuse_addr: None,
             auto_route: None,
             strict_route: None,
             address: None,
@@ -380,6 +387,8 @@ impl SingBoxConfig {
             listen: None,
             listen_port: None,
             set_system_proxy: None,
+            tcp_fast_open: None,
+            reuse_addr: None,
             auto_route: Some(true),
             strict_route: Some(true),
             address: Some(vec!["172.19.0.1/30".to_string()]),

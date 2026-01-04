@@ -25,9 +25,6 @@ struct StartPayload {
 }
 
 #[derive(Serialize)]
-struct KillPortPayload {
-    port: u16,
-}
 
 pub struct HelperClient;
 
@@ -129,21 +126,5 @@ impl HelperClient {
         };
         let resp = self.send_request(req)?;
         Ok(resp.message)
-    }
-
-    pub fn kill_port(&self, port: u16) -> Result<(), Box<dyn Error>> {
-        let payload = KillPortPayload { port };
-        let payload_str = serde_json::to_string(&payload)?;
-
-        let req = Request {
-            command: "kill_port".to_string(),
-            payload: Some(payload_str),
-        };
-        let resp = self.send_request(req)?;
-        if resp.status == "success" {
-            Ok(())
-        } else {
-            Err(resp.message.into())
-        }
     }
 }

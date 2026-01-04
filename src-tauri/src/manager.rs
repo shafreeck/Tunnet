@@ -165,7 +165,10 @@ impl<R: Runtime> CoreManager<R> {
     }
 
     async fn download_core(&self) -> Result<(), String> {
-        let client = Client::new();
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .unwrap_or_default();
         let res = client
             .get(SING_BOX_RELEASE_URL)
             .send()
@@ -524,7 +527,10 @@ impl<R: Runtime> CoreManager<R> {
 
     // Refactored from download_core to accept URL
     async fn download_and_install_core(&self, url: &str) -> Result<(), String> {
-        let client = Client::new();
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(600)) // Allow long download
+            .build()
+            .unwrap_or_default();
         let res = client.get(url).send().await.map_err(|e| e.to_string())?;
 
         if !res.status().is_success() {

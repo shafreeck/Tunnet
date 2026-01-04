@@ -1,5 +1,5 @@
 use crate::manager::CoreManager;
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, info, warn};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use sysinfo::System;
@@ -111,10 +111,14 @@ impl<R: Runtime> ProxyService<R> {
         // mode: "global" | "rule" | "direct"
         routing_mode: String,
     ) -> Result<(), String> {
+        info!("start_proxy: acquiring lock...");
         let _lock = self.start_lock.lock().await;
+        info!("start_proxy: lock acquired, checking download...");
 
         self.manager.check_and_download().await?;
+        info!("start_proxy: download check done, ensuring DBs...");
         self.manager.ensure_databases().await?;
+        info!("start_proxy: DBs ensured. Preparing config.");
 
         let core_path = self.manager.get_core_path();
         let routing_mode = routing_mode.to_lowercase();
@@ -184,7 +188,9 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         // Full restart required (e.g., switched TUN mode or not running)
+        info!("start_proxy: calling stop_proxy_internal...");
         self.stop_proxy_internal(false, retain_system_proxy).await;
+        info!("start_proxy: stop_proxy_internal returned.");
 
         // Give OS a small grace period to release TUN interface resources
         // Reduced from 200ms to 50ms for optimization
@@ -225,260 +231,233 @@ impl<R: Runtime> ProxyService<R> {
             .unwrap()
             .join("config.json");
 
-        // If TUN mode, use Helper
-        if tun_mode {
-            info!("Starting proxy in TUN mode via Helper...");
-            let client = crate::helper_client::HelperClient::new();
-            let result = client
-                .start_proxy(
-                    std::fs::read_to_string(&config_file_path).map_err(|e| e.to_string())?,
-                    core_path.to_string_lossy().to_string(),
-                    self.app
-                        .path()
-                        .app_local_data_dir()
-                        .unwrap()
-                        .to_string_lossy()
-                        .to_string(),
-                )
-                .map_err(|e| e.to_string());
-            if result.is_ok() {
-                if settings.system_proxy {
-                    if !retain_system_proxy {
-                        self.enable_system_proxy(settings.mixed_port);
-                    } else {
-                        info!("System proxy retention active, skipping redundant enable call.");
-                    }
-                }
+        // Loop for retrying startup if port is temporarily held (TIME_WAIT race)
+        let max_retries = 60;
+        let mut last_error = String::new();
 
-                // Wait for services to be ready
-                if !self.wait_for_port(settings.mixed_port, 2000).await {
-                    return Err(format!(
-                        "Proxy port {} is not responding after startup. Check logs for details.",
-                        settings.mixed_port
-                    ));
-                }
-                if let Some(p) = clash_port {
-                    if !self.wait_for_port(p, 2000).await {
-                        return Err(format!(
-                            "Clash API port {} is not responding after startup.",
-                            p
-                        ));
-                    }
-                }
-                let _ = self.app.emit("proxy-status-change", self.get_status());
+        for attempt in 1..=max_retries {
+            if attempt > 1 {
+                debug!("Retry attempt {} for proxy startup...", attempt);
             }
-            return result;
-        }
 
-        // Local Process Mode
-        let app_local_data = self.app.path().app_local_data_dir().unwrap();
-
-        let mut cmd = Command::new(core_path);
-        cmd.arg("run")
-            .arg("-c")
-            .arg(&config_file_path)
-            .arg("--disable-color")
-            .arg("-D")
-            .arg(&app_local_data);
-
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-
-        match cmd.spawn() {
-            Ok(mut child) => {
-                info!("Proxy core spawning, pid: {}", child.id());
-
-                let stdout = child.stdout.take().unwrap();
-                let stderr = child.stderr.take().unwrap();
-                let app_handle = self.app.clone();
-                let app_handle_err = self.app.clone();
-
-                // Capture early stderr for error reporting
-                let startup_stderr = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-                let stderr_capture = startup_stderr.clone();
-
-                std::thread::spawn(move || {
-                    use std::io::{BufRead, BufReader};
-                    let reader = BufReader::new(stdout);
-
-                    for line in reader.lines() {
-                        if let Ok(l) = line {
-                            // ANSI Colors
-                            const ANSI_RESET: &str = "\x1b[0m";
-                            const ANSI_RED: &str = "\x1b[31m";
-                            const ANSI_GREEN: &str = "\x1b[32m";
-                            const ANSI_YELLOW: &str = "\x1b[33m";
-                            const ANSI_CYAN: &str = "\x1b[36m";
-                            const ANSI_GRAY: &str = "\x1b[90m";
-
-                            if l.starts_with("INFO") {
-                                let rest = l.strip_prefix("INFO").unwrap_or("");
-                                let msg = rest.trim_start();
-                                info!("[Core] {}", msg);
-                                let colored = format!("{}INFO{}{}", ANSI_GREEN, ANSI_RESET, rest);
-                                let _ = app_handle.emit("proxy-log", colored);
-                            } else if l.starts_with("WARN") {
-                                let rest = l.strip_prefix("WARN").unwrap_or("");
-                                let msg = rest.trim_start();
-                                warn!("[Core] {}", msg);
-                                let colored = format!("{}WARN{}{}", ANSI_YELLOW, ANSI_RESET, rest);
-                                let _ = app_handle.emit("proxy-log", colored);
-                            } else if l.starts_with("ERROR") {
-                                let rest = l.strip_prefix("ERROR").unwrap_or("");
-                                let msg = rest.trim_start();
-                                error!("[Core] {}", msg);
-                                let colored = format!("{}ERROR{}{}", ANSI_RED, ANSI_RESET, rest);
-                                let _ = app_handle.emit("proxy-log", colored);
-                            } else if l.starts_with("FATAL") {
-                                let rest = l.strip_prefix("FATAL").unwrap_or("");
-                                let msg = rest.trim_start();
-                                error!("[Core] {}", msg);
-                                let colored = format!("{}FATAL{}{}", ANSI_RED, ANSI_RESET, rest);
-                                let _ = app_handle.emit("proxy-log", colored);
-                            } else if l.starts_with("PANIC") {
-                                let rest = l.strip_prefix("PANIC").unwrap_or("");
-                                let msg = rest.trim_start();
-                                error!("[Core] {}", msg);
-                                let colored = format!("{}PANIC{}{}", ANSI_RED, ANSI_RESET, rest);
-                                let _ = app_handle.emit("proxy-log", colored);
-                            } else if l.starts_with("DEBUG") {
-                                let rest = l.strip_prefix("DEBUG").unwrap_or("");
-                                let msg = rest.trim_start();
-                                debug!("[Core] {}", msg);
-                                let colored = format!("{}DEBUG{}{}", ANSI_CYAN, ANSI_RESET, rest);
-                                let _ = app_handle.emit("proxy-log", colored);
-                            } else if l.starts_with("TRACE") {
-                                let rest = l.strip_prefix("TRACE").unwrap_or("");
-                                let msg = rest.trim_start();
-                                trace!("[Core] {}", msg);
-                                let colored = format!("{}TRACE{}{}", ANSI_GRAY, ANSI_RESET, rest);
-                                let _ = app_handle.emit("proxy-log", colored);
+            let startup_result = async {
+                // If TUN mode, use Helper
+                if tun_mode {
+                    info!("Starting proxy in TUN mode via Helper (attempt {})...", attempt);
+                    let client = crate::helper_client::HelperClient::new();
+                    let result = client
+                        .start_proxy(
+                            std::fs::read_to_string(&config_file_path).map_err(|e| e.to_string())?,
+                            core_path.to_string_lossy().to_string(),
+                            self.app
+                                .path()
+                                .app_local_data_dir()
+                                .unwrap()
+                                .to_string_lossy()
+                                .to_string(),
+                        )
+                        .map_err(|e| e.to_string());
+                    
+                    // Logic to handle success/failure of helper
+                    if result.is_ok() {
+                         if settings.system_proxy {
+                            if !retain_system_proxy {
+                                self.enable_system_proxy(settings.mixed_port);
                             } else {
-                                info!("[Core] {}", l);
-                                let _ = app_handle.emit("proxy-log", l);
+                                info!("System proxy retention active, skipping redundant enable call.");
                             }
                         }
-                    }
-                });
 
-                std::thread::spawn(move || {
-                    use std::io::{BufRead, BufReader};
-                    let reader = BufReader::new(stderr);
-
-                    for line in reader.lines() {
-                        if let Ok(l) = line {
-                            // ANSI Colors
-                            const ANSI_RESET: &str = "\x1b[0m";
-                            const ANSI_RED: &str = "\x1b[31m";
-                            const ANSI_GREEN: &str = "\x1b[32m";
-                            const ANSI_YELLOW: &str = "\x1b[33m";
-                            const ANSI_CYAN: &str = "\x1b[36m";
-                            const ANSI_GRAY: &str = "\x1b[90m";
-
-                            // Apply same parsing to stderr as sing-box often writes logs there
-                            if l.starts_with("INFO") {
-                                let rest = l.strip_prefix("INFO").unwrap_or("");
-                                let msg = rest.trim_start();
-                                info!("[Core] {}", msg);
-                                let colored = format!("{}INFO{}{}", ANSI_GREEN, ANSI_RESET, rest);
-                                let _ = app_handle_err.emit("proxy-log", colored);
-                            } else if l.starts_with("WARN") {
-                                let rest = l.strip_prefix("WARN").unwrap_or("");
-                                let msg = rest.trim_start();
-                                warn!("[Core] {}", msg);
-                                let colored = format!("{}WARN{}{}", ANSI_YELLOW, ANSI_RESET, rest);
-                                let _ = app_handle_err.emit("proxy-log", colored);
-                            } else if l.starts_with("ERROR") {
-                                let rest = l.strip_prefix("ERROR").unwrap_or("");
-                                let msg = rest.trim_start();
-                                error!("[Core] {}", msg);
-                                let colored = format!("{}ERROR{}{}", ANSI_RED, ANSI_RESET, rest);
-                                let _ = app_handle_err.emit("proxy-log", colored);
-                            } else if l.starts_with("FATAL") {
-                                let rest = l.strip_prefix("FATAL").unwrap_or("");
-                                let msg = rest.trim_start();
-                                error!("[Core] {}", msg);
-                                let colored = format!("{}FATAL{}{}", ANSI_RED, ANSI_RESET, rest);
-                                let _ = app_handle_err.emit("proxy-log", colored);
-                            } else if l.starts_with("PANIC") {
-                                let rest = l.strip_prefix("PANIC").unwrap_or("");
-                                let msg = rest.trim_start();
-                                error!("[Core] {}", msg);
-                                let colored = format!("{}PANIC{}{}", ANSI_RED, ANSI_RESET, rest);
-                                let _ = app_handle_err.emit("proxy-log", colored);
-                            } else if l.starts_with("DEBUG") {
-                                let rest = l.strip_prefix("DEBUG").unwrap_or("");
-                                let msg = rest.trim_start();
-                                debug!("[Core] {}", msg);
-                                let colored = format!("{}DEBUG{}{}", ANSI_CYAN, ANSI_RESET, rest);
-                                let _ = app_handle_err.emit("proxy-log", colored);
-                            } else if l.starts_with("TRACE") {
-                                let rest = l.strip_prefix("TRACE").unwrap_or("");
-                                let msg = rest.trim_start();
-                                trace!("[Core] {}", msg);
-                                let colored = format!("{}TRACE{}{}", ANSI_GRAY, ANSI_RESET, rest);
-                                let _ = app_handle_err.emit("proxy-log", colored);
-                            } else {
-                                // Default stderr without level usually means error or raw msg
-                                info!("[Core] {}", l);
-                                let _ = app_handle_err.emit("proxy-log", l.clone());
-                            }
-
-                            // Capture first 10 lines
-                            let mut cap = stderr_capture.lock().unwrap();
-                            if cap.len() < 10 {
-                                cap.push(l);
+                        // Wait for services to be ready
+                        if !self.wait_for_port(settings.mixed_port, 2000).await {
+                             return Err(format!(
+                                "Proxy port {} is not responding after startup. Check logs for details.",
+                                settings.mixed_port
+                            ));
+                        }
+                        if let Some(p) = clash_port {
+                            if !self.wait_for_port(p, 2000).await {
+                                return Err(format!(
+                                    "Clash API port {} is not responding after startup.",
+                                    p
+                                ));
                             }
                         }
+                        let _ = self.app.emit("proxy-status-change", self.get_status());
+                        return Ok(());
                     }
-                });
+                    return result;
+                } else {
+                    // Local Process Mode
+                    let app_local_data = self.app.path().app_local_data_dir().unwrap();
+                    info!("Using Core Path: {:?}", core_path);
+                    info!("Using Config Path: {:?}", config_file_path);
 
-                // Short wait to check for immediate crash (e.g. port bind error)
-                std::thread::sleep(std::time::Duration::from_millis(500));
+                    let mut cmd = Command::new(&core_path);
+                    cmd.arg("run")
+                        .arg("-c")
+                        .arg(&config_file_path)
+                        .arg("--disable-color")
+                        .arg("-D")
+                        .arg(&app_local_data);
 
-                if let Ok(Some(status)) = child.try_wait() {
-                    let logs = startup_stderr.lock().unwrap().join("\n");
-                    let msg = format!(
-                        "Proxy core exited prematurely with: {}. Logs:\n{}",
-                        status, logs
-                    );
-                    error!("{}", msg);
-                    return Err(msg);
-                }
+                    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
-                if settings.system_proxy {
-                    if !retain_system_proxy {
-                        self.enable_system_proxy(settings.mixed_port);
-                    } else {
-                        info!("System proxy retention active, skipping redundant enable call.");
+                    match cmd.spawn() {
+                        Ok(mut child) => {
+                            info!("Proxy core spawning, pid: {}", child.id());
+
+                            let stdout = child.stdout.take().unwrap();
+                            let stderr = child.stderr.take().unwrap();
+                            let app_handle = self.app.clone();
+                            let app_handle_err = self.app.clone();
+
+                            // Capture early stderr for error reporting
+                            let startup_stderr = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+                            let stderr_capture = startup_stderr.clone();
+
+                            std::thread::spawn(move || {
+                                use std::io::{BufRead, BufReader};
+                                let reader = BufReader::new(stdout);
+                                let app_h = app_handle; // Move handle
+
+                                for line in reader.lines() {
+                                    if let Ok(l) = line {
+                                        // ANSI Colors
+                                        const ANSI_RESET: &str = "\x1b[0m";
+                                        const ANSI_RED: &str = "\x1b[31m";
+                                        const ANSI_GREEN: &str = "\x1b[32m";
+                                        const ANSI_YELLOW: &str = "\x1b[33m";
+                                        const ANSI_CYAN: &str = "\x1b[36m";
+                                        const ANSI_GRAY: &str = "\x1b[90m";
+
+                                        if l.starts_with("INFO") {
+                                            let rest = l.strip_prefix("INFO").unwrap_or("");
+                                            let colored = format!("{}INFO{}{}", ANSI_GREEN, ANSI_RESET, rest);
+                                            let _ = app_h.emit("proxy-log", colored);
+                                        } else if l.starts_with("WARN") {
+                                            let rest = l.strip_prefix("WARN").unwrap_or("");
+                                            let colored = format!("{}WARN{}{}", ANSI_YELLOW, ANSI_RESET, rest);
+                                            let _ = app_h.emit("proxy-log", colored);
+                                        } else if l.starts_with("ERROR") {
+                                            let rest = l.strip_prefix("ERROR").unwrap_or("");
+                                            let colored = format!("{}ERROR{}{}", ANSI_RED, ANSI_RESET, rest);
+                                            let _ = app_h.emit("proxy-log", colored);
+                                        } else if l.starts_with("FATAL") {
+                                            let rest = l.strip_prefix("FATAL").unwrap_or("");
+                                            let colored = format!("{}FATAL{}{}", ANSI_RED, ANSI_RESET, rest);
+                                            let _ = app_h.emit("proxy-log", colored);
+                                        } else if l.starts_with("PANIC") {
+                                            let rest = l.strip_prefix("PANIC").unwrap_or("");
+                                            let colored = format!("{}PANIC{}{}", ANSI_RED, ANSI_RESET, rest);
+                                            let _ = app_h.emit("proxy-log", colored);
+                                        } else if l.starts_with("DEBUG") {
+                                            let rest = l.strip_prefix("DEBUG").unwrap_or("");
+                                            let colored = format!("{}DEBUG{}{}", ANSI_CYAN, ANSI_RESET, rest);
+                                            let _ = app_h.emit("proxy-log", colored);
+                                        } else if l.starts_with("TRACE") {
+                                            let rest = l.strip_prefix("TRACE").unwrap_or("");
+                                            let colored = format!("{}TRACE{}{}", ANSI_GRAY, ANSI_RESET, rest);
+                                            let _ = app_h.emit("proxy-log", colored);
+                                        } else {
+                                            let _ = app_h.emit("proxy-log", l);
+                                        }
+                                    }
+                                }
+                            });
+
+                            std::thread::spawn(move || {
+                                use std::io::{BufRead, BufReader};
+                                let reader = BufReader::new(stderr);
+                                let app_h = app_handle_err;
+
+                                for line in reader.lines() {
+                                    if let Ok(l) = line {
+                                        // Simple Emit for Stderr
+                                         let _ = app_h.emit("proxy-log", l.clone());
+                                        // Capture first 10 lines
+                                        let mut cap = stderr_capture.lock().unwrap();
+                                        if cap.len() < 10 {
+                                            cap.push(l);
+                                        }
+                                    }
+                                }
+                            });
+
+                            // Short wait to check for immediate crash (e.g. port bind error)
+                            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+                            if let Ok(Some(status)) = child.try_wait() {
+                                let logs = startup_stderr.lock().unwrap().join("\n");
+                                let msg = format!(
+                                    "Proxy core exited prematurely with: {}. Logs:\n{}",
+                                    status, logs
+                                );
+                                error!("{}", msg);
+                                return Err(msg);
+                            }
+
+                            if settings.system_proxy {
+                                if !retain_system_proxy {
+                                    self.enable_system_proxy(settings.mixed_port);
+                                }
+                            }
+
+                            // Wait for services to be ready locally too
+                            // Use a safeguard to kill child if we return early
+                            
+                            // Check ports
+                            if !self.wait_for_port(settings.mixed_port, 2000).await {
+                                let _ = child.kill();
+                                let _ = child.wait();
+                                return Err(format!(
+                                    "Proxy port {} is not responding after startup locally.",
+                                    settings.mixed_port
+                                ));
+                            }
+                            if let Some(p) = clash_port {
+                                if !self.wait_for_port(p, 2000).await {
+                                    let _ = child.kill();
+                                    let _ = child.wait();
+                                    return Err(format!(
+                                        "Clash API port {} is not responding after startup locally.",
+                                        p
+                                    ));
+                                }
+                            }
+
+                            info!("Proxy core started successfully");
+                            *self.child_process.lock().unwrap() = Some(child);
+                            let _ = self.app.emit("proxy-status-change", self.get_status());
+                            Ok(())
+                        }
+                        Err(e) => {
+                            error!("Failed to start proxy core: {}", e);
+                            Err(e.to_string())
+                        }
                     }
                 }
+            }.await;
 
-                // Wait for services to be ready locally too
-                if !self.wait_for_port(settings.mixed_port, 2000).await {
-                    return Err(format!(
-                        "Proxy port {} is not responding after startup locally.",
-                        settings.mixed_port
-                    ));
-                }
-                if let Some(p) = clash_port {
-                    if !self.wait_for_port(p, 2000).await {
-                        return Err(format!(
-                            "Clash API port {} is not responding after startup locally.",
-                            p
-                        ));
+            match startup_result {
+                Ok(_) => return Ok(()),
+                Err(e) => {
+                    last_error = e.clone();
+                    // Heuristic check for address in use
+                    if e.contains("address already in use") || e.contains("bind: address already in use") {
+                        warn!("Startup attempt {} failed: {}. Retrying in 500ms...", attempt, e);
+                        // Simple wait, no aggressive kill
+                        // let _ = self.kill_port_owner(settings.mixed_port);
+                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                        continue;
                     }
+                    // For other errors, fail fast
+                    return Err(e);
                 }
-
-                info!("Proxy core started successfully");
-                *self.child_process.lock().unwrap() = Some(child);
-                let _ = self.app.emit("proxy-status-change", self.get_status());
-                Ok(())
-            }
-            Err(e) => {
-                error!("Failed to start proxy core: {}", e);
-                Err(e.to_string())
             }
         }
+
+        Err(format!("Failed to start proxy after {} attempts. Last error: {}", max_retries, last_error))
     }
 
     pub async fn get_group_nodes(&self, group_id: &str) -> Result<Vec<ProxyNodeStatus>, String> {
@@ -875,6 +854,7 @@ impl<R: Runtime> ProxyService<R> {
         cfg = cfg.with_mixed_inbound(settings.mixed_port, "mixed-in", false);
         if let Some(inbound) = cfg.inbounds.last_mut() {
             inbound.listen = Some(listen.to_string());
+            inbound.reuse_addr = Some(true);
         }
 
         // 1. Add required system outbounds and database paths
@@ -1532,7 +1512,9 @@ impl<R: Runtime> ProxyService<R> {
         // Let's skip exhaustive scan if cleanup_performed is true AND retain_system_proxy is true (fast restart).
         // If we are strictly stopping (quit), we might want to be thorough.
 
-        let should_scan = !cleanup_performed;
+        // Optimization turned off: We found orphans often escape if we rely only on child handle.
+        // To fix "Address already in use", we must be aggressive in cleaning up.
+        let should_scan = true;
 
         if should_scan {
             let core_path = self.manager.get_core_path();
@@ -1570,33 +1552,9 @@ impl<R: Runtime> ProxyService<R> {
         // We only enter this fallback loop if we DIDN'T control the process (cleanup_performed = false).
         // This fixes the 5s timeout issue where kill_port_owner might be returning false positives (e.g. via helper).
 
-        if (!cleanup_performed) && self.manager.load_settings().is_ok() {
-            if let Ok(settings) = self.manager.load_settings() {
-                let port = settings.mixed_port;
-                let start = std::time::Instant::now();
-                let mut attempt = 0;
-
-                loop {
-                    // kill_port_owner returns true if it found and attempted to kill a process
-                    let found_and_killed = self.kill_port_owner(port);
-
-                    if !found_and_killed {
-                        break;
-                    }
-
-                    if start.elapsed().as_secs() >= 5 {
-                        warn!("Timeout waiting for port {} to be released after 5s", port);
-                        break;
-                    }
-
-                    attempt += 1;
-                    debug!(
-                        "Port {} still in use (attempt {}), waiting...",
-                        port, attempt
-                    );
-                    tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
-                }
-            }
+        if self.manager.load_settings().is_ok() {
+            // Deprecated: We rely on helper/child logic.
+            // Port checks removed to avoid lsof dependency.
         }
 
         if cleanup_performed {
@@ -1614,33 +1572,7 @@ impl<R: Runtime> ProxyService<R> {
         }
     }
 
-    fn kill_port_owner(&self, port: u16) -> bool {
-        let mut killed = false;
-        // Search for process using this port (TCP/IPv4)
-        if let Ok(output) = std::process::Command::new("lsof")
-            .args(["-ti", &format!(":{}", port)])
-            .output()
-        {
-            let pids = String::from_utf8_lossy(&output.stdout);
-            for pid_str in pids.lines() {
-                if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                    info!("Force killing process {} squatting on port {}", pid, port);
-                    let _ = std::process::Command::new("kill")
-                        .args(["-9", &pid.to_string()])
-                        .output();
-                    killed = true;
-                }
-            }
-        }
 
-        // Also try to ask helper to kill (for root processes)
-        let client = crate::helper_client::HelperClient::new();
-        if let Ok(_) = client.kill_port(port) {
-            killed = true;
-        }
-
-        killed
-    }
 
     pub fn warmup_network_cache(&self) {
         if !self.active_network_services.lock().unwrap().is_empty() {
@@ -2600,6 +2532,7 @@ impl<R: Runtime> ProxyService<R> {
         let results = futures_util::future::join_all(futures).await;
 
         let _ = child.kill();
+        let _ = child.wait();
 
         let mut updates = std::collections::HashMap::new();
         for res in results {
@@ -2900,6 +2833,7 @@ impl<R: Runtime> ProxyService<R> {
         let results = futures_util::future::join_all(futures).await;
 
         let _ = child.kill();
+        let _ = child.wait();
 
         for res in results {
             if let Ok(Some((id, latency))) = res {
@@ -3225,6 +3159,7 @@ impl<R: Runtime> ProxyService<R> {
 
         if port == 0 {
             let _ = child.kill();
+            let _ = child.wait();
             let output = output_log_clone.lock().unwrap().clone();
             return Err(format!(
                 "Failed to parse port from sing-box log. Output: {}",
@@ -3243,11 +3178,13 @@ impl<R: Runtime> ProxyService<R> {
             Ok(p) => client_builder.proxy(p).build(),
             Err(e) => {
                 let _ = child.kill();
+                let _ = child.wait();
                 return Err(e.to_string());
             }
         }
         .map_err(|e| {
             let _ = child.kill();
+            let _ = child.wait();
             e.to_string()
         })?;
 
@@ -3386,10 +3323,7 @@ impl<R: Runtime> ProxyService<R> {
         // 2. Stop Helper
         let _ = crate::helper_client::HelperClient::new().stop_proxy();
 
-        // 3. Port Clearance (Quick)
-        if let Ok(settings) = self.manager.load_settings() {
-            let _ = self.kill_port_owner(settings.mixed_port);
-        }
+
 
         // 4. Cleanup System Proxy
         self.disable_system_proxy();
