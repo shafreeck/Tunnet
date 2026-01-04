@@ -51,10 +51,12 @@ impl<R: Runtime> ProxyService<R> {
             .build()
             .unwrap_or_default();
 
+        let initial_tun_mode = manager.load_settings().map(|s| s.tun_mode).unwrap_or(false);
+
         Self {
             app: app.clone(),
             child_process: Mutex::new(None),
-            tun_mode: Mutex::new(false), // Init as false, restore later if needed
+            tun_mode: Mutex::new(initial_tun_mode),
             latest_node: Mutex::new(None),
             latest_routing_mode: Mutex::new("rule".to_string()),
             clash_api_port: Mutex::new(None),
@@ -144,13 +146,23 @@ impl<R: Runtime> ProxyService<R> {
 
         // Generate Config
         // Note: We need settings for port allocation and system proxy retention checks
-        let settings = match self.manager.load_settings() {
+        let mut settings = match self.manager.load_settings() {
             Ok(s) => s,
             Err(e) => {
                 error!("Failed to load settings: {}", e);
                 crate::settings::AppSettings::default()
             }
         };
+
+        // Sync tun_mode to settings if different (and persist if needed, but usually we just use the runtime arg)
+        // Actually, start_proxy is the source of truth for "active" mode, so we should update settings to match request.
+        if settings.tun_mode != tun_mode {
+            info!("start_proxy: updating persisted tun_mode to {}", tun_mode);
+            settings.tun_mode = tun_mode;
+            if let Err(e) = self.manager.save_settings(&settings) {
+                error!("Failed to persist tun_mode update: {}", e);
+            }
+        }
 
         // Decision: Retain System Proxy?
         // We retain if:
@@ -2063,13 +2075,19 @@ impl<R: Runtime> ProxyService<R> {
         // Check if proxy is running (Local OR Helper)
         let is_running = self.is_proxy_running();
         if !is_running {
+            // Update runtime mutex to match settings if stopped, ensuring consistent state for get_status
+            *self.tun_mode.lock().unwrap() = settings.tun_mode;
+
             // Just emit update if not running
             let _ = self.app.emit("settings-update", &settings);
+            let _ = self.app.emit("proxy-status-change", self.get_status());
             return Ok(());
         }
 
         // Check if we need a full restart
+        // Check if we need a full restart
         let need_restart = settings.mixed_port != old_settings.mixed_port
+            || settings.tun_mode != old_settings.tun_mode
             || settings.tun_stack != old_settings.tun_stack
             || settings.tun_mtu != old_settings.tun_mtu
             || settings.strict_route != old_settings.strict_route

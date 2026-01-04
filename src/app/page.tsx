@@ -668,13 +668,13 @@ export default function Home() {
 
     // Just update the preference state. The reactive useEffect will handle the rest.
     setTunEnabled(nextState)
+    // Persist to backend settings to sync with Tray and other components
+    saveAppSettings({ ...settings, tun_mode: nextState }).catch(console.error)
+
     // Emit sync event for Tray (when stopped)
     emit("tun-mode-updated", nextState)
 
-    if (isConnected) {
-      // toast.success(t(nextState ? 'toast.tun_mode_enabled' : 'toast.tun_mode_disabled'))
-      // No redundant toast here, let syncProxy handle it
-    }
+    toast.success(t(nextState ? 'toast.tun_mode_enabled' : 'toast.tun_mode_disabled'))
   }
 
   const toggleProxy = async () => {
@@ -1083,7 +1083,7 @@ export default function Home() {
                   setProxyMode(m)
                 }}
                 tunEnabled={tunEnabled}
-                onTunToggle={() => setTunEnabled(!tunEnabled)}
+                onTunToggle={handleTunToggle}
                 systemProxyEnabled={systemProxyEnabled}
                 onSystemProxyToggle={toggleSystemProxy}
                 isLoading={isLoading}

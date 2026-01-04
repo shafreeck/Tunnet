@@ -12,6 +12,7 @@ export interface AppSettings {
     system_proxy: boolean
     allow_lan: boolean
     mixed_port: number
+    tun_mode: boolean
     tun_stack: string
     tun_mtu: number
     strict_route: boolean
@@ -34,6 +35,7 @@ export const defaultSettings: AppSettings = {
     system_proxy: true,
     allow_lan: false,
     mixed_port: 2080,
+    tun_mode: false,
     tun_stack: "gvisor",
     tun_mtu: 9000,
     strict_route: true,
