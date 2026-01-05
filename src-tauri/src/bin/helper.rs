@@ -164,38 +164,6 @@ async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn kill_all_singbox(state: &Arc<AppState>, core_path: &str) {
-    let mut sys = sysinfo::System::new();
-    sys.refresh_processes();
-
-    let core_canon = Path::new(core_path).canonicalize().ok();
-    let core_name = Path::new(core_path).file_name().and_then(|n| n.to_str());
-
-    for process in sys.processes().values() {
-        let exe_matches = process
-            .exe()
-            .map(|e| {
-                core_canon
-                    .as_ref()
-                    .map_or(false, |c| e.canonicalize().ok().as_ref() == Some(c))
-            })
-            .unwrap_or(false);
-        let name_matches = core_name.map_or(false, |n| process.name() == n);
-
-        if exe_matches || name_matches {
-            log(
-                state,
-                &format!(
-                    "Cleaning up existing proxy instance (pid: {}, name: {})",
-                    process.pid(),
-                    process.name()
-                ),
-            );
-            process.kill_with(sysinfo::Signal::Kill);
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 struct StartPayload {
     config: String,
@@ -208,9 +176,6 @@ struct StartPayload {
 
 fn start_libbox(payload: StartPayload, state: &Arc<AppState>) -> Response {
     log(state, "Start Libbox requested");
-
-    // Aggressive cleanup before starting new instance
-    kill_all_singbox(state, &payload.core_path);
 
     // We don't write config to file anymore, we pass it directly via memory!
     // But wait, the config might contain relative paths (geodatabase etc).
