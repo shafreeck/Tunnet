@@ -2,17 +2,17 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::ffi::{CStr, CString};
 use std::fs;
-use std::io::{Read, Write};
-
-use std::os::unix::net::UnixListener;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
-use std::thread;
 
 const SOCKET_PATH: &str = "/var/run/tunnet.sock";
+#[cfg(windows)]
+const PIPE_NAME: &str = r"\\.\pipe\tunnet";
 
 use app_lib::libbox;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Request {
@@ -45,10 +45,16 @@ fn log(state: &Arc<AppState>, msg: &str) {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     println!("Tunnet Helper (Libbox) started");
 
-    let log_path = PathBuf::from("/tmp/tunnet-helper.log");
+    let log_path = if cfg!(windows) {
+        std::env::temp_dir().join("tunnet-helper.log")
+    } else {
+        PathBuf::from("/tmp/tunnet-helper.log")
+    };
+
     let log_file = fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -60,15 +66,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         log_writer: Mutex::new(log_file),
         proxy_running: Mutex::new(false),
     });
-
-    if Path::new(SOCKET_PATH).exists() {
-        fs::remove_file(SOCKET_PATH)?;
-    }
-
-    let listener = UnixListener::bind(SOCKET_PATH)?;
-    if let Err(e) = Command::new("chmod").arg("0666").arg(SOCKET_PATH).status() {
-        eprintln!("Failed to set socket permissions: {}", e);
-    }
 
     // Verify Libbox linkage
     unsafe {
@@ -83,15 +80,31 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    println!("Helper listening on {:?}", SOCKET_PATH);
+    run_listener(app_state).await
+}
 
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
+#[cfg(unix)]
+async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
+    use tokio::net::UnixListener;
+
+    if Path::new(SOCKET_PATH).exists() {
+        fs::remove_file(SOCKET_PATH)?;
+    }
+
+    let listener = UnixListener::bind(SOCKET_PATH)?;
+    if let Err(e) = Command::new("chmod").arg("0666").arg(SOCKET_PATH).status() {
+        eprintln!("Failed to set socket permissions: {}", e);
+    }
+
+    println!("Helper listening on Unix socket: {:?}", SOCKET_PATH);
+
+    loop {
+        match listener.accept().await {
+            Ok((mut stream, _)) => {
                 let state = app_state.clone();
-                thread::spawn(move || {
+                tokio::spawn(async move {
                     let mut request_str = String::new();
-                    match stream.read_to_string(&mut request_str) {
+                    match stream.read_to_string(&mut request_str).await {
                         Ok(size) => {
                             if size > 0 {
                                 let response = match serde_json::from_str::<Request>(&request_str) {
@@ -102,7 +115,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     },
                                 };
                                 let response_str = serde_json::to_string(&response).unwrap();
-                                let _ = stream.write_all(response_str.as_bytes());
+                                let _ = stream.write_all(response_str.as_bytes()).await;
                             }
                         }
                         Err(e) => log(&state, &format!("Read error: {}", e)),
@@ -112,8 +125,43 @@ fn main() -> Result<(), Box<dyn Error>> {
             Err(e) => eprintln!("Accept error: {}", e),
         }
     }
+}
 
-    Ok(())
+#[cfg(windows)]
+async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
+    use tokio::net::windows::named_pipe::ServerOptions;
+
+    println!("Helper listening on Named Pipe: {}", PIPE_NAME);
+
+    loop {
+        let mut server = ServerOptions::new()
+            .first_pipe_instance(true) // Subsequent instances will work too if we use this loop
+            .create(PIPE_NAME)?;
+
+        // Wait for a client to connect
+        server.connect().await?;
+
+        let state = app_state.clone();
+        tokio::spawn(async move {
+            let mut request_str = String::new();
+            match server.read_to_string(&mut request_str).await {
+                Ok(size) => {
+                    if size > 0 {
+                        let response = match serde_json::from_str::<Request>(&request_str) {
+                            Ok(req) => handle_request(req, &state),
+                            Err(e) => Response {
+                                status: "error".into(),
+                                message: format!("JSON error: {}", e),
+                            },
+                        };
+                        let response_str = serde_json::to_string(&response).unwrap();
+                        let _ = server.write_all(response_str.as_bytes()).await;
+                    }
+                }
+                Err(e) => log(&state, &format!("Read error: {}", e)),
+            }
+        });
+    }
 }
 
 fn kill_all_singbox(state: &Arc<AppState>, core_path: &str) {

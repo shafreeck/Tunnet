@@ -119,7 +119,6 @@ impl<R: Runtime> ProxyService<R> {
         let _lock = self.start_lock.lock().await;
         info!("start_proxy: lock acquired, checking download...");
 
-        self.manager.check_and_download().await?;
         info!("start_proxy: download check done, ensuring DBs...");
         self.manager.ensure_databases().await?;
         info!("start_proxy: DBs ensured. Preparing config.");
@@ -1489,12 +1488,70 @@ impl<R: Runtime> ProxyService<R> {
     }
 
     pub fn disable_system_proxy(&self) {
-        info!("Disabling system proxy (local)...");
-        // Optimization: Use cached services if available
-        let mut services_to_disable = self.active_network_services.lock().unwrap().clone();
+        #[cfg(target_os = "macos")]
+        {
+            info!("Disabling system proxy (local)...");
+            // Optimization: Use cached services if available
+            let mut services_to_disable = self.active_network_services.lock().unwrap().clone();
 
-        // If cache is empty, we must fallback to scanning all (safety for first run / crash recovery)
-        if services_to_disable.is_empty() {
+            // If cache is empty, we must fallback to scanning all (safety for first run / crash recovery)
+            if services_to_disable.is_empty() {
+                if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
+                    .arg("-listallnetworkservices")
+                    .output()
+                {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    for service in stdout.lines() {
+                        if service.contains('*') || service.is_empty() {
+                            continue;
+                        }
+                        services_to_disable.push(service.trim().to_string());
+                    }
+                }
+            }
+
+            for s in services_to_disable {
+                debug!("Disabling proxy for service: {}", s);
+                let _ = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setwebproxystate", &s, "off"])
+                    .output();
+                let _ = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setsecurewebproxystate", &s, "off"])
+                    .output();
+                let _ = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setsocksfirewallproxystate", &s, "off"])
+                    .output();
+            }
+
+            self.active_network_services.lock().unwrap().clear();
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            info!("Disabling system proxy on Windows...");
+            let _ = std::process::Command::new("reg")
+                .args([
+                    "add",
+                    r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+                    "/v",
+                    "ProxyEnable",
+                    "/t",
+                    "REG_DWORD",
+                    "/d",
+                    "0",
+                    "/f",
+                ])
+                .output();
+        }
+        info!("disable_system_proxy finished");
+    }
+
+    fn enable_system_proxy(&self, port: u16) {
+        #[cfg(target_os = "macos")]
+        {
+            info!("Enabling system proxy on port {} (local)...", port);
+            self.active_network_services.lock().unwrap().clear();
+
             if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
                 .arg("-listallnetworkservices")
                 .output()
@@ -1504,94 +1561,92 @@ impl<R: Runtime> ProxyService<R> {
                     if service.contains('*') || service.is_empty() {
                         continue;
                     }
-                    services_to_disable.push(service.trim().to_string());
+                    let s = service.trim();
+                    debug!("Enabling proxy for service: {}", s);
+
+                    let mut success = true;
+                    // HTTP
+                    if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
+                        .args(["-setwebproxy", s, "127.0.0.1", &port.to_string()])
+                        .output()
+                    {
+                        if !o.status.success() {
+                            error!("Failed to set web proxy for {}: {:?}", s, o.stderr);
+                            success = false;
+                        }
+                    }
+                    let _ = std::process::Command::new("/usr/sbin/networksetup")
+                        .args(["-setwebproxystate", s, "on"])
+                        .output();
+
+                    // HTTPS
+                    if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
+                        .args(["-setsecurewebproxy", s, "127.0.0.1", &port.to_string()])
+                        .output()
+                    {
+                        if !o.status.success() {
+                            error!("Failed to set secure web proxy for {}: {:?}", s, o.stderr);
+                            success = false;
+                        }
+                    }
+                    let _ = std::process::Command::new("/usr/sbin/networksetup")
+                        .args(["-setsecurewebproxystate", s, "on"])
+                        .output();
+
+                    // SOCKS
+                    if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
+                        .args(["-setsocksfirewallproxy", s, "127.0.0.1", &port.to_string()])
+                        .output()
+                    {
+                        if !o.status.success() {
+                            error!("Failed to set SOCKS proxy for {}: {:?}", s, o.stderr);
+                        }
+                    }
+                    let _ = std::process::Command::new("/usr/sbin/networksetup")
+                        .args(["-setsocksfirewallproxystate", s, "on"])
+                        .output();
+
+                    if success {
+                        info!("Successfully enabled system proxy for {}", s);
+                        self.active_network_services
+                            .lock()
+                            .unwrap()
+                            .push(s.to_string());
+                    }
                 }
             }
         }
 
-        for s in services_to_disable {
-            debug!("Disabling proxy for service: {}", s);
-            let _ = std::process::Command::new("/usr/sbin/networksetup")
-                .args(["-setwebproxystate", &s, "off"])
-                .output();
-            let _ = std::process::Command::new("/usr/sbin/networksetup")
-                .args(["-setsecurewebproxystate", &s, "off"])
-                .output();
-            let _ = std::process::Command::new("/usr/sbin/networksetup")
-                .args(["-setsocksfirewallproxystate", &s, "off"])
-                .output();
-        }
-
-        self.active_network_services.lock().unwrap().clear();
-        info!("disable_system_proxy finished");
-    }
-
-    fn enable_system_proxy(&self, port: u16) {
-        info!("Enabling system proxy on port {} (local)...", port);
-        self.active_network_services.lock().unwrap().clear();
-
-        if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
-            .arg("-listallnetworkservices")
-            .output()
+        #[cfg(target_os = "windows")]
         {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for service in stdout.lines() {
-                if service.contains('*') || service.is_empty() {
-                    continue;
-                }
-                let s = service.trim();
-                debug!("Enabling proxy for service: {}", s);
-
-                let mut success = true;
-                // HTTP
-                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-setwebproxy", s, "127.0.0.1", &port.to_string()])
-                    .output()
-                {
-                    if !o.status.success() {
-                        error!("Failed to set web proxy for {}: {:?}", s, o.stderr);
-                        success = false;
-                    }
-                }
-                let _ = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-setwebproxystate", s, "on"])
-                    .output();
-
-                // HTTPS
-                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-setsecurewebproxy", s, "127.0.0.1", &port.to_string()])
-                    .output()
-                {
-                    if !o.status.success() {
-                        error!("Failed to set secure web proxy for {}: {:?}", s, o.stderr);
-                        success = false;
-                    }
-                }
-                let _ = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-setsecurewebproxystate", s, "on"])
-                    .output();
-
-                // SOCKS
-                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-setsocksfirewallproxy", s, "127.0.0.1", &port.to_string()])
-                    .output()
-                {
-                    if !o.status.success() {
-                        error!("Failed to set SOCKS proxy for {}: {:?}", s, o.stderr);
-                    }
-                }
-                let _ = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-setsocksfirewallproxystate", s, "on"])
-                    .output();
-
-                if success {
-                    info!("Successfully enabled system proxy for {}", s);
-                    self.active_network_services
-                        .lock()
-                        .unwrap()
-                        .push(s.to_string());
-                }
-            }
+            info!("Enabling system proxy on Windows port {}...", port);
+            let proxy_server = format!("127.0.0.1:{}", port);
+            let _ = std::process::Command::new("reg")
+                .args([
+                    "add",
+                    r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+                    "/v",
+                    "ProxyEnable",
+                    "/t",
+                    "REG_DWORD",
+                    "/d",
+                    "1",
+                    "/f",
+                ])
+                .output();
+            let _ = std::process::Command::new("reg")
+                .args([
+                    "add",
+                    r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+                    "/v",
+                    "ProxyServer",
+                    "/t",
+                    "REG_SZ",
+                    "/d",
+                    &proxy_server,
+                    "/f",
+                ])
+                .output();
         }
         info!("enable_system_proxy finished");
     }
@@ -3141,13 +3196,6 @@ impl<R: Runtime> ProxyService<R> {
                 ))
             }
         }
-    }
-    pub async fn check_core_update(&self) -> Result<Option<String>, String> {
-        self.manager.check_core_update().await
-    }
-
-    pub async fn update_core(&self) -> Result<(), String> {
-        self.manager.update_core().await
     }
 
     // --- Tray Helpers ---

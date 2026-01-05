@@ -225,13 +225,6 @@ async fn save_app_settings(
 }
 
 #[tauri::command]
-async fn check_singbox_update(
-    service: State<'_, ProxyService<tauri::Wry>>,
-) -> Result<Option<String>, String> {
-    service.check_core_update().await
-}
-
-#[tauri::command]
 async fn get_groups(
     service: State<'_, ProxyService<tauri::Wry>>,
 ) -> Result<Vec<crate::profile::Group>, String> {
@@ -303,20 +296,6 @@ async fn select_group_node(
     node_name: String,
 ) -> Result<(), String> {
     service.select_group_node(&group_id, &node_name).await
-}
-
-#[tauri::command]
-async fn update_singbox_core(service: State<'_, ProxyService<tauri::Wry>>) -> Result<(), String> {
-    let was_running = service.is_proxy_running();
-    if was_running {
-        service.stop_proxy(true).await;
-    }
-
-    let result = service.update_core().await;
-
-    // Users must restart manually or implementing restart logic is complex here
-    // But since we replaced binary, next start will pick it up.
-    result
 }
 
 #[tauri::command]
@@ -521,8 +500,6 @@ pub fn run() {
             url_test,
             get_app_settings,
             save_app_settings,
-            check_singbox_update,
-            update_singbox_core,
             // Group Commands
             ensure_auto_group,
             get_groups,

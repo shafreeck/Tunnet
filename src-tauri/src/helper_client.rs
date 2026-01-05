@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::error::Error;
-use std::io::{Read, Write};
-use std::os::unix::net::UnixStream;
 
 const SOCKET_PATH: &str = "/var/run/tunnet.sock";
+#[cfg(windows)]
+const PIPE_NAME: &str = r"\\.\pipe\tunnet";
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Request {
@@ -24,8 +24,6 @@ struct StartPayload {
     working_dir: String,
 }
 
-#[derive(Serialize)]
-
 pub struct HelperClient;
 
 impl HelperClient {
@@ -36,37 +34,56 @@ impl HelperClient {
     fn send_request(&self, req: Request) -> Result<Response, Box<dyn Error>> {
         let max_retries = 5;
         let mut retry_count = 0;
-        let mut stream;
+        let req_str = serde_json::to_string(&req)?;
 
         loop {
-            match UnixStream::connect(SOCKET_PATH) {
-                Ok(s) => {
-                    stream = s;
-                    break;
-                }
+            let result = self.attempt_send(&req_str);
+            match result {
+                Ok(resp) => return Ok(resp),
                 Err(e) => {
                     retry_count += 1;
                     if retry_count >= max_retries {
-                        return Err(Box::new(e));
+                        return Err(e);
                     }
-                    // Wait 500ms before retrying
                     std::thread::sleep(std::time::Duration::from_millis(500));
                 }
             }
         }
+    }
 
-        let req_str = serde_json::to_string(&req)?;
+    #[cfg(unix)]
+    fn attempt_send(&self, req_str: &str) -> Result<Response, Box<dyn Error>> {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+        let mut stream = UnixStream::connect(SOCKET_PATH)?;
         stream.write_all(req_str.as_bytes())?;
         stream.shutdown(std::net::Shutdown::Write)?;
 
         let mut resp_str = String::new();
         stream.read_to_string(&mut resp_str)?;
-
-        // Handle empty response gracefully
         if resp_str.is_empty() {
             return Err("Empty response from helper".into());
         }
+        let resp: Response = serde_json::from_str(&resp_str)?;
+        Ok(resp)
+    }
 
+    #[cfg(windows)]
+    fn attempt_send(&self, req_str: &str) -> Result<Response, Box<dyn Error>> {
+        use std::io::{Read, Write};
+        let mut file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(PIPE_NAME)?;
+
+        file.write_all(req_str.as_bytes())?;
+        file.flush()?;
+
+        let mut resp_str = String::new();
+        file.read_to_string(&mut resp_str)?;
+        if resp_str.is_empty() {
+            return Err("Empty response from helper".into());
+        }
         let resp: Response = serde_json::from_str(&resp_str)?;
         Ok(resp)
     }
