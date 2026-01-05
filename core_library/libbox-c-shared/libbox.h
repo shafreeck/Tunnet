@@ -82,9 +82,9 @@ typedef struct { void *data; GoInt len; GoInt cap; } GoSlice;
 extern "C" {
 #endif
 
-extern char* LibboxHello(void);
-extern char* LibboxStart(char* configJSON);
-extern char* LibboxStop(void);
+extern __declspec(dllexport) char* LibboxHello(void);
+extern __declspec(dllexport) char* LibboxStart(char* configJSON);
+extern __declspec(dllexport) char* LibboxStop(void);
 
 #ifdef __cplusplus
 }

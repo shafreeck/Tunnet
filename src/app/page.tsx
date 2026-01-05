@@ -176,6 +176,10 @@ export default function Home() {
   useEffect(() => {
     let pollTimer: NodeJS.Timeout
     if (tunEnabled) {
+      // Skip helper check on Windows (Helper is not used)
+      const isWindows = typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows');
+      if (isWindows) return;
+
       pollTimer = setInterval(async () => {
         try {
           const installed = await invoke("check_helper")
@@ -667,21 +671,23 @@ export default function Home() {
     manualActionRef.current = true
     const nextState = !tunEnabled
 
-
     // Helper Check Logic (Only check if enabling)
     if (nextState) {
-      try {
-        const installed = await invoke("check_helper")
-        if (!installed) {
-          toast.info(t('toast.helper_installing'), { id: "helper-install" })
-          // This might throw if user cancels auth, so we catch it
-          await invoke("install_helper")
-          toast.success(t('toast.helper_installed'), { id: "helper-install" })
+      const isWindows = typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows');
+      if (!isWindows) {
+        try {
+          const installed = await invoke("check_helper")
+          if (!installed) {
+            toast.info(t('toast.helper_installing'), { id: "helper-install" })
+            // This might throw if user cancels auth, so we catch it
+            await invoke("install_helper")
+            toast.success(t('toast.helper_installed'), { id: "helper-install" })
+          }
+        } catch (e: any) {
+          console.error(e)
+          toast.error(t('toast.helper_failed', { error: e.message || e }))
+          return; // Don't proceed if helper check/install failed
         }
-      } catch (e: any) {
-        console.error(e)
-        toast.error(t('toast.helper_failed', { error: e.message || e }))
-        return; // Don't proceed if helper check/install failed
       }
     }
 
@@ -718,10 +724,13 @@ export default function Home() {
 
         // Handle TUN Mode check only (rest handled by useEffect)
         if (tunEnabled) {
-          const installed = await invoke("check_helper")
-          if (!installed) {
-            toast.info(t('toast.helper_installing'))
-            await invoke("install_helper")
+          const isWindows = typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows');
+          if (!isWindows) {
+            const installed = await invoke("check_helper")
+            if (!installed) {
+              toast.info(t('toast.helper_installing'))
+              await invoke("install_helper")
+            }
           }
         }
 
@@ -958,7 +967,7 @@ export default function Home() {
           profiles={profiles}
           onUpdate={() => fetchProfiles()}
           onDelete={async (id) => {
-            await invoke("delete_subscription", { id })
+            await invoke("delete_profile", { id })
             fetchProfiles()
           }}
           onAdd={() => setShowAddSubscription(true)}

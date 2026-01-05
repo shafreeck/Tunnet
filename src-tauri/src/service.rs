@@ -237,24 +237,47 @@ impl<R: Runtime> ProxyService<R> {
             .unwrap()
             .join("helper_config.json");
 
-        if tun_mode {
+        #[cfg(target_os = "windows")]
+        {
+            // Windows: Single Instance (Combined) Approach
+            // We run everything in the main process (users must run as Admin for TUN).
+            let mode = if tun_mode {
+                crate::config::ConfigMode::Combined
+            } else {
+                crate::config::ConfigMode::SystemProxyOnly
+            };
+
             self.write_config(
                 node_opt.as_ref(),
-                crate::config::ConfigMode::TunOnly,
+                mode,
                 &routing_mode,
                 &settings,
-                None,
+                clash_port,
             )?;
-            std::fs::rename(&config_file_path, &helper_config_path).map_err(|e| e.to_string())?;
         }
 
-        self.write_config(
-            node_opt.as_ref(),
-            crate::config::ConfigMode::SystemProxyOnly,
-            &routing_mode,
-            &settings,
-            clash_port,
-        )?;
+        #[cfg(not(target_os = "windows"))]
+        {
+            // macOS/Linux: Dual Instance (Privileged Helper for TUN)
+            if tun_mode {
+                self.write_config(
+                    node_opt.as_ref(),
+                    crate::config::ConfigMode::TunOnly,
+                    &routing_mode,
+                    &settings,
+                    None,
+                )?;
+                std::fs::rename(&config_file_path, &helper_config_path).map_err(|e| e.to_string())?;
+            }
+
+            self.write_config(
+                node_opt.as_ref(),
+                crate::config::ConfigMode::SystemProxyOnly,
+                &routing_mode,
+                &settings,
+                clash_port,
+            )?;
+        }
 
         // Loop for retrying startup if port is temporarily held (TIME_WAIT race)
         let max_retries = 60;
@@ -283,6 +306,8 @@ impl<R: Runtime> ProxyService<R> {
                 *self.local_proxy_running.lock().unwrap() = true;
 
                 // 2. Start TUN Instance (Specialized Port-less config) if requested
+                // ON WINDOWS: We skipped generating helper_config, so we skip this block.
+                #[cfg(not(target_os = "windows"))]
                 if tun_mode {
                     info!(
                         "Starting specialized TUN instance via Helper (attempt {})...",
