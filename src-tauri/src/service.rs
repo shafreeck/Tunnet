@@ -1,5 +1,6 @@
 use crate::manager::CoreManager;
 use log::{debug, error, info, warn};
+use std::collections::HashSet;
 use std::ffi::{CStr, CString};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
@@ -809,11 +810,17 @@ impl<R: Runtime> ProxyService<R> {
         let profiles = self.manager.load_profiles().unwrap_or_default();
         let groups = self.get_groups().unwrap_or_default(); // Uses the new dynamic get_groups
 
+        // Track valid outbound tags to prevent "dependency not found" errors
+        let mut valid_tags = HashSet::new();
+        valid_tags.insert("direct".to_string());
+        valid_tags.insert("block".to_string());
+
         // 3. Add ALL Nodes as Outbounds
         // We iterate all profiles and their nodes
         for profile in &profiles {
             for node in &profile.nodes {
                 let tag = node.id.clone(); // Use UUID as tag
+                let mut added = true;
 
                 // Helper closure or inline to add node
                 match node.protocol.as_str() {
@@ -904,8 +911,12 @@ impl<R: Runtime> ProxyService<R> {
                     }
                     _ => {
                         // Skip unsupported
-                        continue;
+                        added = false;
                     }
+                }
+
+                if added {
+                    valid_tags.insert(tag);
                 }
             }
         }
@@ -918,7 +929,14 @@ impl<R: Runtime> ProxyService<R> {
                 crate::profile::GroupSource::Static { node_ids } => {
                     // Filter valid nodes
                     for pid in node_ids {
-                        member_tags.push(pid.clone());
+                        if valid_tags.contains(pid) {
+                            member_tags.push(pid.clone());
+                        } else {
+                            debug!(
+                                "Skipping invalid node dependency '{}' in group '{}'",
+                                pid, group.id
+                            );
+                        }
                     }
                 }
                 crate::profile::GroupSource::Filter { criteria } => {
@@ -979,6 +997,7 @@ impl<R: Runtime> ProxyService<R> {
                     );
                 }
             }
+            valid_tags.insert(group.id.clone());
         }
 
         // 5. Add MAIN 'proxy' outbound
@@ -992,19 +1011,13 @@ impl<R: Runtime> ProxyService<R> {
             // Verify this node ID exists in our generated outbounds (it should)
             // But 'node_opt' might be a standalone object if not from profile?
             // Usually it's from the list.
-            // We can just use node.id
             proxy_target = node.id.clone();
 
-            // Ensure the node outbound exists (e.g. if 'Local' import not in profiles list? Add it!)
-            // TODO: Make sure 'Local' imports are in profiles list. safe_profiles usually ensures this?
-            // If not, we might miss it.
-            // As a safety net, if node_opt is not in profiles, we should add it?
-            // For now, assume it's in profiles.
-
             // Check if we already added a vmess/etc outbound for this ID.
-            let exists = cfg.outbounds.iter().any(|o| o.tag == proxy_target);
-            if !exists {
+            if !valid_tags.contains(&proxy_target) {
+                info!("Manual node addition safety net for: {}", node.name);
                 // It might be a temp node? Add it manually (legacy behavior fallback)
+                let mut added = true;
                 match node.protocol.as_str() {
                     "vmess" => {
                         cfg = cfg.with_vmess_outbound(
@@ -1020,7 +1033,90 @@ impl<R: Runtime> ProxyService<R> {
                             node.tls,
                         );
                     }
-                    _ => {} // Fallback
+                    "vless" => {
+                        cfg = cfg.with_vless_outbound(
+                            &proxy_target,
+                            node.server.clone(),
+                            node.port,
+                            node.uuid.clone().unwrap_or_default(),
+                            node.flow.clone(),
+                            node.network.clone(),
+                            node.path.clone(),
+                            node.host.clone(),
+                            node.tls,
+                            node.insecure,
+                            node.sni.clone(),
+                            node.alpn.clone(),
+                        );
+                    }
+                    "shadowsocks" | "ss" => {
+                        cfg = cfg.with_shadowsocks_outbound(
+                            &proxy_target,
+                            node.server.clone(),
+                            node.port,
+                            node.cipher
+                                .clone()
+                                .unwrap_or("chacha20-ietf-poly1305".to_string()),
+                            node.password.clone().unwrap_or_default(),
+                        );
+                    }
+                    "trojan" => {
+                        cfg = cfg.with_trojan_outbound(
+                            &proxy_target,
+                            node.server.clone(),
+                            node.port,
+                            node.password.clone().unwrap_or_default(),
+                            node.network.clone(),
+                            node.path.clone(),
+                            node.host.clone(),
+                            node.sni.clone(),
+                            node.insecure,
+                        );
+                    }
+                    "hysteria2" | "hy2" => {
+                        let up_mbps = node.up.as_ref().and_then(|s| s.parse().ok());
+                        let down_mbps = node.down.as_ref().and_then(|s| s.parse().ok());
+                        cfg = cfg.with_hysteria2_outbound(
+                            &proxy_target,
+                            node.server.clone(),
+                            node.port,
+                            node.password.clone().unwrap_or_default(),
+                            node.sni.clone(),
+                            node.insecure,
+                            node.alpn.clone(),
+                            up_mbps,
+                            down_mbps,
+                            node.obfs.clone(),
+                            node.obfs_password.clone(),
+                        );
+                    }
+                    "tuic" => {
+                        cfg = cfg.with_tuic_outbound(
+                            &proxy_target,
+                            node.server.clone(),
+                            node.port,
+                            node.uuid.clone().unwrap_or_default(),
+                            node.password.clone(),
+                            node.sni.clone(),
+                            node.insecure,
+                            node.alpn.clone(),
+                            None,
+                            None,
+                        );
+                    }
+                    _ => {
+                        added = false;
+                        warn!(
+                            "Unsupported protocol '{}' for manual node addition",
+                            node.protocol
+                        );
+                    }
+                }
+
+                if added {
+                    valid_tags.insert(proxy_target.clone());
+                } else {
+                    proxy_target = "direct".to_string();
                 }
             }
         }
@@ -1107,21 +1203,38 @@ impl<R: Runtime> ProxyService<R> {
                         }
 
                         if rule.rule_type == "FINAL" {
-                            default_policy = match rule.policy.as_str() {
+                            let mut policy = match rule.policy.as_str() {
                                 "PROXY" => "proxy".to_string(),
                                 "DIRECT" => "direct".to_string(),
                                 "REJECT" => "reject".to_string(),
                                 _ => rule.policy.clone(), // Likely a Group ID
                             };
+                            // Validation
+                            if policy != "reject" && !valid_tags.contains(&policy) {
+                                warn!("Invalid FINAL policy '{}', falling back to 'proxy'", policy);
+                                policy = "proxy".to_string();
+                            }
+                            default_policy = policy;
                             continue;
                         }
 
-                        let (outbound_tag, action) = match rule.policy.as_str() {
+                        let (mut outbound_tag, action) = match rule.policy.as_str() {
                             "PROXY" => (Some("proxy".to_string()), None),
                             "DIRECT" => (Some("direct".to_string()), None),
                             "REJECT" => (None, Some("reject".to_string())),
                             _ => (Some(rule.policy.clone()), None), // Assume it's a Group ID or Valid Tag
                         };
+
+                        // Validation
+                        if let Some(ref tag) = outbound_tag {
+                            if !valid_tags.contains(tag) {
+                                warn!(
+                                    "Invalid policy '{}' in rule '{}', falling back to 'proxy'",
+                                    tag, rule.id
+                                );
+                                outbound_tag = Some("proxy".to_string());
+                            }
+                        }
 
                         let (
                             domain,
@@ -1174,6 +1287,11 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         // 3. Add the ultimate fallback rule
+        // Validate ultimate default_policy too (just in case no rule set it or it was invalid)
+        if default_policy != "reject" && !valid_tags.contains(&default_policy) {
+            default_policy = "proxy".to_string();
+        }
+
         let (fallback_outbound, fallback_action) = if default_policy == "reject" {
             (None, Some("reject".to_string()))
         } else {
@@ -2080,20 +2198,36 @@ impl<R: Runtime> ProxyService<R> {
                     continue;
                 }
 
-                let target = format!("{}:{}", n.server, n.port);
+                let outbound = self.node_to_outbound(n);
+                let outbound_json = serde_json::to_string(&outbound).map_err(|e| e.to_string())?;
 
                 futures.push(tokio::spawn(async move {
-                    let start = std::time::Instant::now();
-                    // 3s timeout for tcp connect
-                    let timeout = std::time::Duration::from_secs(3);
-                    match tokio::time::timeout(timeout, tokio::net::TcpStream::connect(&target))
-                        .await
-                    {
-                        Ok(Ok(_)) => {
-                            let duration = start.elapsed().as_millis() as u64;
-                            Some((node_id, duration))
-                        }
-                        _ => None,
+                    let outbound_c = std::ffi::CString::new(outbound_json).unwrap();
+                    let target_c =
+                        std::ffi::CString::new("http://www.gstatic.com/generate_204").unwrap();
+
+                    let res_ptr = unsafe {
+                        crate::libbox::LibboxTestOutbound(
+                            outbound_c.as_ptr(),
+                            target_c.as_ptr(),
+                            5000, // 5s timeout
+                        )
+                    };
+
+                    if res_ptr.is_null() {
+                        return None;
+                    }
+
+                    let res_str = unsafe {
+                        std::ffi::CStr::from_ptr(res_ptr)
+                            .to_string_lossy()
+                            .into_owned()
+                    };
+
+                    if let Ok(latency) = res_str.parse::<u64>() {
+                        Some((node_id, latency))
+                    } else {
+                        None
                     }
                 }));
             }
@@ -2135,44 +2269,130 @@ impl<R: Runtime> ProxyService<R> {
         }
         let node = target_node.ok_or("Node not found")?;
 
-        // 1. If active, use Real Proxy Test
-        if self.is_proxy_running() {
-            let status = self.get_status();
-            if let Some(active_node) = &status.node {
-                if active_node.id == node.id {
-                    if let Ok(settings) = self.manager.load_settings() {
-                        let port = settings.mixed_port;
-                        let proxy_url = format!("http://127.0.0.1:{}", port);
-                        let client = reqwest::Client::builder()
-                            .proxy(reqwest::Proxy::all(&proxy_url).map_err(|e| e.to_string())?)
-                            .timeout(std::time::Duration::from_secs(5))
-                            .build()
-                            .map_err(|e| e.to_string())?;
-                        let start = std::time::Instant::now();
-                        let _ = client
-                            .get("http://www.gstatic.com/generate_204")
-                            .send()
-                            .await
-                            .map_err(|e| e.to_string())?;
-                        return Ok(start.elapsed().as_millis() as u64);
-                    }
-                }
+        let outbound = self.node_to_outbound(&node);
+        let outbound_json = serde_json::to_string(&outbound).map_err(|e| e.to_string())?;
+
+        let outbound_c = std::ffi::CString::new(outbound_json).unwrap();
+        let target_c = std::ffi::CString::new("http://www.gstatic.com/generate_204").unwrap();
+
+        let res_ptr = unsafe {
+            crate::libbox::LibboxTestOutbound(
+                outbound_c.as_ptr(),
+                target_c.as_ptr(),
+                5000, // 5s timeout
+            )
+        };
+
+        if res_ptr.is_null() {
+            return Err("Latency test returned null pointer".to_string());
+        }
+
+        let res_str = unsafe { CStr::from_ptr(res_ptr).to_string_lossy().into_owned() };
+
+        // Try to parse as u64 (latency)
+        match res_str.parse::<u64>() {
+            Ok(latency) => Ok(latency),
+            Err(_) => Err(res_str), // Return as error message
+        }
+    }
+
+    fn node_to_outbound(&self, node: &crate::profile::Node) -> crate::config::Outbound {
+        let mut cfg = crate::config::SingBoxConfig::new(None, crate::config::ConfigMode::Combined);
+        let tag = node.id.clone();
+
+        match node.protocol.as_str() {
+            "vmess" => {
+                cfg = cfg.with_vmess_outbound(
+                    &tag,
+                    node.server.clone(),
+                    node.port,
+                    node.uuid.clone().unwrap_or_default(),
+                    node.cipher.clone().unwrap_or("auto".to_string()),
+                    0,
+                    node.network.clone(),
+                    node.path.clone(),
+                    node.host.clone(),
+                    node.tls,
+                );
+            }
+            "vless" => {
+                cfg = cfg.with_vless_outbound(
+                    &tag,
+                    node.server.clone(),
+                    node.port,
+                    node.uuid.clone().unwrap_or_default(),
+                    node.flow.clone(),
+                    node.network.clone(),
+                    node.path.clone(),
+                    node.host.clone(),
+                    node.tls,
+                    node.insecure,
+                    node.sni.clone(),
+                    node.alpn.clone(),
+                );
+            }
+            "shadowsocks" | "ss" => {
+                cfg = cfg.with_shadowsocks_outbound(
+                    &tag,
+                    node.server.clone(),
+                    node.port,
+                    node.cipher
+                        .clone()
+                        .unwrap_or("chacha20-ietf-poly1305".to_string()),
+                    node.password.clone().unwrap_or_default(),
+                );
+            }
+            "trojan" => {
+                cfg = cfg.with_trojan_outbound(
+                    &tag,
+                    node.server.clone(),
+                    node.port,
+                    node.password.clone().unwrap_or_default(),
+                    node.network.clone(),
+                    node.path.clone(),
+                    node.host.clone(),
+                    node.sni.clone(),
+                    node.insecure,
+                );
+            }
+            "hysteria2" | "hy2" => {
+                let up_mbps = node.up.as_ref().and_then(|s| s.parse().ok());
+                let down_mbps = node.down.as_ref().and_then(|s| s.parse().ok());
+                cfg = cfg.with_hysteria2_outbound(
+                    &tag,
+                    node.server.clone(),
+                    node.port,
+                    node.password.clone().unwrap_or_default(),
+                    node.sni.clone(),
+                    node.insecure,
+                    node.alpn.clone(),
+                    up_mbps,
+                    down_mbps,
+                    node.obfs.clone(),
+                    node.obfs_password.clone(),
+                );
+            }
+            "tuic" => {
+                cfg = cfg.with_tuic_outbound(
+                    &tag,
+                    node.server.clone(),
+                    node.port,
+                    node.uuid.clone().unwrap_or_default(),
+                    node.password.clone(),
+                    node.sni.clone(),
+                    node.insecure,
+                    node.alpn.clone(),
+                    None,
+                    None,
+                );
+            }
+            _ => {
+                // Direct for others
+                cfg = cfg.with_direct_tag(&tag);
             }
         }
 
-        // 2. Fallback: Tcp Ping
-        let target = format!("{}:{}", node.server, node.port);
-        let start = std::time::Instant::now();
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(3),
-            tokio::net::TcpStream::connect(&target),
-        )
-        .await
-        {
-            Ok(Ok(_)) => Ok(start.elapsed().as_millis() as u64),
-            Ok(Err(e)) => Err(format!("TCP Connect failed: {}", e)),
-            Err(_) => Err("Connection timed out".to_string()),
-        }
+        cfg.outbounds.pop().unwrap()
     }
 
     // --- Tray Helpers ---
