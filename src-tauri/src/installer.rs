@@ -26,7 +26,13 @@ impl HelperInstaller {
 
     pub fn install(&self) -> Result<(), Box<dyn Error>> {
         // 1. Find binary path (handle dev vs production)
-        let mut resource_path = self.app_handle.path().resource_dir()?.join(HELPER_BIN_NAME);
+        // Note: resources are bundled into a 'resources' subdirectory due to tauri.conf.json structure
+        let mut resource_path = self
+            .app_handle
+            .path()
+            .resource_dir()?
+            .join("resources")
+            .join(HELPER_BIN_NAME);
 
         if cfg!(debug_assertions) {
             // In dev mode, the binary might be in target/debug

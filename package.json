@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "tauri": "tauri"
+    "tauri": "npm run build:helper && tauri",
+    "build:helper": "chmod +x src-tauri/scripts/build_helper.sh && src-tauri/scripts/build_helper.sh"
   },
   "dependencies": {
     "@cloudworxx/tauri-plugin-mac-rounded-corners": "^1.1.1",

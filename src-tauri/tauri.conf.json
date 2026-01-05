@@ -56,7 +56,8 @@
     "resources": [
       "resources/geoip-cn.srs",
       "resources/geosite-cn.srs",
-      "resources/sing-box"
+      "resources/sing-box",
+      "resources/tunnet-helper"
     ],
     "iOS": {
       "developmentTeam": "JSG9S9M456"
