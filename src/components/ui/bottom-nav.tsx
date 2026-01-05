@@ -40,7 +40,7 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
                             "p-1 rounded-lg transition-colors",
                             activeTab === tab.id && "bg-primary/10"
                         )}>
-                            {tab.id === "proxies" ? <Globe size={22} /> : React.cloneElement(tab.icon as React.ReactElement, { size: 22 })}
+                            {tab.id === "proxies" ? <Globe size={22} /> : React.cloneElement(tab.icon as React.ReactElement<{ size: number }>, { size: 22 })}
                         </div>
                         <span className="text-[10px] font-medium tracking-tight">
                             {tab.id === "proxies" ? t('sidebar.proxies', { defaultValue: 'Proxies' }) : tab.label}

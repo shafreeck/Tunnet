@@ -17,11 +17,11 @@ interface ProxiesViewProps {
     servers: any[]
     onSelect: (id: string) => void
     onToggle: (id: string, shouldConnect?: boolean) => void
-    onImport: (url: string) => void
+    onImport: (url: string) => Promise<void>
     onEdit: (node: any) => void
     onDelete: (id: string) => void
     onRefresh: () => void
-    onPing: (id: string) => void
+    onPing: (id: string) => Promise<void>
 
     // Groups Props
     // GroupsView uses allNodes too

@@ -39,3 +39,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Compiled Libraries
+*.a
+*.so
+*.dll
+*.dylib
+*.lib
+*.exp
+
+# Specific libbox artifacts
+core_library/libbox-c-shared/libbox.h
+core_library/libbox-c-shared/libbox_ios.h
+core_library/libbox-c-shared/libbox.def

@@ -110,6 +110,106 @@ fn main() {
         println!("cargo:rustc-link-arg=-framework");
         println!("cargo:rustc-link-arg=Network");
         println!("cargo:rustc-link-arg=-lresolv");
+    } else if target_os == "android" {
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+        let libbox_dir = Path::new(&manifest_dir).join("../core_library/libbox-c-shared");
+        let out_dir = std::path::PathBuf::from(env::var("OUT_DIR").unwrap());
+
+        println!(
+            "cargo:warning=Building libbox for Android target: {}",
+            env::var("TARGET").unwrap_or_default()
+        );
+
+        let target_triple = env::var("TARGET").unwrap_or_default();
+        let mut cmd = Command::new("go");
+        cmd.current_dir(&libbox_dir).args(&[
+            "build",
+            "-tags",
+            "with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls,android",
+            "-buildmode=c-shared",
+        ]);
+
+        cmd.arg("-o").arg(out_dir.join("libbox.so")).arg("main.go");
+
+        cmd.env("CGO_ENABLED", "1").env("GOOS", "android");
+
+        // Resolve NDK Home
+        let ndk_home = env::var("ANDROID_NDK_HOME")
+            .or_else(|_| env::var("NDK_HOME"))
+            .or_else(|_| {
+                env::var("ANDROID_HOME").map(|h| {
+                    let ndk_root = Path::new(&h).join("ndk");
+                    if let Ok(entries) = std::fs::read_dir(&ndk_root) {
+                        if let Some(entry) = entries.filter_map(Result::ok).next() {
+                            return entry.path().to_string_lossy().to_string();
+                        }
+                    }
+                    ndk_root.to_string_lossy().to_string()
+                })
+            })
+            .expect("ANDROID_NDK_HOME or ANDROID_HOME must be set");
+
+        let host_os = "darwin";
+        let toolchain_bin = Path::new(&ndk_home)
+            .join("toolchains/llvm/prebuilt")
+            .join(format!("{}-x86_64", host_os))
+            .join("bin");
+
+        let mut android_abi = "";
+
+        if target_triple.starts_with("aarch64") {
+            cmd.env("GOARCH", "arm64");
+            android_abi = "arm64-v8a";
+            let cc_path = toolchain_bin.join("aarch64-linux-android24-clang");
+            if cc_path.exists() {
+                cmd.env("CC", &cc_path);
+            }
+        } else if target_triple.starts_with("arm") {
+            cmd.env("GOARCH", "arm");
+            android_abi = "armeabi-v7a";
+            let cc_path = toolchain_bin.join("armv7a-linux-androideabi24-clang");
+            if cc_path.exists() {
+                cmd.env("CC", &cc_path);
+            }
+        } else if target_triple.starts_with("x86_64") {
+            cmd.env("GOARCH", "amd64");
+            android_abi = "x86_64";
+            let cc_path = toolchain_bin.join("x86_64-linux-android24-clang");
+            if cc_path.exists() {
+                cmd.env("CC", &cc_path);
+            }
+        } else if target_triple.starts_with("i686") {
+            cmd.env("GOARCH", "386");
+            android_abi = "x86";
+            let cc_path = toolchain_bin.join("i686-linux-android24-clang");
+            if cc_path.exists() {
+                cmd.env("CC", &cc_path);
+            }
+        }
+
+        let status = cmd
+            .status()
+            .expect("Failed to execute go build for Android");
+
+        if !status.success() {
+            panic!("Go build for Android failed");
+        }
+
+        // Copy to jniLibs
+        if !android_abi.is_empty() {
+            let jni_libs_dir = Path::new(&manifest_dir)
+                .join("gen/android/app/src/main/jniLibs")
+                .join(android_abi);
+            let _ = std::fs::create_dir_all(&jni_libs_dir);
+            let _ = std::fs::copy(out_dir.join("libbox.so"), jni_libs_dir.join("libbox.so"));
+            println!(
+                "cargo:warning=Copied libbox.so to {}",
+                jni_libs_dir.display()
+            );
+        }
+
+        println!("cargo:rustc-link-search=native={}", out_dir.display());
+        println!("cargo:rustc-link-lib=dylib=box");
     } else if target_os == "windows" {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
         let libbox_dir = Path::new(&manifest_dir).join("../core_library/libbox-c-shared");

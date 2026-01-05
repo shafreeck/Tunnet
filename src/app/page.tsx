@@ -947,9 +947,11 @@ export default function Home() {
             isConnected={isConnected}
             activeServerId={activeServerId}
             activeAutoNodeId={activeAutoNodeId}
+
             servers={servers}
             onSelect={(id) => setActiveServerId(id)}
             onToggle={handleServerToggle}
+            onRefresh={() => fetchProfiles(true)}
             onImport={handleImport}
             onEdit={(node) => {
               if (node) {
@@ -966,12 +968,9 @@ export default function Home() {
       case "groups":
         return (
           <GroupsView
-            isConnected={isConnected}
-            activeServerId={activeServerId}
-            groups={groups}
-            servers={servers}
-            onSelect={(id) => setActiveServerId(id)}
-            onToggle={handleServerToggle}
+            allNodes={servers}
+            activeTargetId={activeServerId}
+            onSelectTarget={(id) => handleServerToggle(id, true)}
           />
         )
       case "proxies":
@@ -1008,7 +1007,7 @@ export default function Home() {
         return (
           <SubscriptionsView
             profiles={profiles}
-            onRefresh={() => fetchProfiles(true)}
+
             onUpdate={handleUpdateProfile}
             onDelete={handleDeleteProfile}
             onAdd={() => setShowAddSubscription(true)}
