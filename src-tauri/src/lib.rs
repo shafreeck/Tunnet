@@ -300,6 +300,7 @@ async fn select_group_node(
 
 #[tauri::command]
 async fn open_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(desktop)]
     if let Some(window) = app.get_webview_window("main") {
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
@@ -322,6 +323,7 @@ async fn quit_app(
 
 #[tauri::command]
 async fn hide_tray_window(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(desktop)]
     if let Some(window) = app.get_webview_window("tray") {
         window.hide().map_err(|e| e.to_string())?;
     }
@@ -348,42 +350,47 @@ static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default()
-        .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None,
-        ))
-        .on_menu_event(|app, event| {
-            if event.id() == "quit" {
-                log::info!("Menu Item 'Quit' clicked. Performing emergency cleanup...");
-                let service = app.state::<ProxyService<tauri::Wry>>();
-                service.emergency_cleanup();
-                std::process::exit(0);
-            }
-        })
-        .on_window_event(|window, event| {
-            let label = window.label();
-            match event {
-                tauri::WindowEvent::Focused(focused) if label == "tray" => {
-                    if !*focused {
-                        let now = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_millis() as i64;
-                        let last_click = LAST_CLICK_TIME.load(Ordering::Relaxed);
-                        if (now - last_click) > 500 {
-                            let _ = window.hide();
+    let mut builder = tauri::Builder::default().plugin(tauri_plugin_os::init());
+
+    #[cfg(desktop)]
+    {
+        builder = builder
+            .plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                None,
+            ))
+            .on_menu_event(|app, event| {
+                if event.id() == "quit" {
+                    log::info!("Menu Item 'Quit' clicked. Performing emergency cleanup...");
+                    let service = app.state::<ProxyService<tauri::Wry>>();
+                    service.emergency_cleanup();
+                    std::process::exit(0);
+                }
+            })
+            .on_window_event(|window, event| {
+                let label = window.label();
+                match event {
+                    tauri::WindowEvent::Focused(focused) if label == "tray" => {
+                        if !*focused {
+                            let now = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_millis() as i64;
+                            let last_click = LAST_CLICK_TIME.load(Ordering::Relaxed);
+                            if (now - last_click) > 500 {
+                                let _ = window.hide();
+                            }
                         }
                     }
+                    tauri::WindowEvent::CloseRequested { api, .. } if label == "main" => {
+                        let _ = window.hide();
+                        api.prevent_close();
+                    }
+                    _ => {}
                 }
-                tauri::WindowEvent::CloseRequested { api, .. } if label == "main" => {
-                    let _ = window.hide();
-                    api.prevent_close();
-                }
-                _ => {}
-            }
-        })
+            });
+    }
+    builder
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -410,65 +417,71 @@ pub fn run() {
             app.manage(proxy_service);
 
             // System Tray Setup
-            use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
+            #[cfg(desktop)]
+            {
+                use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 
-            // Load dedicated monochromatic tray icon
-            let tray_icon_bytes = include_bytes!("../resources/tray-icon.png");
-            let tray_icon =
-                tauri::image::Image::from_bytes(tray_icon_bytes).expect("Failed to load tray icon");
+                // Load dedicated monochromatic tray icon
+                let tray_icon_bytes = include_bytes!("../resources/tray-icon.png");
+                let tray_icon = tauri::image::Image::from_bytes(tray_icon_bytes)
+                    .expect("Failed to load tray icon");
 
-            let tray = TrayIconBuilder::new()
-                .icon(tray_icon)
-                .show_menu_on_left_click(false)
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        position,
-                        ..
-                    } = event
-                    {
-                        let now = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_millis() as i64;
-                        let last_click = LAST_CLICK_TIME.load(Ordering::Relaxed);
+                let tray = TrayIconBuilder::new()
+                    .icon(tray_icon)
+                    .show_menu_on_left_click(false)
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            position,
+                            ..
+                        } = event
+                        {
+                            let now = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_millis() as i64;
+                            let last_click = LAST_CLICK_TIME.load(Ordering::Relaxed);
 
-                        if (now - last_click) < 200 {
-                            return;
-                        }
-                        LAST_CLICK_TIME.store(now, Ordering::Relaxed);
+                            if (now - last_click) < 200 {
+                                return;
+                            }
+                            LAST_CLICK_TIME.store(now, Ordering::Relaxed);
 
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("tray") {
-                            if window.is_visible().unwrap_or(false) {
-                                let _ = window.hide();
-                            } else {
-                                // Calculate position
-                                let _ = window.set_position(tauri::Position::Physical(
-                                    tauri::PhysicalPosition {
-                                        x: (position.x as i32) - 160,
-                                        y: (position.y as i32) + 0,
-                                    },
-                                ));
+                            let app = tray.app_handle();
+                            if let Some(window) = app.get_webview_window("tray") {
+                                if window.is_visible().unwrap_or(false) {
+                                    let _ = window.hide();
+                                } else {
+                                    // Calculate position
+                                    let _ = window.set_position(tauri::Position::Physical(
+                                        tauri::PhysicalPosition {
+                                            x: (position.x as i32) - 160,
+                                            y: (position.y as i32) + 0,
+                                        },
+                                    ));
 
-                                let _ = window.show();
-                                let _ = window.set_focus(); // Re-enabled for blur detection
-                                let _ = window.set_always_on_top(true);
+                                    let _ = window.show();
+                                    let _ = window.set_focus(); // Re-enabled for blur detection
+                                    let _ = window.set_always_on_top(true);
+                                }
                             }
                         }
-                    }
-                })
-                .build(app)?;
+                    })
+                    .build(app)?;
 
-            #[cfg(target_os = "macos")]
-            let _ = tray.set_icon_as_template(true);
+                #[cfg(target_os = "macos")]
+                let _ = tray.set_icon_as_template(true);
+            }
 
             // Handle Start Minimized
-            let service = app.state::<ProxyService<tauri::Wry>>();
-            if let Ok(settings) = service.get_app_settings() {
-                if settings.start_minimized {
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.hide();
+            #[cfg(desktop)]
+            {
+                let service = app.state::<ProxyService<tauri::Wry>>();
+                if let Ok(settings) = service.get_app_settings() {
+                    if settings.start_minimized {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.hide();
+                        }
                     }
                 }
             }
@@ -518,8 +531,7 @@ pub fn run() {
             rename_profile,
             check_node_pings,
             get_group_status
-        ]);
-    builder
+        ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app_handle, event| {

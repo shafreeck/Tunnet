@@ -52,6 +52,64 @@ fn main() {
         println!("cargo:rustc-link-arg=SystemConfiguration");
 
         println!("cargo:rustc-link-arg=-lresolv");
+    } else if target_os == "ios" {
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+        let libbox_dir = Path::new(&manifest_dir).join("../core_library/libbox-c-shared");
+
+        // Build Go library for iOS
+        let target_triple = env::var("TARGET").unwrap_or_default();
+        let is_sim = target_triple.contains("sim") || target_triple.contains("x86_64");
+
+        println!(
+            "cargo:warning=Building libbox for iOS target: {}, is_sim: {}",
+            target_triple, is_sim
+        );
+
+        let mut cmd = Command::new("go");
+        cmd.current_dir(&libbox_dir)
+            .args(&[
+                "build",
+                "-tags",
+                "with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls",
+                "-buildmode=c-archive",
+                "-o",
+                "libbox_ios.a",
+                "main.go",
+            ])
+            .env("CGO_ENABLED", "1")
+            .env("GOOS", "ios");
+
+        if is_sim {
+            if target_triple.starts_with("aarch64") {
+                cmd.env("GOARCH", "arm64")
+                    .env("CGO_CFLAGS", "-target arm64-apple-ios14.0-simulator");
+            } else {
+                cmd.env("GOARCH", "amd64");
+            }
+        } else {
+            cmd.env("GOARCH", "arm64");
+        }
+
+        let status = cmd.status().expect("Failed to execute go build for iOS");
+
+        if !status.success() {
+            panic!("Go build for iOS failed");
+        }
+
+        // Link instructions
+        println!("cargo:rustc-link-search=native={}", libbox_dir.display());
+        println!("cargo:rustc-link-lib=static=box_ios");
+
+        // iOS Frameworks (Go requirements)
+        println!("cargo:rustc-link-arg=-framework");
+        println!("cargo:rustc-link-arg=CoreFoundation");
+        println!("cargo:rustc-link-arg=-framework");
+        println!("cargo:rustc-link-arg=Security");
+        println!("cargo:rustc-link-arg=-framework");
+        println!("cargo:rustc-link-arg=SystemConfiguration");
+        println!("cargo:rustc-link-arg=-framework");
+        println!("cargo:rustc-link-arg=Network");
+        println!("cargo:rustc-link-arg=-lresolv");
     } else if target_os == "windows" {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
         let libbox_dir = Path::new(&manifest_dir).join("../core_library/libbox-c-shared");
@@ -82,7 +140,7 @@ fn main() {
         if !status.success() {
             panic!("Go build failed");
         }
-        
+
         // Generate .def file using gendef
         // gendef overwrites libbox.def if it exists
         let status = Command::new("gendef")
@@ -90,7 +148,7 @@ fn main() {
             .arg("libbox.dll")
             .status()
             .expect("Failed to execute gendef");
-            
+
         if !status.success() {
             panic!("gendef failed. Ensure 'gendef' (MinGW-w64) is in your PATH.");
         }
@@ -98,30 +156,23 @@ fn main() {
         // Create import library (.lib) for MSVC using lib.exe with absolute path
         // derived from previous error logs showing linker path
         let lib_exe_path = r"C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\bin\HostX64\x64\lib.exe";
-        
+
         let status = Command::new(lib_exe_path)
             .current_dir(&libbox_dir)
-            .args(&[
-                "/DEF:libbox.def",
-                "/OUT:box.lib",
-                "/MACHINE:X64",
-                "/NOLOGO",
-            ])
+            .args(&["/DEF:libbox.def", "/OUT:box.lib", "/MACHINE:X64", "/NOLOGO"])
             .status();
-        
+
         // If lib.exe is not found or fails, try dlltool as fallback (or just fail if verified lib.exe is path)
         // For now, let's expect lib.exe to work if we are in MSVC env.
         // If Command::new fails (not found), status is Err.
         let success = status.map(|s| s.success()).unwrap_or(false);
 
         if !success {
-             // Fallback to dlltool if lib.exe failed (maybe not in PATH)
-             // We can print a warning but we already tried dlltool and it likely failed linking.
-             // Let's force panic to see if lib.exe was found.
-             panic!("Failed to execute lib.exe. Ensure you have MSVC Build Tools installed and available.");
+            // Fallback to dlltool if lib.exe failed (maybe not in PATH)
+            // We can print a warning but we already tried dlltool and it likely failed linking.
+            // Let's force panic to see if lib.exe was found.
+            panic!("Failed to execute lib.exe. Ensure you have MSVC Build Tools installed and available.");
         }
-
-
 
         // Link instructions
         println!("cargo:rustc-link-search=native={}", libbox_dir.display());
@@ -134,30 +185,27 @@ fn main() {
         println!("cargo:rustc-link-lib=ntdll");
         println!("cargo:rustc-link-lib=userenv");
         println!("cargo:rustc-link-lib=crypt32");
-        
+
         // Copy libbox.dll to the target directory so the executable can find it
         let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
         let target_dir = Path::new(&manifest_dir).join("target").join(profile);
-        
+
         // Ensure target directory exists
         if !target_dir.exists() {
-             let _ = std::fs::create_dir_all(&target_dir);
+            let _ = std::fs::create_dir_all(&target_dir);
         }
-        
-        let _ = std::fs::copy(
-            libbox_dir.join("libbox.dll"),
-            target_dir.join("libbox.dll")
-        );
 
+        let _ = std::fs::copy(libbox_dir.join("libbox.dll"), target_dir.join("libbox.dll"));
     }
 
     let mut windows = tauri_build::WindowsAttributes::new();
-    
+
     // Only add manifest in release mode to allow 'cargo run' to work in non-admin terminals
     // In dev mode, if you need TUN, you must run the terminal as Administrator manually.
     let profile = env::var("PROFILE").unwrap_or_default();
     if profile != "debug" {
-        windows = windows.app_manifest(r#"
+        windows = windows.app_manifest(
+            r#"
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
@@ -167,7 +215,8 @@ fn main() {
     </security>
   </trustInfo>
 </assembly>
-"#);
+"#,
+        );
     }
 
     tauri_build::try_build(tauri_build::Attributes::new().windows_attributes(windows))

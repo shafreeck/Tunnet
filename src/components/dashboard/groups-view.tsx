@@ -228,24 +228,24 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget }: GroupsV
 
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
-            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-8 pb-6 shrink-0 relative z-20">
+            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-5 md:p-8 md:pb-6 shrink-0 relative z-20">
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
                 <div className="max-w-5xl mx-auto w-full relative z-10 pointer-events-none">
-                    <div className="flex items-start justify-between mb-8 gap-12">
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 md:mb-8 gap-4 md:gap-12">
                         <div className="max-w-lg">
-                            <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">{t('groups.title')}</h2>
-                            <p className="text-sm text-text-secondary font-medium">{t('groups.subtitle')}</p>
+                            <h2 className="text-xl md:text-2xl font-bold text-text-primary mb-1 md:mb-2 tracking-tight">{t('groups.title')}</h2>
+                            <p className="text-xs md:text-sm text-text-secondary font-medium">{t('groups.subtitle')}</p>
                         </div>
-                        <div className="pointer-events-auto flex items-center gap-4">
-                            <div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 px-3 py-1.5 rounded-xl border border-transparent hover:border-border-color transition-all">
-                                <span className="text-[10px] font-bold text-text-secondary uppercase">{t('groups.show_system')}</span>
-                                <Switch checked={showSystemGroups} onCheckedChange={setShowSystemGroups} className="scale-75 origin-right" />
+                        <div className="pointer-events-auto flex items-center gap-2 md:gap-4 w-full md:w-auto">
+                            <div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 px-2 md:px-3 py-1 md:py-1.5 rounded-xl border border-transparent hover:border-border-color transition-all flex-1 md:flex-none">
+                                <span className="text-[9px] md:text-[10px] font-bold text-text-secondary uppercase">{t('groups.show_system')}</span>
+                                <Switch checked={showSystemGroups} onCheckedChange={setShowSystemGroups} className="scale-75 md:scale-90 origin-right" />
                             </div>
                             <button
                                 onClick={() => openDialog()}
-                                className="flex items-center gap-2 px-6 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-primary/20 scale-100 active:scale-95"
+                                className="flex items-center justify-center gap-2 px-4 md:px-6 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-primary/20 scale-100 active:scale-95 flex-none"
                             >
-                                <Plus size={16} />
+                                <Plus size={14} className="md:size-4" />
                                 {t('groups.create')}
                             </button>
                         </div>
@@ -253,7 +253,7 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget }: GroupsV
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-8 py-8 sidebar-scroll bg-transparent">
+            <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-8 sidebar-scroll bg-transparent">
                 <div className="max-w-5xl mx-auto w-full space-y-3 pb-32">
                     {groups.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-gray-600">

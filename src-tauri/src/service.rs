@@ -2074,6 +2074,8 @@ impl<R: Runtime> ProxyService<R> {
         self.manager.save_settings(&settings)?;
 
         // Handle Launch at Login
+        // Handle Launch at Login
+        #[cfg(desktop)]
         if settings.launch_at_login != old_settings.launch_at_login {
             use tauri_plugin_autostart::ManagerExt;
             if settings.launch_at_login {

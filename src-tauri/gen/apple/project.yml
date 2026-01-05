@@ -1,0 +1,137 @@
+name: tunnet
+options:
+  bundleIdPrefix: com.shafreeck.tunnet
+  deploymentTarget:
+    iOS: 14.0
+fileGroups: [../../src]
+configs:
+  debug: debug
+  release: release
+settingGroups:
+  app:
+    base:
+      PRODUCT_NAME: Tunnet
+      PRODUCT_BUNDLE_IDENTIFIER: com.shafreeck.tunnet
+      DEVELOPMENT_TEAM: JSG9S9M456
+      CODE_SIGN_STYLE: Automatic
+targetTemplates:
+  app:
+    type: application
+    sources:
+      - path: Sources
+        excludes: ["tunnet-extension/**"]
+    scheme:
+      environmentVariables:
+        RUST_BACKTRACE: full
+        RUST_LOG: info
+    settings:
+      groups: [app]
+targets:
+  tunnet-extension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/tunnet-extension
+        excludes: ["Info.plist"]
+    info:
+      path: Sources/tunnet-extension/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    entitlements:
+      path: Sources/tunnet-extension/tunnet-extension.entitlements
+      properties:
+        com.apple.developer.networking.networkextension: [packet-tunnel-vpn]
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.network.server: true
+    dependencies:
+      - sdk: NetworkExtension.framework
+      - sdk: libresolv.tbd
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.shafreeck.tunnet.extension
+        DEVELOPMENT_TEAM: JSG9S9M456
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_BITCODE: false
+        ARCHS: [arm64]
+        VALID_ARCHS: arm64
+        INFOPLIST_FILE: Sources/tunnet-extension/Info.plist
+        SWIFT_INCLUDE_PATHS: ../../../core_library/libbox-c-shared
+        HEADER_SEARCH_PATHS: ../../../core_library/libbox-c-shared
+        LIBRARY_SEARCH_PATHS: ../../../core_library/libbox-c-shared
+        OTHER_LDFLAGS: -lbox_ios -framework CoreFoundation -framework Security -framework SystemConfiguration -framework Network -lresolv
+  tunnet_iOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+        excludes: ["tunnet-extension/**"]
+      - path: Assets.xcassets
+      - path: Externals
+      - path: tunnet_iOS
+        excludes: ["Info.plist", "tunnet_iOS.entitlements"]
+      - path: assets
+        buildPhase: resources
+        type: folder
+      - path: LaunchScreen.storyboard
+    info:
+      path: tunnet_iOS/Info.plist
+      properties:
+        LSRequiresIPhoneOS: true
+        UILaunchStoryboardName: LaunchScreen
+        UIRequiredDeviceCapabilities: [arm64, metal]
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        CFBundleShortVersionString: 0.1.0
+        CFBundleVersion: "1"
+    entitlements:
+      path: tunnet_iOS/tunnet_iOS.entitlements
+      properties:
+        com.apple.developer.networking.networkextension: [packet-tunnel-vpn]
+    scheme:
+      environmentVariables:
+        RUST_BACKTRACE: full
+        RUST_LOG: info
+    settings:
+      base:
+        DEVELOPMENT_TEAM: JSG9S9M456
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_BITCODE: false
+        ARCHS: [arm64]
+        VALID_ARCHS: arm64
+        LIBRARY_SEARCH_PATHS[arch=x86_64]: $(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)
+        LIBRARY_SEARCH_PATHS[arch=arm64]: $(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)
+        ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: true
+        EXCLUDED_ARCHS[sdk=iphoneos*]: x86_64
+      groups: [app]
+    dependencies:
+      - target: tunnet-extension
+        embed: true
+      - framework: libapp.a
+        embed: false
+      - sdk: CoreGraphics.framework
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+      - sdk: QuartzCore.framework
+      - sdk: Security.framework
+      - sdk: UIKit.framework
+      - sdk: WebKit.framework
+      - sdk: libresolv.tbd
+    preBuildScripts:
+      - script: |
+          export PATH="$PATH:$HOME/.cargo/bin:$HOME/.local/bin:$HOME/go/bin:/usr/local/bin:/opt/homebrew/bin"
+          npm run -- tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}
+        name: Build Rust Code
+        basedOnDependencyAnalysis: false
+        outputFiles:
+          - $(SRCROOT)/Externals/x86_64/${CONFIGURATION}/libapp.a
+          - $(SRCROOT)/Externals/arm64/${CONFIGURATION}/libapp.a

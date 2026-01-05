@@ -1,0 +1,4 @@
+module Libbox {
+    header "libbox.h"
+    export *
+}

@@ -68,7 +68,7 @@ unsafe extern "C" {
     *   **Frameworks**: 显式链接了 macOS 系统框架 (`Security`, `CoreFoundation`, `SystemConfiguration`, `resolv`) 以满足 Go Runtime 和 Sing-box 的依赖。
     *   **Code**: `tunnet-helper` 现在是一个单一的守护进程，直接在内存中启动 Sing-box 实例，不再产生子进程。
 
-### Phase 3: Windows Architecture [Next]
+### Phase 3: Windows Architecture [Done]
 **目标**: 实现 Windows Service 宿主。
 1.  创建 `tunnet-service` crate (Rust)，使用 `windows-service`。
 2.  实现 Named Pipe Server。

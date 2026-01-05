@@ -5,17 +5,19 @@ import { invoke } from "@tauri-apps/api/core"
 import { listen, emit } from "@tauri-apps/api/event"
 import { useTranslation } from "react-i18next"
 import { AppSettings, defaultSettings, getAppSettings, saveAppSettings } from "@/lib/settings"
-import { Sidebar } from "@/components/dashboard/sidebar"
+import { Sidebar, ViewType } from "@/components/dashboard/sidebar"
 import { LocationsView } from "@/components/dashboard/locations-view"
+import { GroupsView, Group } from "@/components/dashboard/groups-view"
 import { SubscriptionsView } from "@/components/dashboard/subscriptions-view"
 import { RulesView } from "@/components/dashboard/rules-view"
 import { SettingsView } from "@/components/dashboard/settings-view"
 import { Header, ConnectionStatus } from "@/components/dashboard/connection-status"
 import { ServerList } from "@/components/dashboard/server-list"
-import { GroupsView, Group } from "@/components/dashboard/groups-view"
+import { ProxiesView } from "@/components/dashboard/proxies-view"
 import { LogViewer } from "@/components/dashboard/log-viewer"
 import { WindowControls } from "@/components/ui/window-controls"
-import { toast } from "sonner" // Assuming sonner is available or standard alert
+import { BottomNav } from "@/components/ui/bottom-nav"
+import { toast } from "sonner"
 import { getFlagUrl, getCountryName, getFlagUrlFromCode, getCountryCode } from "@/lib/flags"
 import { NodeEditor, Node } from "@/components/dashboard/node-editor"
 import { ConfirmationModal } from "@/components/ui/confirmation-modal"
@@ -26,8 +28,16 @@ export default function Home() {
   const { t } = useTranslation()
   // Hydration fix
   const [mounted, setMounted] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+
   useEffect(() => {
     setMounted(true)
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
   const [isConnected, setIsConnected] = useState(false)
@@ -866,7 +876,7 @@ export default function Home() {
   }
 
   // View State
-  const [currentView, setCurrentView] = useState<"dashboard" | "locations" | "rules" | "settings" | "proxies" | "groups">("dashboard")
+  const [currentView, setCurrentView] = useState<ViewType>("dashboard")
   const [profiles, setProfiles] = useState<any[]>([])
 
   // Derive active subscription stats
@@ -934,9 +944,10 @@ export default function Home() {
       case "locations":
         return (
           <LocationsView
-            servers={servers}
-            activeServerId={activeServerId}
             isConnected={isConnected}
+            activeServerId={activeServerId}
+            activeAutoNodeId={activeAutoNodeId}
+            servers={servers}
             onSelect={(id) => setActiveServerId(id)}
             onToggle={handleServerToggle}
             onImport={handleImport}
@@ -949,43 +960,66 @@ export default function Home() {
               }
             }}
             onDelete={handleDeleteNode}
-            onRefresh={() => fetchProfiles(true)}
             onPing={handlePingNode}
-            activeAutoNodeId={activeAutoNodeId}
           />
         )
       case "groups":
         return (
           <GroupsView
-            allNodes={servers}
-            activeTargetId={activeServerId}
-            onSelectTarget={(id) => handleServerToggle(id)}
+            isConnected={isConnected}
+            activeServerId={activeServerId}
+            groups={groups}
+            servers={servers}
+            onSelect={(id) => setActiveServerId(id)}
+            onToggle={handleServerToggle}
           />
         )
-      case "proxies": // Mapped to Subscriptions
-        return <SubscriptionsView
-          profiles={profiles}
-          onUpdate={() => fetchProfiles()}
-          onDelete={async (id) => {
-            await invoke("delete_profile", { id })
-            fetchProfiles()
-          }}
-          onAdd={() => setShowAddSubscription(true)}
-          onSelect={handleSubscriptionSelect}
-          onUpdateAll={() => fetchProfiles()}
-          isImporting={false}
-          onNodeSelect={(id, selectOnly) => handleServerToggle(id, !selectOnly)}
-          isConnected={isConnected}
-          activeServerId={activeServerId || undefined}
-          activeAutoNodeId={activeAutoNodeId}
-        />
+      case "proxies":
+        if (isMobile) {
+          return (
+            <ProxiesView
+              isConnected={isConnected}
+              activeServerId={activeServerId}
+              activeAutoNodeId={activeAutoNodeId}
+              servers={servers}
+              onSelect={(id) => setActiveServerId(id)}
+              onToggle={handleServerToggle}
+              onImport={handleImport}
+              onEdit={(node) => {
+                if (node) {
+                  setEditingNode(node as Node)
+                  setEditorOpen(true)
+                } else {
+                  setShowAddModal(true)
+                }
+              }}
+              onDelete={handleDeleteNode}
+              onRefresh={() => fetchProfiles(true)}
+              onPing={handlePingNode}
+              profiles={profiles}
+              onUpdateSubscription={handleUpdateProfile}
+              onDeleteSubscription={handleDeleteProfile}
+              onAddSubscription={() => setShowAddSubscription(true)}
+              onSelectSubscription={handleSubscriptionSelect}
+              onUpdateAllSubscriptions={handleUpdateAll}
+            />
+          )
+        }
+        return (
+          <SubscriptionsView
+            profiles={profiles}
+            onRefresh={() => fetchProfiles(true)}
+            onUpdate={handleUpdateProfile}
+            onDelete={handleDeleteProfile}
+            onAdd={() => setShowAddSubscription(true)}
+            onSelect={handleSubscriptionSelect}
+            onUpdateAll={handleUpdateAll}
+          />
+        )
       case "subscription_detail" as any:
         const subscription = profiles.find(p => p.id === selectedSubscriptionId)
         if (!subscription) return <div>Subscription not found</div>
 
-        // Filter servers to show only ones from this subscription
-        // We need to map subscription nodes to the `servers` format (which `updateServersState` does into `servers` state)
-        // But `servers` contains ALL nodes. So we filter `servers` by checking if ID is in subscription nodes.
         const subNodeIds = new Set(subscription.nodes.map((n: any) => n.id))
         const subServers = servers.filter(s => subNodeIds.has(s.id))
 
@@ -1023,7 +1057,6 @@ export default function Home() {
                       setEditingNode(node as unknown as Node)
                       setEditorOpen(true)
                     } else {
-                      // Pre-fill subscription ID if adding new? Not supported yet.
                       setShowAddModal(true)
                     }
                   }}
@@ -1047,20 +1080,7 @@ export default function Home() {
       case "dashboard":
       default:
         // Original Dashboard Content
-        const activeServer = servers.find(s => s.id === activeServerId)
-
-        // If activeServer is missing but ID starts with auto_, create a virtual one for display
-        // We can parse the name from ID: "auto_" + sanitized_name.
-        // It's hard to reverse.
-        // But we know it's "Auto - [Something]". server-list.tsx uses "Auto - [suffix]".
-        // Just "Auto Select" is safe generic for now.
         const isAutoOrSystem = activeServerId?.startsWith("auto_") || activeServerId?.startsWith("system:")
-        const displayServer = activeServer || (isAutoOrSystem ? {
-          name: activeTarget?.name || t('status.auto_select', { defaultValue: 'Auto Select' }),
-          flagUrl: "", // Use globe
-          id: activeServerId
-        } : null)
-
         const displayActiveNodeName = activeAutoNode?.name || (() => {
           const id = activeServerId
           if (!id) return activeTarget?.name
@@ -1077,11 +1097,6 @@ export default function Home() {
         let isFiltered = false;
         let currentFilterName = "";
 
-        // Only filter if:
-        // 1. We have an active server ID that is a Subscription Group (system:sub:...)
-        // 2. forceShowAll is FALSE
-        // 3. We are in Dashboard view (implied by case "dashboard")
-
         if (activeServerId && activeServerId.startsWith("system:sub:") && !forceShowAll) {
           const subId = activeServerId.replace("system:sub:", "")
           const subProfile = profiles.find(p => p.id === subId)
@@ -1095,7 +1110,7 @@ export default function Home() {
 
         return (
           <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-            <div className="flex-1 overflow-y-auto px-8 pb-8 sidebar-scroll">
+            <div className="flex-1 overflow-y-auto px-4 md:px-8 pb-8 sidebar-scroll">
               <ConnectionStatus
                 isConnected={isConnected}
                 targetId={activeServerId}
@@ -1121,13 +1136,10 @@ export default function Home() {
                 isLoading={isLoading}
               />
 
-
-
               <ServerList
                 servers={displayedServers}
                 activeServerId={activeServerId}
                 isConnected={isConnected}
-                // Filter Props
                 filterName={currentFilterName}
                 isFiltered={isFiltered}
                 onClearFilter={() => setForceShowAll(true)}
@@ -1159,15 +1171,15 @@ export default function Home() {
   if (!mounted) return null
 
   return (
-    <div className="h-screen flex gap-2 p-2 overflow-hidden" data-tauri-drag-region>
-      <WindowControls />
+    <div className="h-[100dvh] flex md:gap-2 md:p-2 overflow-hidden bg-background text-foreground" data-tauri-drag-region>
+      <WindowControls className="hidden md:flex" />
       <Sidebar
         currentView={currentView as any}
         onViewChange={setCurrentView as any}
         subscription={activeSubscription}
       />
-      <main className="flex-1 flex flex-col h-full relative overflow-hidden rounded-xl bg-black/10 backdrop-blur-sm border border-white/5">
-        {currentView !== "locations" && currentView !== "rules" && currentView !== "settings" && currentView !== "proxies" && currentView !== "groups" && (currentView as any) !== "subscription_detail" && (
+      <main className="flex-1 flex flex-col h-full relative overflow-hidden md:rounded-xl bg-black/10 backdrop-blur-sm md:border border-white/5 pb-16 md:pb-0">
+        {currentView !== "proxies" && currentView !== "rules" && currentView !== "settings" && currentView !== "locations" && currentView !== "groups" && (currentView as any) !== "subscription_detail" && (
           <Header
             isConnected={isConnected}
             onToggle={toggleProxy}
@@ -1176,6 +1188,11 @@ export default function Home() {
         )}
 
         {renderView()}
+
+        <BottomNav
+          activeTab={currentView as any}
+          onTabChange={(tab) => setCurrentView(tab as any)}
+        />
 
         {/* Modals */}
         <NodeEditor

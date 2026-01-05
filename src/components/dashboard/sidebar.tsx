@@ -44,7 +44,7 @@ export function Sidebar({ currentView, onViewChange, subscription }: SidebarProp
     const percent = total > 0 ? Math.min(100, (used / total) * 100) : 0
 
     return (
-        <aside className="w-[280px] glass-sidebar flex flex-col shrink-0 h-full z-40 transition-all duration-300 relative rounded-xl overflow-hidden shadow-floating">
+        <aside className="w-[280px] glass-sidebar flex flex-col shrink-0 h-full z-40 transition-all duration-300 relative rounded-xl overflow-hidden shadow-floating md:flex hidden">
             {/* Window Controls Spacer / Drag Region */}
             <div data-tauri-drag-region className="h-12 w-full cursor-default shrink-0" />
 
@@ -60,7 +60,7 @@ export function Sidebar({ currentView, onViewChange, subscription }: SidebarProp
             </div>
 
             <nav className="flex flex-col gap-1 w-full px-3 flex-1 overflow-y-auto sidebar-scroll">
-                <div className="text-[10px] font-bold text-tertiary px-3 mb-2 mt-2 tracking-wider">{t('sidebar.network')}</div>
+                <div className="text-[10px] font-bold text-tertiary px-3 mb-2 mt-2 tracking-wider uppercase tracking-[0.1em]">{t('sidebar.network', { defaultValue: 'Network' })}</div>
 
                 <NavItem
                     icon={<Rocket size={20} />}
@@ -89,7 +89,7 @@ export function Sidebar({ currentView, onViewChange, subscription }: SidebarProp
                     onClick={() => onViewChange("rules")}
                 />
 
-                <div className="text-[10px] font-bold text-tertiary px-3 mb-2 mt-6 tracking-wider">{t('sidebar.system')}</div>
+                <div className="text-[10px] font-bold text-tertiary px-3 mb-2 mt-6 tracking-wider uppercase tracking-[0.1em]">{t('sidebar.system')}</div>
 
                 <NavItem
                     icon={<Settings size={20} />}

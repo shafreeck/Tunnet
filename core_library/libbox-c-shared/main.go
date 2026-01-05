@@ -101,6 +101,78 @@ func LibboxStop() *C.char {
 	return nil
 }
 
+//export LibboxStartMobile
+func LibboxStartMobile(fd C.int, configJSON *C.char) *C.char {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if instance != nil {
+		return C.CString("service already running")
+	}
+
+	configStr := C.GoString(configJSON)
+
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	cancel = cancelFunc
+	ctx = include.Context(ctx)
+
+	// Inject FD into TUN inbounds if they don't have one
+	var rawConfig map[string]any
+	if err := sjson.UnmarshalContext(ctx, []byte(configStr), &rawConfig); err != nil {
+		cancel()
+		cancel = nil
+		return C.CString(fmt.Sprintf("decode config error (map): %s", err))
+	}
+
+	if inbounds, ok := rawConfig["inbounds"].([]any); ok {
+		for i, inbound := range inbounds {
+			if inboundMap, ok := inbound.(map[string]any); ok {
+				if inboundMap["type"] == "tun" {
+					if _, exists := inboundMap["file_descriptor"]; !exists {
+						inboundMap["file_descriptor"] = int(fd)
+						inbounds[i] = inboundMap
+					}
+				}
+			}
+		}
+		rawConfig["inbounds"] = inbounds
+	}
+
+	updatedConfig, err := sjson.Marshal(rawConfig)
+	if err != nil {
+		cancel()
+		cancel = nil
+		return C.CString(fmt.Sprintf("encode updated config error: %s", err))
+	}
+
+	var options option.Options
+	if err := sjson.UnmarshalContext(ctx, updatedConfig, &options); err != nil {
+		cancel()
+		cancel = nil
+		return C.CString(fmt.Sprintf("decode config error: %s", err))
+	}
+
+	instance, err = box.New(box.Options{
+		Context: ctx,
+		Options: options,
+	})
+	if err != nil {
+		cancel()
+		cancel = nil
+		return C.CString(fmt.Sprintf("create service error: %s", err))
+	}
+
+	if err := instance.Start(); err != nil {
+		instance.Close()
+		instance = nil
+		cancel()
+		cancel = nil
+		return C.CString(fmt.Sprintf("start service error: %s", err))
+	}
+
+	return nil
+}
+
 func main() {}
 
 //export LibboxTestOutbound

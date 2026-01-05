@@ -1,0 +1,693 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		02F1B978A4DD56595E56552F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BE88AA47345AE5331E20E4DC /* Assets.xcassets */; };
+		27768824A02E9372D1388038 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 78D3760E3EF62751008BA353 /* CoreGraphics.framework */; };
+		2B6C54876D67479B325909BD /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BC10E93D7B0A870A0EB5FB76 /* UIKit.framework */; };
+		321DA352FC0F74BD37B4A2E4 /* tunnet-extension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CAC90A823D741E78B137B2AB /* tunnet-extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		36E1521F00D8819F2F08A68A /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D7027C75DBFD9F442E7C8F2 /* MetalKit.framework */; };
+		37B5278ECF974975311D774F /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ECE305D80E7C2395D82B7238 /* Metal.framework */; };
+		66B8A0D05A95F7C0A702DAC3 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BD35BB8DC80F0E3CB448DC7 /* PacketTunnelProvider.swift */; };
+		723F332D0D9388A661FECE5D /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 190F94D2A5A74C2F743ACB8B /* assets */; };
+		87E7DA20EA233628E08F934D /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 7868B112E102EB6566E66F04 /* main.mm */; };
+		89B77B6FE0CE55550B313D8E /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 230487413D6A35282F61D8D1 /* LaunchScreen.storyboard */; };
+		901B50A33FB7A90E8D9336C3 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 83B50E547C2AB16E64CF3C8A /* WebKit.framework */; };
+		9452C53C2FD0C83E88A1EE1D /* libresolv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = DCE00FCE638E0D72C447150A /* libresolv.tbd */; };
+		9AAECA52B1FAC1CB04D95A92 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 30C38FC5A732C264922508AD /* NetworkExtension.framework */; };
+		BF6228FFD5962098006EF5E7 /* libresolv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = DCE00FCE638E0D72C447150A /* libresolv.tbd */; };
+		C16A8508B6E14F36A917BF7A /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 93B9AC788DC5346BDC143232 /* QuartzCore.framework */; };
+		EF73EF8B5D6FFC7A0FEF40C4 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D18B6A180B6B1171618E52E7 /* Security.framework */; };
+		F2DD5795A9932A717766A701 /* libapp.a in Resources */ = {isa = PBXBuildFile; fileRef = A9B3F16FA27581C29DC291F4 /* libapp.a */; };
+		F8E5A9F2FB8B14CD6205675F /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 07C6B4775D0F5B847D035C31 /* libapp.a */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		61B78BE29BF5D2759E998215 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DBD5B63E770C4C981E2E5A8C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 73CF606F5794AA6318B2AB88;
+			remoteInfo = "tunnet-extension";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B4470EA6A7327EAB7D2925AC /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				321DA352FC0F74BD37B4A2E4 /* tunnet-extension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		04B2EE2CCC35B3D5ECC46280 /* lib.rs */ = {isa = PBXFileReference; path = lib.rs; sourceTree = "<group>"; };
+		07C6B4775D0F5B847D035C31 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
+		0D7027C75DBFD9F442E7C8F2 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		14E74C3A0A80307FDD6AA550 /* helper_client.rs */ = {isa = PBXFileReference; path = helper_client.rs; sourceTree = "<group>"; };
+		1808199FEA93BD7B9DE91A6F /* config.rs */ = {isa = PBXFileReference; path = config.rs; sourceTree = "<group>"; };
+		190F94D2A5A74C2F743ACB8B /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
+		230487413D6A35282F61D8D1 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		2F9C91B3F04C3419C0A3F74B /* settings.rs */ = {isa = PBXFileReference; path = settings.rs; sourceTree = "<group>"; };
+		30C38FC5A732C264922508AD /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
+		4961725A08D878501DFF50CB /* parsing_test_mod.rs */ = {isa = PBXFileReference; path = parsing_test_mod.rs; sourceTree = "<group>"; };
+		526D8611363D375B7CA76C56 /* libbox.rs */ = {isa = PBXFileReference; path = libbox.rs; sourceTree = "<group>"; };
+		570D64C0EC9F95B325D75856 /* service.rs */ = {isa = PBXFileReference; path = service.rs; sourceTree = "<group>"; };
+		6112A3F0E3140B34896B33B1 /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
+		7868B112E102EB6566E66F04 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
+		78D3760E3EF62751008BA353 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
+		83B50E547C2AB16E64CF3C8A /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
+		8BD35BB8DC80F0E3CB448DC7 /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
+		93B9AC788DC5346BDC143232 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		980FD7E8A64DF1B7264CEFE7 /* installer.rs */ = {isa = PBXFileReference; path = installer.rs; sourceTree = "<group>"; };
+		A9B3F16FA27581C29DC291F4 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
+		AA7D90B034418ECD34332593 /* manager.rs */ = {isa = PBXFileReference; path = manager.rs; sourceTree = "<group>"; };
+		AFE354F22404CA6C6861CFE6 /* helper.rs */ = {isa = PBXFileReference; path = helper.rs; sourceTree = "<group>"; };
+		B2AA3D6F7E1F7205CF664364 /* mod.rs */ = {isa = PBXFileReference; path = mod.rs; sourceTree = "<group>"; };
+		B737628781512F9FCDBB3617 /* mac_rounded_corners.rs */ = {isa = PBXFileReference; path = mac_rounded_corners.rs; sourceTree = "<group>"; };
+		BB6D1E1043660CAA5D144955 /* tunnet_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = tunnet_iOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BC10E93D7B0A870A0EB5FB76 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
+		BDD1C42A734335C598714297 /* tunnet-extension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "tunnet-extension.entitlements"; sourceTree = "<group>"; };
+		BE361DFEED560BF9974CF0A6 /* main.rs */ = {isa = PBXFileReference; path = main.rs; sourceTree = "<group>"; };
+		BE88AA47345AE5331E20E4DC /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		CAC90A823D741E78B137B2AB /* tunnet-extension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = "tunnet-extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		D18B6A180B6B1171618E52E7 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		DCE00FCE638E0D72C447150A /* libresolv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libresolv.tbd; path = usr/lib/libresolv.tbd; sourceTree = SDKROOT; };
+		ECE305D80E7C2395D82B7238 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		FE555F5BCB3E60429FFBA421 /* profile.rs */ = {isa = PBXFileReference; path = profile.rs; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		4D8E39E90A29806FB0BE1EEC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9AAECA52B1FAC1CB04D95A92 /* NetworkExtension.framework in Frameworks */,
+				BF6228FFD5962098006EF5E7 /* libresolv.tbd in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DA339341BC8B640209E02D34 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F8E5A9F2FB8B14CD6205675F /* libapp.a in Frameworks */,
+				27768824A02E9372D1388038 /* CoreGraphics.framework in Frameworks */,
+				37B5278ECF974975311D774F /* Metal.framework in Frameworks */,
+				36E1521F00D8819F2F08A68A /* MetalKit.framework in Frameworks */,
+				C16A8508B6E14F36A917BF7A /* QuartzCore.framework in Frameworks */,
+				EF73EF8B5D6FFC7A0FEF40C4 /* Security.framework in Frameworks */,
+				2B6C54876D67479B325909BD /* UIKit.framework in Frameworks */,
+				901B50A33FB7A90E8D9336C3 /* WebKit.framework in Frameworks */,
+				9452C53C2FD0C83E88A1EE1D /* libresolv.tbd in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		12B1BFC2B4C9212DB7981400 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				78D3760E3EF62751008BA353 /* CoreGraphics.framework */,
+				07C6B4775D0F5B847D035C31 /* libapp.a */,
+				DCE00FCE638E0D72C447150A /* libresolv.tbd */,
+				ECE305D80E7C2395D82B7238 /* Metal.framework */,
+				0D7027C75DBFD9F442E7C8F2 /* MetalKit.framework */,
+				30C38FC5A732C264922508AD /* NetworkExtension.framework */,
+				93B9AC788DC5346BDC143232 /* QuartzCore.framework */,
+				D18B6A180B6B1171618E52E7 /* Security.framework */,
+				BC10E93D7B0A870A0EB5FB76 /* UIKit.framework */,
+				83B50E547C2AB16E64CF3C8A /* WebKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		32AC56FA9CE22F781A661ED6 /* bin */ = {
+			isa = PBXGroup;
+			children = (
+				AFE354F22404CA6C6861CFE6 /* helper.rs */,
+			);
+			path = bin;
+			sourceTree = "<group>";
+		};
+		374F4289774CC8243925B47B /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				3EE260F15AD367C219756829 /* tunnet */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		3EE260F15AD367C219756829 /* tunnet */ = {
+			isa = PBXGroup;
+			children = (
+				7868B112E102EB6566E66F04 /* main.mm */,
+				E70739A7A0D531389D35F425 /* bindings */,
+			);
+			path = tunnet;
+			sourceTree = "<group>";
+		};
+		65DD759773031B7E4315D704 /* tunnet-extension */ = {
+			isa = PBXGroup;
+			children = (
+				8BD35BB8DC80F0E3CB448DC7 /* PacketTunnelProvider.swift */,
+				BDD1C42A734335C598714297 /* tunnet-extension.entitlements */,
+			);
+			name = "tunnet-extension";
+			path = "Sources/tunnet-extension";
+			sourceTree = "<group>";
+		};
+		771E79E46BFD78925BAD09CD /* tunnet_iOS */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = tunnet_iOS;
+			sourceTree = "<group>";
+		};
+		9BFE14D415A6083449F7BA01 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BB6D1E1043660CAA5D144955 /* tunnet_iOS.app */,
+				CAC90A823D741E78B137B2AB /* tunnet-extension.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B7939F43FDD93BA081BD9EEC /* arm64 */ = {
+			isa = PBXGroup;
+			children = (
+				C499B04933A99F1513E891D8 /* debug */,
+			);
+			path = arm64;
+			sourceTree = "<group>";
+		};
+		C0CE403224AB43F1FA46C2A7 /* src */ = {
+			isa = PBXGroup;
+			children = (
+				1808199FEA93BD7B9DE91A6F /* config.rs */,
+				14E74C3A0A80307FDD6AA550 /* helper_client.rs */,
+				980FD7E8A64DF1B7264CEFE7 /* installer.rs */,
+				04B2EE2CCC35B3D5ECC46280 /* lib.rs */,
+				526D8611363D375B7CA76C56 /* libbox.rs */,
+				BE361DFEED560BF9974CF0A6 /* main.rs */,
+				AA7D90B034418ECD34332593 /* manager.rs */,
+				4961725A08D878501DFF50CB /* parsing_test_mod.rs */,
+				FE555F5BCB3E60429FFBA421 /* profile.rs */,
+				570D64C0EC9F95B325D75856 /* service.rs */,
+				2F9C91B3F04C3419C0A3F74B /* settings.rs */,
+				32AC56FA9CE22F781A661ED6 /* bin */,
+				D61042F2385D10EC2E90A956 /* plugins */,
+			);
+			name = src;
+			path = ../../src;
+			sourceTree = "<group>";
+		};
+		C499B04933A99F1513E891D8 /* debug */ = {
+			isa = PBXGroup;
+			children = (
+				A9B3F16FA27581C29DC291F4 /* libapp.a */,
+			);
+			path = debug;
+			sourceTree = "<group>";
+		};
+		D5FF5F5D09E1246D17721E75 /* Externals */ = {
+			isa = PBXGroup;
+			children = (
+				B7939F43FDD93BA081BD9EEC /* arm64 */,
+			);
+			path = Externals;
+			sourceTree = "<group>";
+		};
+		D61042F2385D10EC2E90A956 /* plugins */ = {
+			isa = PBXGroup;
+			children = (
+				B737628781512F9FCDBB3617 /* mac_rounded_corners.rs */,
+				B2AA3D6F7E1F7205CF664364 /* mod.rs */,
+			);
+			path = plugins;
+			sourceTree = "<group>";
+		};
+		E70739A7A0D531389D35F425 /* bindings */ = {
+			isa = PBXGroup;
+			children = (
+				6112A3F0E3140B34896B33B1 /* bindings.h */,
+			);
+			path = bindings;
+			sourceTree = "<group>";
+		};
+		FF6C46EC5EE5A7E17ADE03C6 = {
+			isa = PBXGroup;
+			children = (
+				190F94D2A5A74C2F743ACB8B /* assets */,
+				BE88AA47345AE5331E20E4DC /* Assets.xcassets */,
+				230487413D6A35282F61D8D1 /* LaunchScreen.storyboard */,
+				D5FF5F5D09E1246D17721E75 /* Externals */,
+				374F4289774CC8243925B47B /* Sources */,
+				C0CE403224AB43F1FA46C2A7 /* src */,
+				771E79E46BFD78925BAD09CD /* tunnet_iOS */,
+				65DD759773031B7E4315D704 /* tunnet-extension */,
+				12B1BFC2B4C9212DB7981400 /* Frameworks */,
+				9BFE14D415A6083449F7BA01 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		"TEMP_19D1A6E6-ED66-4AC2-91E0-64CD5FAEF33D" /* x86_64 */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = x86_64;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		30644117DD14A040CD777900 /* tunnet_iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9245DFE36D5512CFCA7B0809 /* Build configuration list for PBXNativeTarget "tunnet_iOS" */;
+			buildPhases = (
+				8A4F018AF59455B38D8B3FB8 /* Build Rust Code */,
+				9C19C92AC8831319CEE140DF /* Sources */,
+				B9E842C021C868BCC52B12A9 /* Resources */,
+				DA339341BC8B640209E02D34 /* Frameworks */,
+				B4470EA6A7327EAB7D2925AC /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				9C0E86450211245A8F307642 /* PBXTargetDependency */,
+			);
+			name = tunnet_iOS;
+			packageProductDependencies = (
+			);
+			productName = tunnet_iOS;
+			productReference = BB6D1E1043660CAA5D144955 /* tunnet_iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		73CF606F5794AA6318B2AB88 /* tunnet-extension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 517E6EDB52283C37FD410553 /* Build configuration list for PBXNativeTarget "tunnet-extension" */;
+			buildPhases = (
+				BB74A9AF80C00741BD5255AF /* Sources */,
+				4D8E39E90A29806FB0BE1EEC /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "tunnet-extension";
+			packageProductDependencies = (
+			);
+			productName = "tunnet-extension";
+			productReference = CAC90A823D741E78B137B2AB /* tunnet-extension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		DBD5B63E770C4C981E2E5A8C /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					30644117DD14A040CD777900 = {
+						DevelopmentTeam = JSG9S9M456;
+						ProvisioningStyle = Automatic;
+					};
+					73CF606F5794AA6318B2AB88 = {
+						DevelopmentTeam = JSG9S9M456;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 66EB618B0506AE586D367992 /* Build configuration list for PBXProject "tunnet" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = FF6C46EC5EE5A7E17ADE03C6;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				73CF606F5794AA6318B2AB88 /* tunnet-extension */,
+				30644117DD14A040CD777900 /* tunnet_iOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B9E842C021C868BCC52B12A9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				02F1B978A4DD56595E56552F /* Assets.xcassets in Resources */,
+				89B77B6FE0CE55550B313D8E /* LaunchScreen.storyboard in Resources */,
+				723F332D0D9388A661FECE5D /* assets in Resources */,
+				F2DD5795A9932A717766A701 /* libapp.a in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		8A4F018AF59455B38D8B3FB8 /* Build Rust Code */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Rust Code";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/Externals/x86_64/${CONFIGURATION}/libapp.a",
+				"$(SRCROOT)/Externals/arm64/${CONFIGURATION}/libapp.a",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "export PATH=\"$PATH:$HOME/.cargo/bin:$HOME/.local/bin:$HOME/go/bin:/usr/local/bin:/opt/homebrew/bin\"\nnpm run -- tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		9C19C92AC8831319CEE140DF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				87E7DA20EA233628E08F934D /* main.mm in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB74A9AF80C00741BD5255AF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				66B8A0D05A95F7C0A702DAC3 /* PacketTunnelProvider.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		9C0E86450211245A8F307642 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 73CF606F5794AA6318B2AB88 /* tunnet-extension */;
+			targetProxy = 61B78BE29BF5D2759E998215 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		29B88B9F3BFDB1883C199406 /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					arm64,
+				);
+				CODE_SIGN_ENTITLEMENTS = "Sources/tunnet-extension/tunnet-extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = JSG9S9M456;
+				ENABLE_BITCODE = NO;
+				HEADER_SEARCH_PATHS = "../../../core_library/libbox-c-shared";
+				INFOPLIST_FILE = "Sources/tunnet-extension/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = "../../../core_library/libbox-c-shared";
+				OTHER_LDFLAGS = "-lbox_ios -framework CoreFoundation -framework Security -framework SystemConfiguration -framework Network -lresolv";
+				PRODUCT_BUNDLE_IDENTIFIER = com.shafreeck.tunnet.extension;
+				SDKROOT = iphoneos;
+				SWIFT_INCLUDE_PATHS = "../../../core_library/libbox-c-shared";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALID_ARCHS = arm64;
+			};
+			name = debug;
+		};
+		60A82DE8EE6763175FEA4014 /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = (
+					arm64,
+				);
+				CODE_SIGN_ENTITLEMENTS = "Sources/tunnet-extension/tunnet-extension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = JSG9S9M456;
+				ENABLE_BITCODE = NO;
+				HEADER_SEARCH_PATHS = "../../../core_library/libbox-c-shared";
+				INFOPLIST_FILE = "Sources/tunnet-extension/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = "../../../core_library/libbox-c-shared";
+				OTHER_LDFLAGS = "-lbox_ios -framework CoreFoundation -framework Security -framework SystemConfiguration -framework Network -lresolv";
+				PRODUCT_BUNDLE_IDENTIFIER = com.shafreeck.tunnet.extension;
+				SDKROOT = iphoneos;
+				SWIFT_INCLUDE_PATHS = "../../../core_library/libbox-c-shared";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALID_ARCHS = arm64;
+			};
+			name = release;
+		};
+		A3700D597B2DF6F6E70062E9 /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = release;
+		};
+		A9BAD46DD9325BB204C41CE0 /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ARCHS = (
+					arm64,
+				);
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = tunnet_iOS/tunnet_iOS.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = JSG9S9M456;
+				ENABLE_BITCODE = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\".\"",
+				);
+				INFOPLIST_FILE = tunnet_iOS/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.shafreeck.tunnet;
+				PRODUCT_NAME = Tunnet;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALID_ARCHS = arm64;
+			};
+			name = debug;
+		};
+		EDDE72024CBDC10634739485 /* release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ARCHS = (
+					arm64,
+				);
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = tunnet_iOS/tunnet_iOS.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = JSG9S9M456;
+				ENABLE_BITCODE = NO;
+				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\".\"",
+				);
+				INFOPLIST_FILE = tunnet_iOS/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME) $(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.shafreeck.tunnet;
+				PRODUCT_NAME = Tunnet;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALID_ARCHS = arm64;
+			};
+			name = release;
+		};
+		FA193F298B676B736CDA0995 /* debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		517E6EDB52283C37FD410553 /* Build configuration list for PBXNativeTarget "tunnet-extension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				29B88B9F3BFDB1883C199406 /* debug */,
+				60A82DE8EE6763175FEA4014 /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
+		66EB618B0506AE586D367992 /* Build configuration list for PBXProject "tunnet" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FA193F298B676B736CDA0995 /* debug */,
+				A3700D597B2DF6F6E70062E9 /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
+		9245DFE36D5512CFCA7B0809 /* Build configuration list for PBXNativeTarget "tunnet_iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A9BAD46DD9325BB204C41CE0 /* debug */,
+				EDDE72024CBDC10634739485 /* release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = DBD5B63E770C4C981E2E5A8C /* Project object */;
+}

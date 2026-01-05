@@ -57,6 +57,9 @@
       "resources/geoip-cn.srs",
       "resources/geosite-cn.srs",
       "resources/sing-box"
-    ]
+    ],
+    "iOS": {
+      "developmentTeam": "JSG9S9M456"
+    }
   }
 }

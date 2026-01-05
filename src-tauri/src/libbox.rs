@@ -1,6 +1,7 @@
 use std::os::raw::c_char;
 
-#[link(name = "box")]
+#[cfg_attr(not(target_os = "ios"), link(name = "box"))]
+#[cfg_attr(target_os = "ios", link(name = "box_ios"))]
 extern "C" {
     pub fn LibboxStart(config: *const c_char) -> *const c_char;
     pub fn LibboxStop() -> *const c_char;
@@ -10,4 +11,5 @@ extern "C" {
         target_url: *const c_char,
         timeout_ms: i64,
     ) -> *const c_char;
+    pub fn LibboxStartMobile(fd: i32, config: *const c_char) -> *const c_char;
 }

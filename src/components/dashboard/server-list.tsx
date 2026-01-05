@@ -251,8 +251,8 @@ export function ServerList({
     return (
         <div className="flex-1 flex flex-col min-h-0 relative">
             {!hideHeader && (
-                <div className="flex items-center justify-between mb-4 mt-2 px-1 shrink-0 sticky top-0 bg-sidebar-bg backdrop-blur-xl z-20 py-2 -mx-1 rounded-t-xl border-b border-border-color">
-                    <div className="flex items-center gap-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 mt-2 px-1 shrink-0 sticky top-0 bg-sidebar-bg backdrop-blur-xl z-20 py-2 sm:py-2 -mx-1 rounded-t-xl border-b border-border-color gap-3 sm:gap-0">
+                    <div className="flex items-center gap-3 md:gap-6 w-full sm:w-auto">
                         <button
                             onClick={() => setShowLogs(false)}
                             className={cn(
@@ -301,7 +301,7 @@ export function ServerList({
                     </div>
 
                     {!showLogs ? (
-                        <div className="flex gap-2 items-center">
+                        <div className="flex gap-1.5 sm:gap-2 items-center justify-end w-full sm:w-auto">
                             {/* Expandable Search Input */}
                             <div className={cn(
                                 "flex items-center transition-all duration-300 overflow-hidden",
@@ -528,11 +528,11 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
 
             {isSelected && <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-xl transition-colors", isRunning ? "bg-accent-green shadow-[0_0_10px_rgba(34,197,94,0.5)]" : "bg-primary")} ></div>}
 
-            <div className="size-10 rounded-full bg-black/5 dark:bg-black/30 overflow-hidden flex-shrink-0 mr-4 shadow-inner ml-2 flex items-center justify-center">
+            <div className="size-8 md:size-10 rounded-full bg-black/5 dark:bg-black/30 overflow-hidden flex-shrink-0 mr-2 md:mr-4 shadow-inner ml-1 md:ml-2 flex items-center justify-center">
                 {server.flagUrl ? (
                     <img className="w-full h-full object-cover" src={server.flagUrl} alt={server.country} />
                 ) : (
-                    <Globe className="text-gray-400 size-6 opacity-50" />
+                    <Globe className="text-gray-400 size-5 md:size-6 opacity-50" />
                 )}
             </div>
 
@@ -565,13 +565,13 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
                         </span>
                     ))}
                 </div>
-                <p className="text-text-tertiary text-xs truncate mt-0.5 group-hover:text-text-secondary">
+                <p className="text-text-tertiary text-[11px] md:text-xs truncate mt-0.5 group-hover:text-text-secondary">
                     {server.provider}
                 </p>
             </div>
 
-            <div className="flex items-center gap-5 mr-2">
-                <div className="flex items-center justify-end min-w-[60px]">
+            <div className="flex items-center gap-1.5 sm:gap-5 mr-1 md:mr-2">
+                <div className="flex items-center justify-end min-w-[50px] md:min-w-[60px]">
                     {/* Latency - Hidden on hover */}
                     <div className="text-right flex flex-col items-end group-hover:hidden transition-all duration-200">
                         <span className={cn(

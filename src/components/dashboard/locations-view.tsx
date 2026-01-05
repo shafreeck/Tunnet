@@ -130,18 +130,18 @@ export function LocationsView({
             viewMode === "map" && "bg-transparent"
         )}>
             {/* Unified Header Style */}
-            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent px-8 pt-6 pb-2 shrink-0 relative z-30">
+            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-5 md:px-8 md:pt-6 md:pb-2 shrink-0 relative z-30">
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
                 <div className="max-w-5xl mx-auto w-full relative z-10 pointer-events-none">
-                    <div className="flex items-start justify-between mb-4">
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 gap-4">
                         <div>
-                            <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">{t('locations.title')}</h2>
-                            <p className="text-sm text-text-secondary font-medium">
+                            <h2 className="text-xl md:text-2xl font-bold text-text-primary mb-1 md:mb-2 tracking-tight">{t('locations.title')}</h2>
+                            <p className="text-xs md:text-sm text-text-secondary font-medium">
                                 {t('locations.subtitle', { countries: totalCountries, servers: servers.length })}
                             </p>
                         </div>
 
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto overflow-x-auto no-scrollbar pointer-events-auto">
                             {/* View Mode Switcher */}
                             <div className="flex bg-card-bg p-1 rounded-xl border border-border-color pointer-events-auto">
                                 <button
@@ -214,7 +214,7 @@ export function LocationsView({
             {/* Content Area */}
             <div className="flex-1 relative overflow-hidden bg-transparent">
                 {viewMode === "grid" ? (
-                    <div className="h-full overflow-y-auto px-8 py-8 sidebar-scroll">
+                    <div className="h-full overflow-y-auto px-4 md:px-8 py-4 md:py-8 sidebar-scroll">
                         <div className="max-w-5xl mx-auto w-full">
                             <LocationGrid
                                 servers={servers}
@@ -241,10 +241,10 @@ export function LocationsView({
 
                 {/* Shared Server List Sidebar/Drawer - Re-styled */}
                 <div className={cn(
-                    "absolute top-6 bottom-6 right-6 w-[400px] glass-card border border-border-color rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden transition-all duration-300 transform z-40",
-                    "bg-white/80 dark:bg-black/60 backdrop-blur-md", // Default: More transparent
+                    "absolute top-0 bottom-0 right-0 md:top-6 md:bottom-6 md:right-6 w-full sm:w-[400px] glass-card border-l md:border border-border-color md:rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden transition-all duration-300 transform z-40",
+                    "bg-white/80 dark:bg-black/80 backdrop-blur-md", // Default: More transparent
                     "hover:bg-white/95 hover:dark:bg-black/95 hover:backdrop-blur-xl hover:shadow-2xl", // Hover: Solid & Focused
-                    (showListValues || (viewMode === 'map' && selectedCountry)) ? "translate-x-0 opacity-100" : "translate-x-[120%] opacity-0"
+                    (showListValues || (viewMode === 'map' && selectedCountry)) ? "translate-x-0 opacity-100" : "translate-x-full md:translate-x-[120%] opacity-0"
                 )}>
                     <div className="p-8 border-b border-border-color bg-card-bg flex items-center justify-between">
                         <div className="flex items-center gap-4">

@@ -332,15 +332,15 @@ export function RulesView() {
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* Unified Header Style */}
-            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-8 pb-6 shrink-0 relative z-20">
+            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-5 md:p-8 md:pb-6 shrink-0 relative z-20">
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
                 <div className="max-w-5xl mx-auto w-full relative z-10 pointer-events-none">
-                    <div className="flex items-start justify-between mb-8 gap-12">
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 md:mb-8 gap-4 md:gap-12">
                         <div className="max-w-lg">
-                            <h2 className="text-2xl font-bold text-text-primary mb-2 tracking-tight">{t('rules.title')}</h2>
-                            <p className="text-sm text-text-secondary font-medium">{t('rules.subtitle')}</p>
+                            <h2 className="text-xl md:text-2xl font-bold text-text-primary mb-1 md:mb-2 tracking-tight">{t('rules.title')}</h2>
+                            <p className="text-xs md:text-sm text-text-secondary font-medium">{t('rules.subtitle')}</p>
                         </div>
-                        <div className="flex gap-4 pointer-events-auto shrink-0">
+                        <div className="flex gap-2 md:gap-4 pointer-events-auto shrink-0 w-full md:w-auto">
                             <div className="relative">
                                 <button
                                     onClick={() => !currentlyApplying && setIsPresetOpen(!isPresetOpen)}
@@ -420,7 +420,7 @@ export function RulesView() {
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto px-8 py-8 sidebar-scroll bg-transparent">
+            <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-8 sidebar-scroll bg-transparent">
                 <div className="max-w-5xl mx-auto w-full space-y-3 pb-32">
                     {filteredRules.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-gray-600">
@@ -433,19 +433,19 @@ export function RulesView() {
                                 key={rule.id}
                                 className="glass-card flex items-center justify-between p-4 rounded-2xl hover:bg-black/5 dark:hover:bg-white/8 transition-all duration-300 group border border-transparent hover:border-border-color"
                             >
-                                <div className="flex items-center gap-6 flex-1">
-                                    <div className="w-32 shrink-0">
-                                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/5 w-fit">
-                                            <Shield size={12} className="text-primary/70" />
-                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{rule.type.replace('_', ' ')}</span>
+                                <div className="flex items-center gap-3 md:gap-6 flex-1 min-w-0">
+                                    <div className="w-20 md:w-32 shrink-0 hidden sm:block">
+                                        <div className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-xl bg-white/5 border border-white/5 w-fit">
+                                            <Shield size={10} className="md:size-3 text-primary/70" />
+                                            <span className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-widest">{rule.type.replace('_', ' ')}</span>
                                         </div>
                                     </div>
                                     <div className="flex flex-col flex-1 min-w-0">
-                                        <span className="text-sm font-semibold text-text-primary font-mono truncate">{rule.value}</span>
-                                        {rule.description && <span className="text-xs text-text-secondary truncate mt-0.5">{t(rule.description)}</span>}
+                                        <span className="text-xs md:text-sm font-semibold text-text-primary font-mono truncate">{rule.value}</span>
+                                        {rule.description && <span className="text-[10px] md:text-xs text-text-secondary truncate mt-0.5">{t(rule.description)}</span>}
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-8">
+                                <div className="flex items-center gap-2 md:gap-8 shrink-0">
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -473,32 +473,32 @@ export function RulesView() {
                                         }}
                                         disabled={loadingRuleId === rule.id}
                                         className={cn(
-                                            "px-3 py-1 rounded-full text-[10px] font-bold border tracking-widest uppercase w-20 text-center cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center relative z-0",
+                                            "px-2 md:px-3 py-1 rounded-full text-[9px] md:text-[10px] font-bold border tracking-widest uppercase w-16 md:w-20 text-center cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center relative z-0",
                                             getPolicyColor(rule.policy),
                                             loadingRuleId === rule.id ? "opacity-70 cursor-wait" : ""
                                         )}>
                                         {loadingRuleId === rule.id ? (
-                                            <Loader2 size={12} className="animate-spin" />
+                                            <Loader2 size={10} className="animate-spin" />
                                         ) : (
-                                            getPolicyLabel(rule.policy)
+                                            <span className="truncate">{getPolicyLabel(rule.policy)}</span>
                                         )}
                                     </button>
-                                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
-                                        <button onClick={(e) => { setEditingRule(rule); setDialogData({ ...rule }); setIsDialogOpen(true); }} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><Edit2 size={16} /></button>
+                                    <div className="flex items-center gap-1 md:gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-300 translate-x-0 md:translate-x-2 md:group-hover:translate-x-0">
+                                        <button onClick={(e) => { setEditingRule(rule); setDialogData({ ...rule }); setIsDialogOpen(true); }} className="p-1.5 md:p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><Edit2 size={14} className="md:size-4" /></button>
                                         <button
                                             onClick={(e) => handleDeleteRule(rule.id, e)}
                                             disabled={deletingRuleId === rule.id}
                                             className={cn(
-                                                "p-2 rounded-xl transition-all",
+                                                "p-1.5 md:p-2 rounded-xl transition-all",
                                                 deletingRuleId === rule.id
                                                     ? "text-red-400 bg-red-400/10 cursor-wait"
                                                     : "text-gray-400 hover:text-red-400 hover:bg-red-400/10"
                                             )}
                                         >
                                             {deletingRuleId === rule.id ? (
-                                                <Loader2 size={16} className="animate-spin" />
+                                                <Loader2 size={14} className="md:size-4 animate-spin" />
                                             ) : (
-                                                <Trash2 size={16} />
+                                                <Trash2 size={14} className="md:size-4" />
                                             )}
                                         </button>
                                     </div>
@@ -510,14 +510,24 @@ export function RulesView() {
             </div>
 
             {/* Bottom Default Status */}
-            <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+            <div className={cn(
+                "fixed left-0 right-0 z-30 pointer-events-none flex justify-center",
+                "bottom-[72px] md:bottom-10" // Adjust bottom position for mobile to be above BottomNav
+            )}>
                 <div
-                    className="pointer-events-auto glass-card flex items-center gap-4 px-6 py-3 rounded-2xl border-border-color shadow-2xl hover:bg-black/5 dark:hover:bg-white/10 transition-all active:scale-95 group cursor-pointer relative"
+                    className={cn(
+                        "pointer-events-auto glass-card flex items-center justify-between md:justify-start gap-4 transition-all active:scale-95 group cursor-pointer relative",
+                        "w-full mx-4 px-5 py-4 rounded-[2rem] border-t border-white/10 shadow-[0_-8px_30px_rgba(0,0,0,0.3)]", // Mobile: Near full-width bar
+                        "md:w-auto md:mx-0 md:px-6 md:py-3 md:rounded-2xl md:border md:shadow-2xl" // Desktop: Floating pill
+                    )}
                 >
                     {isFallbackOpen && (
                         <>
                             <div className="fixed inset-0 z-0" onClick={() => setIsFallbackOpen(false)} />
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-64 bg-white/90 dark:bg-black/80 backdrop-blur-xl border border-border-color rounded-2xl shadow-2xl z-20 py-2 overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-2 duration-200">
+                            <div className={cn(
+                                "absolute bottom-full left-1/2 -translate-x-1/2 mb-4 w-64 bg-white/90 dark:bg-black/80 backdrop-blur-xl border border-border-color rounded-2xl shadow-2xl z-20 py-2 overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-2 duration-200",
+                                "max-w-[calc(100vw-32px)]"
+                            )}>
                                 <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
                                     <div className="px-4 py-2 text-[10px] font-bold text-text-tertiary uppercase tracking-widest border-b border-border-color/50 mb-1">{t('rules.dialog.policy')}</div>
                                     {(["PROXY", "DIRECT", "REJECT"] as const).map(policy => (
@@ -588,26 +598,26 @@ export function RulesView() {
                             </div>
                         </>
                     )}
-                    <div className="flex flex-col items-start" onClick={() => setIsFallbackOpen(!isFallbackOpen)}>
-                        <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest leading-none mb-1">{t('rules.default_policy')}</span>
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-text-primary">{t('rules.all_other_traffic')}</span>
-                            <div className={cn("size-1.5 rounded-full animate-pulse bg-primary")} />
+                    <div className="flex flex-col items-start min-w-0" onClick={() => setIsFallbackOpen(!isFallbackOpen)}>
+                        <span className="text-[9px] md:text-[10px] font-bold text-text-tertiary uppercase tracking-widest leading-none mb-1">{t('rules.default_policy')}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs md:text-sm font-bold text-text-primary truncate">{t('rules.all_other_traffic')}</span>
+                            <div className={cn("size-1 md:size-1.5 rounded-full animate-pulse bg-primary shrink-0")} />
                         </div>
                     </div>
-                    <div className="h-8 w-px bg-white/10 mx-2" />
+                    <div className="h-8 w-px bg-white/10 mx-1 md:mx-2 shrink-0" />
                     <button
                         onClick={() => setIsFallbackOpen(!isFallbackOpen)}
                         disabled={loadingDefaultPolicy}
                         className={cn(
-                            "px-4 py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase border cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md min-w-[80px] flex items-center justify-center",
+                            "px-3 md:px-4 py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase border cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md min-w-[70px] md:min-w-[80px] flex items-center justify-center shrink-0",
                             getPolicyColor(defaultPolicy),
                             loadingDefaultPolicy ? "opacity-70 cursor-wait" : ""
                         )}>
                         {loadingDefaultPolicy ? (
-                            <Loader2 size={14} className="animate-spin" />
+                            <Loader2 size={12} className="md:size-14 animate-spin" />
                         ) : (
-                            getPolicyLabel(defaultPolicy)
+                            <span className="truncate">{getPolicyLabel(defaultPolicy)}</span>
                         )}
                     </button>
                 </div>

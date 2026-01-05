@@ -104,29 +104,30 @@ export function SettingsView({ initialCategory = "general" }: SettingsViewProps)
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500 text-foreground">
             {/* Top Navigation Tabs */}
-            <div className="h-14 border-b border-black/[0.02] dark:border-white/[0.02] flex items-center px-8 bg-transparent shrink-0 relative z-30">
+            <div className="h-14 border-b border-black/[0.02] dark:border-white/[0.02] flex items-center px-4 md:px-8 bg-transparent shrink-0 relative z-30">
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
-                <div className="flex bg-card-bg p-1 rounded-xl border border-border-color relative z-10">
+                <div className="flex bg-card-bg p-1 rounded-xl border border-border-color relative z-10 w-full md:w-auto overflow-x-auto no-scrollbar">
                     {categories.map((cat) => (
                         <button
                             key={cat.id}
                             onClick={() => setActiveCategory(cat.id as SettingCategory)}
                             className={cn(
-                                "flex items-center gap-2 px-6 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 relative",
+                                "flex items-center gap-2 px-3 md:px-6 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 relative shrink-0",
                                 activeCategory === cat.id
                                     ? "bg-primary text-white shadow-lg shadow-primary/20"
                                     : "text-secondary hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"
                             )}
                         >
                             {cat.icon}
-                            {cat.label}
+                            <span className="hidden sm:inline">{cat.label}</span>
+                            <span className="sm:hidden">{cat.label.slice(0, 2)}</span>
                         </button>
                     ))}
                 </div>
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto sidebar-scroll px-8 py-10">
+            <div className="flex-1 overflow-y-auto sidebar-scroll px-4 md:px-8 py-6 md:py-10">
                 <div className="max-w-3xl mx-auto pb-10">
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
                         {loading ? (
@@ -173,19 +174,19 @@ function SettingItem({
     icon?: React.ReactNode
 }) {
     return (
-        <div className="glass-card flex items-center justify-between p-5 rounded-3xl transition-all duration-500 ring-1 ring-border-color group">
-            <div className="flex items-center gap-5">
+        <div className="glass-card flex items-center justify-between p-4 md:p-5 rounded-3xl transition-all duration-500 ring-1 ring-border-color group">
+            <div className="flex items-center gap-3 md:gap-5 flex-1 min-w-0">
                 {icon && (
-                    <div className="size-12 rounded-2xl bg-black/5 dark:bg-white/5 flex items-center justify-center text-secondary group-hover:text-primary transition-all duration-300 group-hover:bg-primary/10 group-hover:scale-110">
+                    <div className="size-10 md:size-12 shrink-0 rounded-2xl bg-black/5 dark:bg-white/5 flex items-center justify-center text-secondary group-hover:text-primary transition-all duration-300 group-hover:bg-primary/10 group-hover:scale-110">
                         {icon}
                     </div>
                 )}
-                <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-semibold text-foreground group-hover:text-primary/90 transition-colors">{title}</span>
-                    {description && <span className="text-xs text-secondary max-w-[450px] leading-relaxed">{description}</span>}
+                <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="text-sm font-semibold text-foreground group-hover:text-primary/90 transition-colors truncate">{title}</span>
+                    {description && <span className="text-xs text-secondary max-w-[450px] leading-relaxed line-clamp-2 md:line-clamp-none">{description}</span>}
                 </div>
             </div>
-            <div className="flex items-center">
+            <div className="flex items-center shrink-0 ml-2">
                 {children}
             </div>
         </div>

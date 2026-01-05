@@ -36,7 +36,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
     const displaySubName = isConnected && targetType === 'group' && activeNodeName && activeNodeName !== serverName ? activeNodeName : null
 
     return (
-        <div className="flex flex-col items-center justify-center py-10 relative">
+        <div className="flex flex-col items-center justify-center py-6 md:py-10 relative">
             <div className="relative mb-6 group cursor-pointer" onClick={isLoading ? undefined : onMainToggle}>
                 <span className={`animate-ping absolute inset-0 inline-flex h-full w-full rounded-full ${isConnected ? 'bg-accent-green' : 'bg-red-500'} opacity-20 duration-1000 ${isLoading ? 'hidden' : ''}`}></span>
                 <div className={`relative size-28 rounded-full border border-white/10 bg-black/40 backdrop-blur-xl glow-effect flex items-center justify-center overflow-hidden shadow-2xl transition-transform duration-300 ${isLoading ? 'scale-100 cursor-not-allowed' : 'group-hover:scale-105'}`}>
@@ -70,7 +70,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
 
             <div className="flex flex-col items-center mb-2">
                 <h1
-                    className="text-3xl font-bold text-text-primary mb-1 tracking-tight text-center drop-shadow-md cursor-default outline-none"
+                    className="text-2xl md:text-3xl font-bold text-text-primary mb-1 tracking-tight text-center drop-shadow-md cursor-default outline-none"
                     data-tooltip-id="node-info-tooltip"
                 >
                     {displayName}
@@ -138,7 +138,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                     title="Toggle System Proxy"
                 >
                     <div className={`size-2 rounded-full ${systemProxyEnabled ? (isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-text-secondary/80') : 'bg-gray-500/30'} transition-all duration-300`} />
-                    <span className="text-xs font-semibold tracking-wide">
+                    <span className="text-[11px] md:text-xs font-semibold tracking-wide">
                         {t('status.system_proxy_switch')}
                     </span>
                 </button>
@@ -149,7 +149,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                     title="Toggle TUN Mode"
                 >
                     <div className={`size-2 rounded-full ${tunEnabled ? (isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-text-secondary/80') : 'bg-gray-500/30'} transition-all duration-300`} />
-                    <span className="text-xs font-semibold tracking-wide">
+                    <span className="text-[11px] md:text-xs font-semibold tracking-wide">
                         {t('status.tun_mode_switch')}
                     </span>
                 </button>
