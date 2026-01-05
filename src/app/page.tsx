@@ -33,7 +33,9 @@ export default function Home() {
   const [isConnected, setIsConnected] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const isLoadingRef = useRef(false)
+  const manualActionRef = useRef(false)
   useEffect(() => { isLoadingRef.current = isLoading }, [isLoading])
+
 
   /* Removed early return to fix hook order */
   // Server Management Lifted State
@@ -208,7 +210,9 @@ export default function Home() {
             console.error("Failed to stop proxy", e)
           } finally {
             setIsLoading(false)
+            setTimeout(() => { manualActionRef.current = false }, 1000)
           }
+
         }
         return
       }
@@ -302,8 +306,10 @@ export default function Home() {
         lastAppliedConfigRef.current = null
       } finally {
         setIsLoading(false)
+        setTimeout(() => { manualActionRef.current = false }, 1000)
       }
     }
+
 
     syncProxy()
   }, [isConnected, proxyMode, tunEnabled, activeServerId, groups, servers])
@@ -373,7 +379,8 @@ export default function Home() {
     const unlistenStatus = listen<any>("proxy-status-change", (event) => {
       // If we are currently loading a local change, ignore background events
       // to avoid race conditions with intermediate status changes (e.g. during restart)
-      if (isLoadingRef.current) return;
+      if (isLoadingRef.current || manualActionRef.current) return;
+
 
       const status = event.payload
       setIsConnected(status.is_running)
@@ -657,7 +664,9 @@ export default function Home() {
   }
 
   const handleTunToggle = async () => {
+    manualActionRef.current = true
     const nextState = !tunEnabled
+
 
     // Helper Check Logic (Only check if enabling)
     if (nextState) {
@@ -689,7 +698,9 @@ export default function Home() {
 
   const toggleProxy = async () => {
     if (isLoading) return
+    manualActionRef.current = true
     setIsLoading(true)
+
     try {
       if (isConnected) {
         // Just update state, the useEffect takes care of the backend
@@ -754,6 +765,8 @@ export default function Home() {
 
   const handleServerToggle = async (id: string, shouldConnect = true) => {
     if (isLoading) return
+    manualActionRef.current = true
+
 
     // If clicking the currently connected server -> Stop
     if (isConnected && activeServerId === id) {

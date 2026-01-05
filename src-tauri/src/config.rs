@@ -15,6 +15,13 @@ pub struct SingBoxConfig {
     pub experimental: Option<ExperimentalConfig>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
+pub enum ConfigMode {
+    TunOnly,
+    SystemProxyOnly,
+    Combined,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LogConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -258,7 +265,7 @@ pub struct DnsRule {
 }
 
 impl SingBoxConfig {
-    pub fn new(clash_api_port: Option<u16>) -> Self {
+    pub fn new(clash_api_port: Option<u16>, mode: ConfigMode) -> Self {
         // Basic DNS for Tun Mode v1.12+ Format
         let dns = DnsConfig {
             servers: vec![
@@ -279,14 +286,19 @@ impl SingBoxConfig {
                     address: None,
                     server: Some("223.5.5.5".to_string()),
                     server_port: Some(53),
+
                     address_resolver: None,
                     address_strategy: None,
                     address_fallback_delay: None,
                     detour: Some("direct".to_string()),
                 },
             ],
+
             rules: vec![DnsRule {
-                inbound: Some(vec!["tun-in".to_string()]),
+                inbound: Some(vec![match mode {
+                    ConfigMode::TunOnly => "tun-in".to_string(),
+                    _ => "mixed-in".to_string(),
+                }]),
                 outbound: None,
                 domain: None,
                 domain_suffix: None,
@@ -301,8 +313,9 @@ impl SingBoxConfig {
         let mut experimental = ExperimentalConfig {
             cache_file: Some(CacheFileConfig {
                 enabled: true,
-                path: "cache.db".to_string(),
+                path: "".to_string(),
             }),
+
             clash_api: None,
         };
 

@@ -30,8 +30,10 @@ export default function TrayPage() {
     const [traffic, setTraffic] = useState({ up: 0, down: 0 })
     const [trafficHistory, setTrafficHistory] = useState<{ up: number, down: number }[]>(new Array(30).fill({ up: 0, down: 0 }))
     const [isQuitting, setIsQuitting] = useState(false)
+    const manualActionRef = useRef(false)
 
     const ipInfoRef = useRef(ipInfo)
+
     useEffect(() => { ipInfoRef.current = ipInfo }, [ipInfo])
 
     useEffect(() => {
@@ -56,8 +58,10 @@ export default function TrayPage() {
 
         // Listen for proxy status update
         const unlistenStatus = listen<any>("proxy-status-change", (event) => {
+            if (manualActionRef.current) return;
             console.log("Tray: Proxy status updated", event.payload)
             setStatus(event.payload)
+
             setIsTransitioning(false) // Stop loading when status confirmed
             // Also refresh profiles on status change to be safe
             invoke("get_profiles").then((profiles: any) => {
@@ -212,7 +216,9 @@ export default function TrayPage() {
 
     const toggleConnection = async () => {
         if (isTransitioning) return
+        manualActionRef.current = true
         setIsTransitioning(true)
+
 
         try {
             if (status.is_running) {
@@ -237,9 +243,12 @@ export default function TrayPage() {
             }
         } catch (e) {
             console.error("Tray: Operation failed", e)
+        } finally {
             setIsTransitioning(false)
+            setTimeout(() => { manualActionRef.current = false }, 1000)
         }
     }
+
 
 
     const setMode = async (mode: "rule" | "global" | "direct") => {
@@ -264,7 +273,9 @@ export default function TrayPage() {
 
     const toggleTunMode = async () => {
         if (isTransitioning) return
+        manualActionRef.current = true
         setIsTransitioning(true)
+
 
         const newTunMode = !status.tun_mode
         try {
@@ -284,9 +295,14 @@ export default function TrayPage() {
                 setIsTransitioning(false)
             }
         } catch (e) {
+            console.error("Tun toggle failed", e)
+        } finally {
+
             setIsTransitioning(false)
+            setTimeout(() => { manualActionRef.current = false }, 1000)
         }
     }
+
 
     const handleQuit = useCallback(async () => {
         if (isQuitting) return

@@ -1,9 +1,12 @@
 use crate::manager::CoreManager;
 use log::{debug, error, info, warn};
-use std::process::{Child, Command, Stdio};
+use std::ffi::{CStr, CString};
+use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use sysinfo::System;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
+
+use crate::libbox;
 
 #[derive(serde::Serialize, Clone, Debug)]
 pub struct ProxyStatus {
@@ -32,8 +35,9 @@ pub struct ProxyNodeStatus {
 pub struct ProxyService<R: Runtime> {
     app: AppHandle<R>,
     manager: CoreManager<R>,
-    child_process: Mutex<Option<Child>>,
+    local_proxy_running: Mutex<bool>,
     tun_mode: Mutex<bool>,
+
     latest_node: Mutex<Option<crate::profile::Node>>,
     latest_routing_mode: Mutex<String>,
     clash_api_port: Mutex<Option<u16>>,
@@ -55,7 +59,7 @@ impl<R: Runtime> ProxyService<R> {
 
         Self {
             app: app.clone(),
-            child_process: Mutex::new(None),
+            local_proxy_running: Mutex::new(false),
             tun_mode: Mutex::new(initial_tun_mode),
             latest_node: Mutex::new(None),
             latest_routing_mode: Mutex::new("rule".to_string()),
@@ -132,13 +136,7 @@ impl<R: Runtime> ProxyService<R> {
             self.latest_routing_mode.lock().unwrap()
         );
         let is_running = self.is_proxy_running();
-        // Always perform a full restart to ensure stability and clean state.
-        // SIGHUP is not reliably supported by sing-box for Tun/Route changes.
-        if is_running {
-            info!("Restarting proxy to apply changes...");
-        }
-
-        // Moved stop_proxy_internal call down to allow retention decision
+        let prev_tun = *self.tun_mode.lock().unwrap();
 
         // Update state
         *self.latest_node.lock().unwrap() = node_opt.clone();
@@ -177,7 +175,6 @@ impl<R: Runtime> ProxyService<R> {
         // enable_system_proxy will overwrite settings anyway if they changed.
         // The important part is avoiding 'disable'.
         // Retain only if tun_mode hasn't changed severely.
-        let prev_tun = *self.tun_mode.lock().unwrap();
         let retain_system_proxy = is_running && (prev_tun == tun_mode);
 
         if is_running {
@@ -191,6 +188,8 @@ impl<R: Runtime> ProxyService<R> {
         info!("start_proxy: calling stop_proxy_internal...");
         self.stop_proxy_internal(false, retain_system_proxy).await;
         info!("start_proxy: stop_proxy_internal returned.");
+        // Add a small delay to ensure ports are released (especially for Libbox FFI)
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
         // Give OS a small grace period to release TUN interface resources
         // Reduced from 200ms to 50ms for optimization
@@ -222,7 +221,9 @@ impl<R: Runtime> ProxyService<R> {
 
         *self.clash_api_port.lock().unwrap() = clash_port;
 
-        self.write_config(node_opt, tun_mode, &routing_mode, &settings, clash_port)?;
+        // In Dual-Instance mode, we might need multiple configs.
+        // For simplicity, we'll write the "helper" config if tun is requested,
+        // and always write the "local" config.
 
         let config_file_path = self
             .app
@@ -230,6 +231,31 @@ impl<R: Runtime> ProxyService<R> {
             .app_local_data_dir()
             .unwrap()
             .join("config.json");
+        let helper_config_path = self
+            .app
+            .path()
+            .app_local_data_dir()
+            .unwrap()
+            .join("helper_config.json");
+
+        if tun_mode {
+            self.write_config(
+                node_opt.as_ref(),
+                crate::config::ConfigMode::TunOnly,
+                &routing_mode,
+                &settings,
+                None,
+            )?;
+            std::fs::rename(&config_file_path, &helper_config_path).map_err(|e| e.to_string())?;
+        }
+
+        self.write_config(
+            node_opt.as_ref(),
+            crate::config::ConfigMode::SystemProxyOnly,
+            &routing_mode,
+            &settings,
+            clash_port,
+        )?;
 
         // Loop for retrying startup if port is temporarily held (TIME_WAIT race)
         let max_retries = 60;
@@ -241,13 +267,34 @@ impl<R: Runtime> ProxyService<R> {
             }
 
             let startup_result = async {
-                // If TUN mode, use Helper
+                // 1. Start Main App Proxy (Port Listener)
+                info!("Starting local proxy instance (attempt {})...", attempt);
+                let config_str =
+                    std::fs::read_to_string(&config_file_path).map_err(|e| e.to_string())?;
+                let c_config = CString::new(config_str).map_err(|_| "Config holds null bytes")?;
+
+                unsafe {
+                    let err_ptr = libbox::LibboxStart(c_config.as_ptr());
+                    if !err_ptr.is_null() {
+                        let err_msg = CStr::from_ptr(err_ptr).to_string_lossy().into_owned();
+                        error!("Local LibboxStart failed: {}", err_msg);
+                        return Err(err_msg);
+                    }
+                }
+                *self.local_proxy_running.lock().unwrap() = true;
+
+                // 2. Start TUN Instance (Specialized Port-less config) if requested
                 if tun_mode {
-                    info!("Starting proxy in TUN mode via Helper (attempt {})...", attempt);
+                    info!(
+                        "Starting specialized TUN instance via Helper (attempt {})...",
+                        attempt
+                    );
                     let client = crate::helper_client::HelperClient::new();
+                    let helper_config_str =
+                        std::fs::read_to_string(&helper_config_path).map_err(|e| e.to_string())?;
                     let result = client
                         .start_proxy(
-                            std::fs::read_to_string(&config_file_path).map_err(|e| e.to_string())?,
+                            helper_config_str,
                             core_path.to_string_lossy().to_string(),
                             self.app
                                 .path()
@@ -257,207 +304,66 @@ impl<R: Runtime> ProxyService<R> {
                                 .to_string(),
                         )
                         .map_err(|e| e.to_string());
-                    
-                    // Logic to handle success/failure of helper
-                    if result.is_ok() {
-                         if settings.system_proxy {
-                            if !retain_system_proxy {
-                                self.enable_system_proxy(settings.mixed_port);
-                            } else {
-                                info!("System proxy retention active, skipping redundant enable call.");
-                            }
+
+                    if let Err(e) = result {
+                        error!("TUN Helpber start failed: {}", e);
+                        // Clean up local proxy before retrying
+                        unsafe {
+                            libbox::LibboxStop();
                         }
-
-                        // Wait for services to be ready
-                        if !self.wait_for_port(settings.mixed_port, 2000).await {
-                             return Err(format!(
-                                "Proxy port {} is not responding after startup. Check logs for details.",
-                                settings.mixed_port
-                            ));
-                        }
-                        if let Some(p) = clash_port {
-                            if !self.wait_for_port(p, 2000).await {
-                                return Err(format!(
-                                    "Clash API port {} is not responding after startup.",
-                                    p
-                                ));
-                            }
-                        }
-                        let _ = self.app.emit("proxy-status-change", self.get_status());
-                        return Ok(());
-                    }
-                    return result;
-                } else {
-                    // Local Process Mode
-                    let app_local_data = self.app.path().app_local_data_dir().unwrap();
-                    info!("Using Core Path: {:?}", core_path);
-                    info!("Using Config Path: {:?}", config_file_path);
-
-                    let mut cmd = Command::new(&core_path);
-                    cmd.arg("run")
-                        .arg("-c")
-                        .arg(&config_file_path)
-                        .arg("--disable-color")
-                        .arg("-D")
-                        .arg(&app_local_data);
-
-                    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-
-                    match cmd.spawn() {
-                        Ok(mut child) => {
-                            info!("Proxy core spawning, pid: {}", child.id());
-
-                            let stdout = child.stdout.take().unwrap();
-                            let stderr = child.stderr.take().unwrap();
-                            let app_handle = self.app.clone();
-                            let app_handle_err = self.app.clone();
-
-                            // Capture early stderr for error reporting
-                            let startup_stderr = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-                            let stderr_capture = startup_stderr.clone();
-
-                            std::thread::spawn(move || {
-                                use std::io::{BufRead, BufReader};
-                                let reader = BufReader::new(stdout);
-                                let app_h = app_handle; // Move handle
-
-                                for line in reader.lines() {
-                                    if let Ok(l) = line {
-                                        // ANSI Colors
-                                        const ANSI_RESET: &str = "\x1b[0m";
-                                        const ANSI_RED: &str = "\x1b[31m";
-                                        const ANSI_GREEN: &str = "\x1b[32m";
-                                        const ANSI_YELLOW: &str = "\x1b[33m";
-                                        const ANSI_CYAN: &str = "\x1b[36m";
-                                        const ANSI_GRAY: &str = "\x1b[90m";
-
-                                        if l.starts_with("INFO") {
-                                            let rest = l.strip_prefix("INFO").unwrap_or("");
-                                            let colored = format!("{}INFO{}{}", ANSI_GREEN, ANSI_RESET, rest);
-                                            let _ = app_h.emit("proxy-log", colored);
-                                        } else if l.starts_with("WARN") {
-                                            let rest = l.strip_prefix("WARN").unwrap_or("");
-                                            let colored = format!("{}WARN{}{}", ANSI_YELLOW, ANSI_RESET, rest);
-                                            let _ = app_h.emit("proxy-log", colored);
-                                        } else if l.starts_with("ERROR") {
-                                            let rest = l.strip_prefix("ERROR").unwrap_or("");
-                                            let colored = format!("{}ERROR{}{}", ANSI_RED, ANSI_RESET, rest);
-                                            let _ = app_h.emit("proxy-log", colored);
-                                        } else if l.starts_with("FATAL") {
-                                            let rest = l.strip_prefix("FATAL").unwrap_or("");
-                                            let colored = format!("{}FATAL{}{}", ANSI_RED, ANSI_RESET, rest);
-                                            let _ = app_h.emit("proxy-log", colored);
-                                        } else if l.starts_with("PANIC") {
-                                            let rest = l.strip_prefix("PANIC").unwrap_or("");
-                                            let colored = format!("{}PANIC{}{}", ANSI_RED, ANSI_RESET, rest);
-                                            let _ = app_h.emit("proxy-log", colored);
-                                        } else if l.starts_with("DEBUG") {
-                                            let rest = l.strip_prefix("DEBUG").unwrap_or("");
-                                            let colored = format!("{}DEBUG{}{}", ANSI_CYAN, ANSI_RESET, rest);
-                                            let _ = app_h.emit("proxy-log", colored);
-                                        } else if l.starts_with("TRACE") {
-                                            let rest = l.strip_prefix("TRACE").unwrap_or("");
-                                            let colored = format!("{}TRACE{}{}", ANSI_GRAY, ANSI_RESET, rest);
-                                            let _ = app_h.emit("proxy-log", colored);
-                                        } else {
-                                            let _ = app_h.emit("proxy-log", l);
-                                        }
-                                    }
-                                }
-                            });
-
-                            std::thread::spawn(move || {
-                                use std::io::{BufRead, BufReader};
-                                let reader = BufReader::new(stderr);
-                                let app_h = app_handle_err;
-
-                                for line in reader.lines() {
-                                    if let Ok(l) = line {
-                                        // Simple Emit for Stderr
-                                         let _ = app_h.emit("proxy-log", l.clone());
-                                        // Capture first 10 lines
-                                        let mut cap = stderr_capture.lock().unwrap();
-                                        if cap.len() < 10 {
-                                            cap.push(l);
-                                        }
-                                    }
-                                }
-                            });
-
-                            // Short wait to check for immediate crash (e.g. port bind error)
-                            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-                            if let Ok(Some(status)) = child.try_wait() {
-                                let logs = startup_stderr.lock().unwrap().join("\n");
-                                let msg = format!(
-                                    "Proxy core exited prematurely with: {}. Logs:\n{}",
-                                    status, logs
-                                );
-                                error!("{}", msg);
-                                return Err(msg);
-                            }
-
-                            if settings.system_proxy {
-                                if !retain_system_proxy {
-                                    self.enable_system_proxy(settings.mixed_port);
-                                }
-                            }
-
-                            // Wait for services to be ready locally too
-                            // Use a safeguard to kill child if we return early
-                            
-                            // Check ports
-                            if !self.wait_for_port(settings.mixed_port, 2000).await {
-                                let _ = child.kill();
-                                let _ = child.wait();
-                                return Err(format!(
-                                    "Proxy port {} is not responding after startup locally.",
-                                    settings.mixed_port
-                                ));
-                            }
-                            if let Some(p) = clash_port {
-                                if !self.wait_for_port(p, 2000).await {
-                                    let _ = child.kill();
-                                    let _ = child.wait();
-                                    return Err(format!(
-                                        "Clash API port {} is not responding after startup locally.",
-                                        p
-                                    ));
-                                }
-                            }
-
-                            info!("Proxy core started successfully");
-                            *self.child_process.lock().unwrap() = Some(child);
-                            let _ = self.app.emit("proxy-status-change", self.get_status());
-                            Ok(())
-                        }
-                        Err(e) => {
-                            error!("Failed to start proxy core: {}", e);
-                            Err(e.to_string())
-                        }
+                        *self.local_proxy_running.lock().unwrap() = false;
+                        return Err(e);
                     }
                 }
-            }.await;
+
+                if settings.system_proxy {
+                    self.enable_system_proxy(settings.mixed_port);
+                }
+
+                // Wait for services to be ready
+                if !self.wait_for_port(settings.mixed_port, 2000).await {
+                    error!(
+                        "Proxy port {} is not responding after startup.",
+                        settings.mixed_port
+                    );
+                    self.stop_proxy_internal(false, retain_system_proxy).await;
+                    return Err(format!("Proxy port {} not responding", settings.mixed_port));
+                }
+
+                if let Some(p) = clash_port {
+                    if !self.wait_for_port(p, 2000).await {
+                        error!("Clash API port {} is not responding.", p);
+                        self.stop_proxy_internal(false, retain_system_proxy).await;
+                        return Err(format!("Clash API port {} not responding", p));
+                    }
+                }
+
+                let _ = self.app.emit("proxy-status-change", self.get_status());
+                Ok(())
+            }
+            .await;
 
             match startup_result {
                 Ok(_) => return Ok(()),
                 Err(e) => {
                     last_error = e.clone();
-                    // Heuristic check for address in use
-                    if e.contains("address already in use") || e.contains("bind: address already in use") {
-                        warn!("Startup attempt {} failed: {}. Retrying in 500ms...", attempt, e);
-                        // Simple wait, no aggressive kill
-                        // let _ = self.kill_port_owner(settings.mixed_port);
+                    if e.contains("address already in use")
+                        || e.contains("bind: address already in use")
+                    {
+                        warn!("Startup attempt {} failed: {}. Cleaning up orphans and retrying in 500ms...", attempt, e);
+                        self.kill_all_singbox_processes();
                         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                         continue;
                     }
-                    // For other errors, fail fast
                     return Err(e);
                 }
             }
         }
 
-        Err(format!("Failed to start proxy after {} attempts. Last error: {}", max_retries, last_error))
+        Err(format!(
+            "Failed to start dual-instance proxy after {} attempts. Last error: {}",
+            max_retries, last_error
+        ))
     }
 
     pub async fn get_group_nodes(&self, group_id: &str) -> Result<Vec<ProxyNodeStatus>, String> {
@@ -828,14 +734,17 @@ impl<R: Runtime> ProxyService<R> {
 
     fn write_config(
         &self,
-        node_opt: Option<crate::profile::Node>,
-        tun_mode: bool,
+        node_opt: Option<&crate::profile::Node>,
+        mode: crate::config::ConfigMode,
         _routing_mode: &str,
         settings: &crate::settings::AppSettings,
         clash_api_port: Option<u16>,
     ) -> Result<(), String> {
+        let tun_mode = mode == crate::config::ConfigMode::TunOnly
+            || mode == crate::config::ConfigMode::Combined;
         let app_local_data = self.app.path().app_local_data_dir().unwrap();
-        let mut cfg = crate::config::SingBoxConfig::new(clash_api_port);
+        let mut cfg = crate::config::SingBoxConfig::new(clash_api_port, mode);
+
         // Synchronize log level with app settings
         if let Some(log) = &mut cfg.log {
             log.level = Some(settings.log_level.clone());
@@ -851,10 +760,12 @@ impl<R: Runtime> ProxyService<R> {
             "127.0.0.1"
         };
 
-        cfg = cfg.with_mixed_inbound(settings.mixed_port, "mixed-in", false);
-        if let Some(inbound) = cfg.inbounds.last_mut() {
-            inbound.listen = Some(listen.to_string());
-            inbound.reuse_addr = Some(true);
+        if mode != crate::config::ConfigMode::TunOnly {
+            cfg = cfg.with_mixed_inbound(settings.mixed_port, "mixed-in", false);
+            if let Some(inbound) = cfg.inbounds.last_mut() {
+                inbound.listen = Some(listen.to_string());
+                inbound.reuse_addr = Some(true);
+            }
         }
 
         // 1. Add required system outbounds and database paths
@@ -1304,6 +1215,22 @@ impl<R: Runtime> ProxyService<R> {
                 }
             }
         }
+        // 6. Set Cache File to avoid writing to src-tauri in dev
+        let cache_name = if mode == crate::config::ConfigMode::TunOnly {
+            "cache_tun.db"
+        } else {
+            "cache.db"
+        };
+        cfg.experimental = Some(crate::config::ExperimentalConfig {
+            cache_file: Some(crate::config::CacheFileConfig {
+                enabled: true,
+                path: app_local_data
+                    .join(cache_name)
+                    .to_string_lossy()
+                    .to_string(),
+            }),
+            clash_api: cfg.experimental.and_then(|e| e.clash_api), // Preserve clash_api if already set
+        });
 
         let json = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
         let config_path = app_local_data.join("config.json");
@@ -1340,27 +1267,13 @@ impl<R: Runtime> ProxyService<R> {
     }
 
     pub fn is_proxy_running(&self) -> bool {
-        // 1. Check local child
-        let mut child_guard = self.child_process.lock().unwrap();
-        if let Some(child) = child_guard.as_mut() {
-            match child.try_wait() {
-                Ok(Some(_)) => {
-                    // Process has exited
-                    return false;
-                }
-                Ok(None) => {
-                    // Still running
-                    return true;
-                }
-                Err(e) => {
-                    error!("Error checking child process status: {}", e);
-                    return false;
-                }
-            }
+        // In Dual-Instance mode, "running" means either local OR helper is active.
+        // We check local state first.
+        if *self.local_proxy_running.lock().unwrap() {
+            return true;
         }
-        drop(child_guard); // Release lock
 
-        // 2. Check helper (if tun)
+        // Check helper (even if not in tun_mode, just in case of residue)
         let client = crate::helper_client::HelperClient::new();
         if let Ok(running) = client.check_status() {
             if running {
@@ -1404,15 +1317,7 @@ impl<R: Runtime> ProxyService<R> {
     pub fn get_status(&self) -> ProxyStatus {
         let is_running = self.is_proxy_running();
 
-        // Infer TUN mode from reality if memory is empty
-        let helper_running = crate::helper_client::HelperClient::new()
-            .check_status()
-            .unwrap_or(false);
-        let current_tun = if is_running {
-            helper_running || *self.tun_mode.lock().unwrap()
-        } else {
-            *self.tun_mode.lock().unwrap()
-        };
+        let current_tun = *self.tun_mode.lock().unwrap();
 
         let node = self.latest_node.lock().unwrap().clone();
         let mut target_id = None;
@@ -1449,6 +1354,7 @@ impl<R: Runtime> ProxyService<R> {
         let routing_mode = self.latest_routing_mode.lock().unwrap().clone();
 
         // Re-entrant call to start_proxy will perform clean STOP -> START
+        // Note: For Dual-Instance, we pass tun_mode from current settings
         return Box::pin(self.start_proxy(node, tun_mode, routing_mode)).await;
     }
 
@@ -1462,13 +1368,17 @@ impl<R: Runtime> ProxyService<R> {
     pub fn emergency_cleanup(&self) {
         info!("Emergency cleanup triggered...");
 
-        // 1. Kill Child Process
-        if let Ok(mut lock) = self.child_process.lock() {
-            if let Some(mut child) = lock.take() {
-                info!("Killing process {}", child.id());
-                let _ = child.kill();
-                let _ = child.wait(); // Synchronous wait
+        // 1. Stop local libbox core
+        if *self.local_proxy_running.lock().unwrap() {
+            info!("Stopping local libbox proxy core (emergency)...");
+            unsafe {
+                let err_ptr = libbox::LibboxStop();
+                if !err_ptr.is_null() {
+                    let err_msg = CStr::from_ptr(err_ptr).to_string_lossy().into_owned();
+                    error!("Emergency LibboxStop failed: {}", err_msg);
+                }
             }
+            *self.local_proxy_running.lock().unwrap() = false;
         }
 
         // 2. Stop Helper managed process (if any)
@@ -1484,22 +1394,27 @@ impl<R: Runtime> ProxyService<R> {
 
     async fn stop_proxy_internal(&self, broadcast: bool, retain_system_proxy: bool) {
         let mut cleanup_performed = false;
-        let child_to_wait = { self.child_process.lock().unwrap().take() };
 
-        if let Some(mut child) = child_to_wait {
+        if *self.local_proxy_running.lock().unwrap() {
             cleanup_performed = true;
-            let pid = child.id();
-            info!("Stopping local proxy core (pid: {})...", pid);
-            let _ = child.kill();
-            // Simplify wait logic: Just wait synchronously.
-            // It prevents zombies/orphans and is reliable.
-            let _ = child.wait();
+
+            info!("Stopping local libbox proxy core...");
+            unsafe {
+                let err_ptr = libbox::LibboxStop();
+                if !err_ptr.is_null() {
+                    let err_msg = CStr::from_ptr(err_ptr).to_string_lossy().into_owned();
+                    error!("LibboxStop failed: {}", err_msg);
+                }
+            }
+            *self.local_proxy_running.lock().unwrap() = false;
         }
 
-        // 2. Stop Helper Process
+        // 2. Stop Helper Process (TUN)
+        info!("Notifying helper to stop proxy...");
         let client = crate::helper_client::HelperClient::new();
         if let Ok(_) = client.stop_proxy() {
             cleanup_performed = true;
+            info!("Helper proxy stop command sent.");
         }
 
         // 3. Exhaustive Kill by Executable Path AND Name
@@ -1524,8 +1439,8 @@ impl<R: Runtime> ProxyService<R> {
                 .and_then(|n| n.to_str())
                 .unwrap_or("sing-box");
 
-            let mut sys = System::new_all();
-            sys.refresh_all();
+            let mut sys = System::new();
+            sys.refresh_processes();
 
             for process in sys.processes().values() {
                 let exe_matches = process
@@ -1566,13 +1481,120 @@ impl<R: Runtime> ProxyService<R> {
         if !retain_system_proxy {
             self.disable_system_proxy();
         }
+
         *self.clash_api_port.lock().unwrap() = None;
         if broadcast {
             let _ = self.app.emit("proxy-status-change", self.get_status());
         }
     }
 
+    pub fn disable_system_proxy(&self) {
+        info!("Disabling system proxy (local)...");
+        // Optimization: Use cached services if available
+        let mut services_to_disable = self.active_network_services.lock().unwrap().clone();
 
+        // If cache is empty, we must fallback to scanning all (safety for first run / crash recovery)
+        if services_to_disable.is_empty() {
+            if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
+                .arg("-listallnetworkservices")
+                .output()
+            {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for service in stdout.lines() {
+                    if service.contains('*') || service.is_empty() {
+                        continue;
+                    }
+                    services_to_disable.push(service.trim().to_string());
+                }
+            }
+        }
+
+        for s in services_to_disable {
+            debug!("Disabling proxy for service: {}", s);
+            let _ = std::process::Command::new("/usr/sbin/networksetup")
+                .args(["-setwebproxystate", &s, "off"])
+                .output();
+            let _ = std::process::Command::new("/usr/sbin/networksetup")
+                .args(["-setsecurewebproxystate", &s, "off"])
+                .output();
+            let _ = std::process::Command::new("/usr/sbin/networksetup")
+                .args(["-setsocksfirewallproxystate", &s, "off"])
+                .output();
+        }
+
+        self.active_network_services.lock().unwrap().clear();
+        info!("disable_system_proxy finished");
+    }
+
+    fn enable_system_proxy(&self, port: u16) {
+        info!("Enabling system proxy on port {} (local)...", port);
+        self.active_network_services.lock().unwrap().clear();
+
+        if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
+            .arg("-listallnetworkservices")
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for service in stdout.lines() {
+                if service.contains('*') || service.is_empty() {
+                    continue;
+                }
+                let s = service.trim();
+                debug!("Enabling proxy for service: {}", s);
+
+                let mut success = true;
+                // HTTP
+                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setwebproxy", s, "127.0.0.1", &port.to_string()])
+                    .output()
+                {
+                    if !o.status.success() {
+                        error!("Failed to set web proxy for {}: {:?}", s, o.stderr);
+                        success = false;
+                    }
+                }
+                let _ = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setwebproxystate", s, "on"])
+                    .output();
+
+                // HTTPS
+                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setsecurewebproxy", s, "127.0.0.1", &port.to_string()])
+                    .output()
+                {
+                    if !o.status.success() {
+                        error!("Failed to set secure web proxy for {}: {:?}", s, o.stderr);
+                        success = false;
+                    }
+                }
+                let _ = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setsecurewebproxystate", s, "on"])
+                    .output();
+
+                // SOCKS
+                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setsocksfirewallproxy", s, "127.0.0.1", &port.to_string()])
+                    .output()
+                {
+                    if !o.status.success() {
+                        error!("Failed to set SOCKS proxy for {}: {:?}", s, o.stderr);
+                    }
+                }
+                let _ = std::process::Command::new("/usr/sbin/networksetup")
+                    .args(["-setsocksfirewallproxystate", s, "on"])
+                    .output();
+
+                if success {
+                    info!("Successfully enabled system proxy for {}", s);
+                    self.active_network_services
+                        .lock()
+                        .unwrap()
+                        .push(s.to_string());
+                }
+            }
+        }
+        info!("enable_system_proxy finished");
+    }
 
     pub fn warmup_network_cache(&self) {
         if !self.active_network_services.lock().unwrap().is_empty() {
@@ -1582,7 +1604,6 @@ impl<R: Runtime> ProxyService<R> {
         // Spawn background thread to avoid blocking startup
         let services_lock = self.active_network_services.clone();
         std::thread::spawn(move || {
-            // info!("Warming up network service cache in background...");
             if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
                 .arg("-listallnetworkservices")
                 .output()
@@ -1602,154 +1623,6 @@ impl<R: Runtime> ProxyService<R> {
                 }
             }
         });
-    }
-
-    fn disable_system_proxy(&self) {
-        // Optimization: Use cached services if available
-        let mut services_to_disable = self.active_network_services.lock().unwrap().clone();
-
-        // If cache is empty, we must fallback to scanning all (safety for first run / crash recovery)
-        if services_to_disable.is_empty() {
-            info!("Disabling system proxy (scanning all)...");
-            if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
-                .arg("-listallnetworkservices")
-                .output()
-            {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                for service in stdout.lines() {
-                    if service.contains('*') || service.is_empty() {
-                        continue;
-                    }
-                    services_to_disable.push(service.trim().to_string());
-                }
-            }
-        } else {
-            info!("Disabling system proxy (targeted via cache)...");
-        }
-
-        for s in services_to_disable {
-            // Optimization: Blind Disable.
-            // Checking "is enabled" takes 3 extra exec calls per service.
-            // Just running "off" is faster and harmless (idempotent).
-
-            // Web Proxy
-            let _ = std::process::Command::new("/usr/sbin/networksetup")
-                .args(["-setwebproxystate", &s, "off"])
-                .output();
-
-            // Secure Web Proxy
-            let _ = std::process::Command::new("/usr/sbin/networksetup")
-                .args(["-setsecurewebproxystate", &s, "off"])
-                .output();
-
-            // SOCKS Proxy
-            let _ = std::process::Command::new("/usr/sbin/networksetup")
-                .args(["-setsocksfirewallproxystate", &s, "off"])
-                .output();
-        }
-
-        // Clear cache
-        self.active_network_services.lock().unwrap().clear();
-        info!("disable_system_proxy finished");
-    }
-
-    fn enable_system_proxy(&self, port: u16) {
-        info!("Enabling system proxy on port {}...", port);
-        // Clean cache before refilling
-        self.active_network_services.lock().unwrap().clear();
-
-        if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
-            .arg("-listallnetworkservices")
-            .output()
-        {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for service in stdout.lines() {
-                if service.contains('*') {
-                    continue;
-                }
-                let s = service.trim();
-                if s.is_empty() {
-                    continue;
-                }
-
-                let mut success = true;
-
-                // HTTP
-                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-setwebproxy", s, "127.0.0.1", &port.to_string()])
-                    .output()
-                {
-                    if !o.status.success() {
-                        success = false;
-                        error!(
-                            "Failed to set web proxy for {}: {}",
-                            s,
-                            String::from_utf8_lossy(&o.stderr)
-                        );
-                    }
-                }
-
-                // Enable HTTP
-                if success {
-                    let _ = std::process::Command::new("/usr/sbin/networksetup")
-                        .args(["-setwebproxystate", s, "on"])
-                        .output();
-                }
-
-                // HTTPS
-                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-setsecurewebproxy", s, "127.0.0.1", &port.to_string()])
-                    .output()
-                {
-                    if !o.status.success() {
-                        success = false;
-                        error!(
-                            "Failed to set secure web proxy for {}: {}",
-                            s,
-                            String::from_utf8_lossy(&o.stderr)
-                        );
-                    }
-                }
-
-                // Enable HTTPS
-                if success {
-                    let _ = std::process::Command::new("/usr/sbin/networksetup")
-                        .args(["-setsecurewebproxystate", s, "on"])
-                        .output();
-                }
-
-                // SOCKS
-                if let Ok(o) = std::process::Command::new("/usr/sbin/networksetup")
-                    .args(["-setsocksfirewallproxy", s, "127.0.0.1", &port.to_string()])
-                    .output()
-                {
-                    if !o.status.success() {
-                        success = false;
-                        error!(
-                            "Failed to set socks proxy for {}: {}",
-                            s,
-                            String::from_utf8_lossy(&o.stderr)
-                        );
-                    }
-                }
-
-                // Enable SOCKS
-                if success {
-                    let _ = std::process::Command::new("/usr/sbin/networksetup")
-                        .args(["-setsocksfirewallproxystate", s, "on"])
-                        .output();
-                }
-
-                if success {
-                    self.active_network_services
-                        .lock()
-                        .unwrap()
-                        .push(s.to_string());
-                }
-            }
-        } else {
-            error!("Failed to list network services");
-        }
     }
 
     pub async fn import_subscription(
@@ -2247,7 +2120,7 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         // 3. Gen Config
-        let mut cfg = crate::config::SingBoxConfig::new(None);
+        let mut cfg = crate::config::SingBoxConfig::new(None, crate::config::ConfigMode::Combined);
         // Clear DNS to avoid "outbound detour not found: proxy" since we don't have a "proxy" outbound in probe config
         cfg.dns = None;
 
@@ -2579,7 +2452,7 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         // 3. Gen Config
-        let mut cfg = crate::config::SingBoxConfig::new(None);
+        let mut cfg = crate::config::SingBoxConfig::new(None, crate::config::ConfigMode::Combined);
         cfg.dns = None;
 
         if let Some(route) = &mut cfg.route {
@@ -2927,7 +2800,7 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         // Gen Config
-        let mut cfg = crate::config::SingBoxConfig::new(None);
+        let mut cfg = crate::config::SingBoxConfig::new(None, crate::config::ConfigMode::Combined);
         cfg.dns = None;
         if let Some(route) = &mut cfg.route {
             route.rules.clear();
@@ -3311,19 +3184,21 @@ impl<R: Runtime> ProxyService<R> {
         Ok(())
     }
     pub fn stop_proxy_sync(&self) {
-        // 1. Stop Local Process
-        {
-            let mut child_opt = self.child_process.lock().unwrap();
-            if let Some(mut child) = child_opt.take() {
-                let _ = child.kill();
-                let _ = child.wait();
+        // 1. Stop Local Libbox
+        if *self.local_proxy_running.lock().unwrap() {
+            info!("Stopping local libbox proxy core (sync)...");
+            unsafe {
+                let err_ptr = libbox::LibboxStop();
+                if !err_ptr.is_null() {
+                    let err_msg = CStr::from_ptr(err_ptr).to_string_lossy().into_owned();
+                    error!("Sync LibboxStop failed: {}", err_msg);
+                }
             }
+            *self.local_proxy_running.lock().unwrap() = false;
         }
 
         // 2. Stop Helper
         let _ = crate::helper_client::HelperClient::new().stop_proxy();
-
-
 
         // 4. Cleanup System Proxy
         self.disable_system_proxy();

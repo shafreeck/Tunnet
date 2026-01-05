@@ -1,9 +1,11 @@
 mod config;
 mod helper_client;
 mod installer;
+pub mod libbox;
 mod manager;
 mod profile;
 mod service;
+
 pub mod settings;
 
 use service::ProxyService;
@@ -150,7 +152,7 @@ async fn check_helper(app: tauri::AppHandle) -> Result<bool, String> {
     match client.get_version() {
         Ok(v) => {
             // Version 1.1.0+ supports reload (SIGHUP)
-            Ok(v == "1.1.5") // Bound to specific version for update
+            Ok(v == "2.0.12") // Bound to specific version for update
         }
         Err(_) => {
             // Helper installed but not responsive (crashed, stopped, or stale socket)

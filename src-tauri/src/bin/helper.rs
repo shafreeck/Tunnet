@@ -1,20 +1,23 @@
 use serde::{Deserialize, Serialize};
 use std::error::Error;
+use std::ffi::{CStr, CString};
 use std::fs;
 use std::io::{Read, Write};
 
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 const SOCKET_PATH: &str = "/var/run/tunnet.sock";
 
+use app_lib::libbox;
+
 #[derive(Serialize, Deserialize, Debug)]
 struct Request {
     command: String,
-    payload: Option<String>, // JSON string of config
+    payload: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -26,94 +29,9 @@ struct Response {
 use std::fs::File;
 use std::io::BufWriter;
 
-// Global state to hold the running proxy process
 struct AppState {
-    proxy_process: Mutex<Option<Child>>,
-    current_config_path: Mutex<Option<PathBuf>>,
     log_writer: Mutex<Option<BufWriter<File>>>,
-}
-
-fn main() -> Result<(), Box<dyn Error>> {
-    // Simple logger
-    println!("Tunnet Helper started");
-
-    let log_path = PathBuf::from("/tmp/tunnet-helper.log");
-    let log_file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(log_path)
-        .ok()
-        .map(|f| BufWriter::new(f));
-
-    let app_state = Arc::new(AppState {
-        proxy_process: Mutex::new(None),
-        current_config_path: Mutex::new(None),
-        log_writer: Mutex::new(log_file),
-    });
-
-    // Remove existing socket if present
-    if Path::new(SOCKET_PATH).exists() {
-        fs::remove_file(SOCKET_PATH)?;
-    }
-
-    let listener = UnixListener::bind(SOCKET_PATH)?;
-    // After binding, we MUST set the socket permissions so the regular user app can write to it.
-    // Since we're on Unix, we can use chmod.
-    if let Err(e) = Command::new("chmod").arg("0666").arg(SOCKET_PATH).status() {
-        eprintln!("Failed to set socket permissions: {}", e);
-    }
-
-    println!("Helper started, listening on {:?}", SOCKET_PATH);
-
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
-                let state = app_state.clone();
-                thread::spawn(move || {
-                    let mut request_str = String::new();
-                    match stream.read_to_string(&mut request_str) {
-                        Ok(size) => {
-                            if size > 0 {
-                                println!("Received {} bytes", size);
-                                let response = match serde_json::from_str::<Request>(&request_str) {
-                                    Ok(req) => handle_request(req, &state),
-                                    Err(e) => Response {
-                                        status: "error".into(),
-                                        message: format!(
-                                            "JSON error at {}: {}",
-                                            e,
-                                            request_str.get(..100).unwrap_or(&request_str)
-                                        ),
-                                    },
-                                };
-
-                                let response_str = serde_json::to_string(&response).unwrap();
-                                if let Err(e) = stream.write_all(response_str.as_bytes()) {
-                                    eprintln!("Failed to write response: {}", e);
-                                }
-                            }
-                        }
-                        Err(e) => eprintln!("Failed to read stream: {}", e),
-                    }
-                });
-            }
-            Err(e) => eprintln!("Connection failed: {}", e),
-        }
-    }
-
-    Ok(())
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct StartPayload {
-    config: String,
-    core_path: String,
-    working_dir: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct KillPortPayload {
-    port: u16,
+    proxy_running: Mutex<bool>,
 }
 
 fn log(state: &Arc<AppState>, msg: &str) {
@@ -124,345 +42,261 @@ fn log(state: &Arc<AppState>, msg: &str) {
             .unwrap()
             .as_secs();
         let _ = writeln!(writer, "[{}] {}", timestamp, msg);
-        // We do NOT flush here intentionally to benefit from buffering.
-        // Operating system/libc will handle flushing.
     }
 }
 
-fn start_sing_box(payload: StartPayload, state: &Arc<AppState>) -> Response {
-    let mut process_guard = state.proxy_process.lock().unwrap();
-    let mut config_path_guard = state.current_config_path.lock().unwrap();
+fn main() -> Result<(), Box<dyn Error>> {
+    println!("Tunnet Helper (Libbox) started");
 
-    log(state, "Start requested");
+    let log_path = PathBuf::from("/tmp/tunnet-helper.log");
+    let log_file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)
+        .ok()
+        .map(|f| BufWriter::new(f));
 
-    let max_retries = 3;
-    let mut retry_count = 0;
+    let app_state = Arc::new(AppState {
+        log_writer: Mutex::new(log_file),
+        proxy_running: Mutex::new(false),
+    });
 
-    // Retry loop for "resource busy" or startup failures
-    loop {
-        // 1. Cleanup Existing Process (Robust)
-        if let Some(mut child) = process_guard.take() {
-            log(state, "Killing existing process");
-            let _ = child.kill();
-            let _ = child.wait();
+    if Path::new(SOCKET_PATH).exists() {
+        fs::remove_file(SOCKET_PATH)?;
+    }
+
+    let listener = UnixListener::bind(SOCKET_PATH)?;
+    if let Err(e) = Command::new("chmod").arg("0666").arg(SOCKET_PATH).status() {
+        eprintln!("Failed to set socket permissions: {}", e);
+    }
+
+    // Verify Libbox linkage
+    unsafe {
+        let hello_ptr = libbox::LibboxHello();
+
+        if !hello_ptr.is_null() {
+            let hello = CStr::from_ptr(hello_ptr).to_string_lossy();
+            log(
+                &app_state,
+                &format!("Libbox linked successfully: {}", hello),
+            );
         }
-        *config_path_guard = None;
+    }
 
-        // 2. Write Config
-        let config_path = PathBuf::from("/tmp/tunnet_config.json");
-        if let Err(e) = fs::write(&config_path, &payload.config) {
-            let err = format!("Failed to write config: {}", e);
-            log(state, &err);
+    println!("Helper listening on {:?}", SOCKET_PATH);
+
+    for stream in listener.incoming() {
+        match stream {
+            Ok(mut stream) => {
+                let state = app_state.clone();
+                thread::spawn(move || {
+                    let mut request_str = String::new();
+                    match stream.read_to_string(&mut request_str) {
+                        Ok(size) => {
+                            if size > 0 {
+                                let response = match serde_json::from_str::<Request>(&request_str) {
+                                    Ok(req) => handle_request(req, &state),
+                                    Err(e) => Response {
+                                        status: "error".into(),
+                                        message: format!("JSON error: {}", e),
+                                    },
+                                };
+                                let response_str = serde_json::to_string(&response).unwrap();
+                                let _ = stream.write_all(response_str.as_bytes());
+                            }
+                        }
+                        Err(e) => log(&state, &format!("Read error: {}", e)),
+                    }
+                });
+            }
+            Err(e) => eprintln!("Accept error: {}", e),
+        }
+    }
+
+    Ok(())
+}
+
+fn kill_all_singbox(state: &Arc<AppState>, core_path: &str) {
+    let mut sys = sysinfo::System::new();
+    sys.refresh_processes();
+
+    let core_canon = Path::new(core_path).canonicalize().ok();
+    let core_name = Path::new(core_path).file_name().and_then(|n| n.to_str());
+
+    for process in sys.processes().values() {
+        let exe_matches = process
+            .exe()
+            .map(|e| {
+                core_canon
+                    .as_ref()
+                    .map_or(false, |c| e.canonicalize().ok().as_ref() == Some(c))
+            })
+            .unwrap_or(false);
+        let name_matches = core_name.map_or(false, |n| process.name() == n);
+
+        if exe_matches || name_matches {
+            log(
+                state,
+                &format!(
+                    "Cleaning up existing proxy instance (pid: {}, name: {})",
+                    process.pid(),
+                    process.name()
+                ),
+            );
+            process.kill_with(sysinfo::Signal::Kill);
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct StartPayload {
+    config: String,
+    // working_dir and core_path are kept for compatibility with Request struct but ignored in FFI mode
+    #[serde(default)]
+    core_path: String,
+    #[serde(default)]
+    working_dir: String,
+}
+
+fn start_libbox(payload: StartPayload, state: &Arc<AppState>) -> Response {
+    log(state, "Start Libbox requested");
+
+    // Aggressive cleanup before starting new instance
+    kill_all_singbox(state, &payload.core_path);
+
+    // We don't write config to file anymore, we pass it directly via memory!
+    // But wait, the config might contain relative paths (geodatabase etc).
+    // Sing-box usually resolves paths relative to Working Directory.
+    // The FFI `LibboxStart` currently just calls `box.New`. `box.New` uses `Options`.
+    // We might need to ensure paths in JSON are absolute, OR set CWD of the helper process.
+
+    // Since we are running in the helper process, we can just chdir if needed,
+    // or rely on absolute paths from the frontend (which Tunnet already does mostly).
+
+    // Change working directory to ensure relative paths (cache.db, geoip.db) work
+    if !payload.working_dir.is_empty() {
+        if let Err(e) = std::env::set_current_dir(&payload.working_dir) {
+            let msg = format!(
+                "Failed to set working dir to {}: {}",
+                payload.working_dir, e
+            );
+            log(state, &msg);
             return Response {
                 status: "error".into(),
-                message: err,
+                message: msg,
             };
         }
-
-        // 3. Spawn Process with Piped I/O
-        let spawn_result = Command::new(&payload.core_path)
-            .args(&[
-                "run",
-                "-c",
-                config_path.to_str().unwrap(),
-                "--disable-color",
-                "-D",
-                &payload.working_dir,
-            ])
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn();
-
-        match spawn_result {
-            Ok(mut child) => {
-                log(state, &format!("Sing-box spawned, PID {}", child.id()));
-
-                // Wait briefly to check for immediate failure
-                std::thread::sleep(std::time::Duration::from_millis(500));
-
-                if let Ok(Some(status)) = child.try_wait() {
-                    let mut err_msg = String::new();
-                    if let Some(mut stderr) = child.stderr.take() {
-                        use std::io::Read;
-                        let _ = stderr.read_to_string(&mut err_msg);
-                    }
-                    if err_msg.is_empty() {
-                        if let Some(mut stdout) = child.stdout.take() {
-                            use std::io::Read;
-                            let _ = stdout.read_to_string(&mut err_msg);
-                        }
-                    }
-
-                    let exit_msg = format!(
-                        "Proxy core exited prematurely with: {}. Logs:\n{}",
-                        status, err_msg
-                    );
-                    log(state, &exit_msg);
-
-                    return Response {
-                        status: "error".into(),
-                        message: exit_msg,
-                    };
-                }
-
-                // Still running: Spawn threads to pipe logs to file for troubleshooting
-                if let Some(stdout) = child.stdout.take() {
-                    let state_clone = state.clone(); // Clone Arc for the new thread
-                    std::thread::spawn(move || {
-                        use std::io::{BufRead, BufReader};
-                        let reader = BufReader::new(stdout);
-                        for line in reader.lines() {
-                            if let Ok(l) = line {
-                                log(&state_clone, &format!("[Core STDOUT] {}", l));
-                            }
-                        }
-                    });
-                }
-                if let Some(stderr) = child.stderr.take() {
-                    let state_clone = state.clone(); // Clone Arc for the new thread
-                    std::thread::spawn(move || {
-                        use std::io::{BufRead, BufReader};
-                        let reader = BufReader::new(stderr);
-                        for line in reader.lines() {
-                            if let Ok(l) = line {
-                                log(&state_clone, &format!("[Core STDERR] {}", l));
-                            }
-                        }
-                    });
-                }
-
-                *process_guard = Some(child);
-                *config_path_guard = Some(config_path);
-                return Response {
-                    status: "success".into(),
-                    message: "Proxy started".into(),
-                };
-            }
-            Err(e) => {
-                let err = format!(
-                    "Failed to spawn sing-box (attempt {}): {}",
-                    retry_count + 1,
-                    e
-                );
-                log(state, &err);
-                retry_count += 1;
-                if retry_count >= max_retries {
-                    return Response {
-                        status: "error".into(),
-                        message: err,
-                    };
-                }
-                std::thread::sleep(std::time::Duration::from_millis(500));
-            }
-        }
+        log(
+            state,
+            &format!("Changed working directory to {}", payload.working_dir),
+        );
     }
-}
 
-fn kill_process_on_port(port: u16, state: &Arc<AppState>) -> Response {
-    log(state, &format!("Kill port requested for port {}", port));
-    // Find PIDs using lsof
-    if let Ok(output) = Command::new("/usr/sbin/lsof")
-        .args(&["-ti", &format!(":{}", port)])
-        .output()
-    {
-        if output.status.success() {
-            let pids = String::from_utf8_lossy(&output.stdout);
-            if pids.trim().is_empty() {
-                return Response {
-                    status: "success".into(),
-                    message: "No process found on port".into(),
-                };
-            }
-
-            for pid_str in pids.lines() {
-                if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                    log(state, &format!("Killing process {} on port {}", pid, port));
-                    let _ = Command::new("/bin/kill")
-                        .args(&["-9", &pid.to_string()])
-                        .output();
-                }
-            }
+    let c_config = match CString::new(payload.config) {
+        Ok(c) => c,
+        Err(_) => {
             return Response {
-                status: "success".into(),
-                message: "Processes killed".into(),
+                status: "error".into(),
+                message: "Config contains null byte".into(),
+            }
+        }
+    };
+
+    unsafe {
+        let err_ptr = libbox::LibboxStart(c_config.as_ptr());
+        if !err_ptr.is_null() {
+            let err_msg = CStr::from_ptr(err_ptr).to_string_lossy().into_owned();
+            log(state, &format!("LibboxStart failed: {}", err_msg));
+            return Response {
+                status: "error".into(),
+                message: err_msg,
             };
         }
     }
 
+    *state.proxy_running.lock().unwrap() = true;
+
+    log(state, "LibboxStart success");
     Response {
         status: "success".into(),
-        message: "No process found or lsof failed".into(),
+        message: "Proxy started via Libbox".into(),
     }
 }
 
-struct ChildGuard(Option<Child>);
-
-impl Drop for ChildGuard {
-    fn drop(&mut self) {
-        if let Some(mut child) = self.0.take() {
-            // Last resort: kill and wait to ensure no zombies/orphans
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-    }
-}
-
-fn stop_sing_box(state: &Arc<AppState>) -> Response {
-    let mut process_guard = state.proxy_process.lock().unwrap();
-    if let Some(child) = process_guard.take() {
-        log(state, "Stopping process gracefully...");
-
-        // Wrap in guard to ensure cleanup even if we panic or early return
-        let mut guard = ChildGuard(Some(child));
-
-        if let Some(ref mut child) = guard.0 {
-            let pid = child.id();
-            let mut stopped = false;
-
-            // 1. Try SIGTERM first
-            #[cfg(unix)]
-            {
-                // Use spawn() instead of status() to avoid blocking if the kill command hangs
-                let _ = Command::new("/bin/kill")
-                    .arg("-TERM")
-                    .arg(pid.to_string())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status();
-
-                // Wait up to 3s (reduced from 5s for better UX)
-                for _ in 0..30 {
-                    match child.try_wait() {
-                        Ok(Some(_)) => {
-                            stopped = true;
-                            break;
-                        }
-                        Ok(None) => std::thread::sleep(std::time::Duration::from_millis(100)),
-                        Err(_) => break,
-                    }
-                }
-            }
-
-            // 2. Force Kill if still running
-            if !stopped {
-                log(state, "Process didn't exit, forcing KILL");
-                // Guard drop will handle kill+wait
-            } else {
-                log(state, "Process exited gracefully");
-                // Process is waited, but we need to tell Guard not to kill it again.
-                // However, Guard checks take().
-                // If we want to avoid double-wait (benign), we can take it out.
-                // But Guard::drop does kill+wait.
-                // If process already exited, kill returns Err (ignored), wait returns status immediately.
-                // So it is safe to let Guard handle the final wait assurance.
-                // Actually, if we already successfully `try_wait`ed and got status, `wait` might error or panic?
-                // Rust `wait` on reaped child?
-                // "If the process has already been successfully waited on, wait will fail with ECHILD" (man wait).
-                // Rust `Command` logic tracks this?
-                // Actually `child.try_wait()` does NOT consume the `Child` struct. It updates internal state?
-                // `start_sing_box` calls `child.wait()`.
-                // If `try_wait` returned `Some`, it means it's reaped.
-                // Calling `wait` on it again?
-                // Rust docs: "It is correct to call this method [wait] multiple times."
-                // Wait, really? "If the child has already exited, this function will return immediately"
-                // Yes, it returns the exit status.
-                // So Guard is safe.
-            }
-        }
-
-        // Configuration cleanup
-        let mut config_path_guard = state.current_config_path.lock().unwrap();
-        *config_path_guard = None;
-
-        Response {
-            status: "success".into(),
-            message: "Proxy stopped".into(),
-        }
-    } else {
-        Response {
-            status: "success".into(), // Idempotent
-            message: "Proxy was not running".into(),
-        }
-    }
-}
-
-fn check_status(state: &Arc<AppState>) -> Response {
-    let mut process_guard = state.proxy_process.lock().unwrap();
-    if let Some(child) = process_guard.as_mut() {
-        match child.try_wait() {
-            Ok(Some(_)) => {
-                *process_guard = None; // Exited
-                Response {
-                    status: "stopped".into(),
-                    message: "Process exited".into(),
-                }
-            }
-            Ok(None) => Response {
-                status: "running".into(),
-                message: "Running".into(),
-            },
-            Err(_) => Response {
+fn stop_libbox(state: &Arc<AppState>) -> Response {
+    log(state, "Stop Libbox requested");
+    unsafe {
+        let err_ptr = libbox::LibboxStop();
+        if !err_ptr.is_null() {
+            let err_msg = CStr::from_ptr(err_ptr).to_string_lossy().into_owned();
+            log(state, &format!("LibboxStop failed: {}", err_msg));
+            // Even if stop failed, we might consider it stopped or in inconsistent state
+            // and we still reset the flag to allow retry.
+            *state.proxy_running.lock().unwrap() = false;
+            return Response {
                 status: "error".into(),
-                message: "Error checking status".into(),
-            },
+                message: err_msg,
+            };
         }
-    } else {
-        Response {
-            status: "stopped".into(),
-            message: "Not running".into(),
-        }
+    }
+    *state.proxy_running.lock().unwrap() = false;
+
+    log(state, "LibboxStop success");
+    Response {
+        status: "success".into(),
+        message: "Proxy stopped".into(),
     }
 }
 
-// Assuming a handle_request function exists elsewhere in the code
-// This is a placeholder to show where the new match arm would go.
-// In a real scenario, you'd insert this into the actual handle_request function.
+// We can remove kill_process_on_port or keep it as a no-op / fallback if user port is held by someone else?
+// But Libbox runs in-process. If Libbox fails to bind, it returns error.
+// We can't kill "ourself" to free port.
+// So we just return success/fail.
+
 fn handle_request(req: Request, state: &Arc<AppState>) -> Response {
     match req.command.as_str() {
         "start" => {
             if let Some(payload_str) = req.payload {
-                // Try parsing as StartPayload
                 match serde_json::from_str::<StartPayload>(&payload_str) {
-                    Ok(payload) => start_sing_box(payload, state),
+                    Ok(payload) => start_libbox(payload, state),
                     Err(_) => Response {
                         status: "error".into(),
-                        message: "Invalid payload format for start".into(),
+                        message: "Invalid payload".into(),
                     },
                 }
             } else {
                 Response {
                     status: "error".into(),
-                    message: "Missing payload for start".into(),
+                    message: "Missing payload".into(),
                 }
+            }
+        }
+        "stop" => stop_libbox(state),
+        "status" => {
+            let running = *state.proxy_running.lock().unwrap();
+            Response {
+                status: if running { "running" } else { "stopped" }.into(),
+                message: if running {
+                    "Proxy active"
+                } else {
+                    "Proxy inactive"
+                }
+                .into(),
             }
         }
 
-        "stop" => stop_sing_box(state),
-        "status" => check_status(state),
         "version" => Response {
             status: "success".into(),
-            message: "1.1.5".into(), // Reverted to 1.1.5
+            message: "2.0.12".into(),
         },
-        "kill_port" => {
-            if let Some(payload_str) = req.payload {
-                match serde_json::from_str::<KillPortPayload>(&payload_str) {
-                    Ok(payload) => kill_process_on_port(payload.port, state),
-                    Err(_) => Response {
-                        status: "error".into(),
-                        message: "Invalid payload for kill_port".into(),
-                    },
-                }
-            } else {
-                Response {
-                    status: "error".into(),
-                    message: "Missing payload for kill_port".into(),
-                }
-            }
-        }
+
+        "kill_port" => Response {
+            status: "success".into(),
+            message: "Not needed in Libbox mode".into(),
+        },
         _ => Response {
             status: "error".into(),
-            message: format!("Unknown command: '{}'", req.command),
+            message: "Unknown command".into(),
         },
     }
 }
