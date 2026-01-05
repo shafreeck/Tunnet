@@ -127,7 +127,7 @@ async fn check_node_locations(
     node_ids: Vec<String>,
     service: State<'_, ProxyService<tauri::Wry>>,
 ) -> Result<(), String> {
-    service.probe_nodes_connectivity(node_ids).await
+    service.probe_nodes_latency(node_ids).await
 }
 
 use installer::HelperInstaller;

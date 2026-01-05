@@ -1,9 +1,7 @@
 use crate::manager::CoreManager;
 use log::{debug, error, info, warn};
 use std::ffi::{CStr, CString};
-use std::process::{Command, Stdio};
 use std::sync::Mutex;
-use sysinfo::System;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use crate::libbox;
@@ -74,38 +72,7 @@ impl<R: Runtime> ProxyService<R> {
     pub fn init(&self) {
         // Ensure helper cleans up too (in case of previous crash/TUN mode residue)
         crate::helper_client::HelperClient::new().stop_proxy().ok();
-        self.kill_all_singbox_processes();
         self.warmup_network_cache();
-    }
-
-    fn kill_all_singbox_processes(&self) {
-        info!("Performing startup cleanup of orphan sing-box processes...");
-        let core_path = self.manager.get_core_path();
-        let core_canon = std::fs::canonicalize(&core_path).unwrap_or(core_path.clone());
-        let core_name = core_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("sing-box");
-
-        let mut sys = System::new();
-        sys.refresh_processes();
-
-        for process in sys.processes().values() {
-            let exe_matches = process
-                .exe()
-                .map(|e| std::fs::canonicalize(e).unwrap_or(e.to_path_buf()) == core_canon)
-                .unwrap_or(false);
-            let name_matches = process.name() == core_name;
-
-            if exe_matches || name_matches {
-                info!(
-                    "Startup Cleanup: Killing found process (pid: {}, name: {})",
-                    process.pid(),
-                    process.name()
-                );
-                process.kill_with(sysinfo::Signal::Kill);
-            }
-        }
     }
 
     pub async fn start_proxy(
@@ -121,9 +88,7 @@ impl<R: Runtime> ProxyService<R> {
 
         info!("start_proxy: download check done, ensuring DBs...");
         self.manager.ensure_databases().await?;
-        info!("start_proxy: DBs ensured. Preparing config.");
-
-        let core_path = self.manager.get_core_path();
+        let core_path = std::path::PathBuf::new();
         let routing_mode = routing_mode.to_lowercase();
         let node_name = node_opt.as_ref().map(|n| n.name.as_str()).unwrap_or("None");
 
@@ -267,7 +232,8 @@ impl<R: Runtime> ProxyService<R> {
                     &settings,
                     None,
                 )?;
-                std::fs::rename(&config_file_path, &helper_config_path).map_err(|e| e.to_string())?;
+                std::fs::rename(&config_file_path, &helper_config_path)
+                    .map_err(|e| e.to_string())?;
             }
 
             self.write_config(
@@ -374,8 +340,10 @@ impl<R: Runtime> ProxyService<R> {
                     if e.contains("address already in use")
                         || e.contains("bind: address already in use")
                     {
-                        warn!("Startup attempt {} failed: {}. Cleaning up orphans and retrying in 500ms...", attempt, e);
-                        self.kill_all_singbox_processes();
+                        warn!(
+                            "Startup attempt {} failed: {}. Retrying in 500ms...",
+                            attempt, e
+                        );
                         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                         continue;
                     }
@@ -1305,36 +1273,6 @@ impl<R: Runtime> ProxyService<R> {
             }
         }
 
-        // 3. Check for orphan processes (Support recovery after UI crash)
-        let core_path = self.manager.get_core_path();
-        let core_canon = std::fs::canonicalize(&core_path).unwrap_or(core_path);
-
-        let mut sys = System::new();
-        sys.refresh_processes();
-        for process in sys.processes().values() {
-            if let Some(exe) = process.exe() {
-                let exe_canon = std::fs::canonicalize(exe).unwrap_or(exe.to_path_buf());
-                if exe_canon == core_canon {
-                    // Critical Fix: Ignore Zombie processes (defunct)
-                    if process.status() == sysinfo::ProcessStatus::Zombie {
-                        debug!(
-                            "is_proxy_running: Found zombie process (pid: {}), ignoring.",
-                            process.pid()
-                        );
-                        continue;
-                    }
-
-                    info!(
-                        "is_proxy_running: Found orphan process (pid: {}), ignoring as requested.",
-                        process.pid()
-                    );
-                    // Critical Change: User requested to ignore orphan processes for status check.
-                    // This prevents false "Connected" state if previous cleanup failed.
-                    continue;
-                }
-            }
-        }
-
         false
     }
 
@@ -1439,50 +1377,6 @@ impl<R: Runtime> ProxyService<R> {
         if let Ok(_) = client.stop_proxy() {
             cleanup_performed = true;
             info!("Helper proxy stop command sent.");
-        }
-
-        // 3. Exhaustive Kill by Executable Path AND Name
-        // Optimization: If we cleaned up the child process successfully, skip this expensive scan.
-        // We assume 'cleanup_performed' means we had a child handle.
-        // However, we want to be safe. Let's only skip if we are sure.
-        // For now, let's keep it but maybe optimize `start_proxy` to be cleaner.
-        // Actually, sys.refresh_all() is very slow (can be 500ms+ on loaded mac).
-        // If cleanup_performed is true, we likely got the main process.
-        // Let's skip exhaustive scan if cleanup_performed is true AND retain_system_proxy is true (fast restart).
-        // If we are strictly stopping (quit), we might want to be thorough.
-
-        // Optimization turned off: We found orphans often escape if we rely only on child handle.
-        // To fix "Address already in use", we must be aggressive in cleaning up.
-        let should_scan = true;
-
-        if should_scan {
-            let core_path = self.manager.get_core_path();
-            let core_canon = std::fs::canonicalize(&core_path).unwrap_or(core_path.clone());
-            let core_name = core_path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("sing-box");
-
-            let mut sys = System::new();
-            sys.refresh_processes();
-
-            for process in sys.processes().values() {
-                let exe_matches = process
-                    .exe()
-                    .map(|e| std::fs::canonicalize(e).unwrap_or(e.to_path_buf()) == core_canon)
-                    .unwrap_or(false);
-                let name_matches = process.name() == core_name;
-
-                if exe_matches || name_matches {
-                    info!(
-                        "Killing remaining proxy process (pid: {}, name: {})",
-                        process.pid(),
-                        process.name()
-                    );
-                    process.kill_with(sysinfo::Signal::Kill);
-                    cleanup_performed = true;
-                }
-            }
         }
 
         // 4. Robust Port Release Check (Loop up to 3 seconds)
@@ -2174,619 +2068,38 @@ impl<R: Runtime> ProxyService<R> {
         *self.tun_mode.lock().unwrap()
     }
 
-    pub async fn probe_nodes_connectivity(&self, node_ids: Vec<String>) -> Result<(), String> {
-        let mut profiles = self.manager.load_profiles()?;
-
-        // 2. Prepare probing plan: (Node, port)
-        let mut probe_plan = Vec::new();
-        for profile in &profiles {
-            for node in &profile.nodes {
-                if node_ids.contains(&node.id) {
-                    // Alloc port
-                    match std::net::TcpListener::bind("127.0.0.1:0") {
-                        Ok(l) => {
-                            if let Ok(_) = l.local_addr() {
-                                probe_plan.push((node.clone(), 0));
-                            }
-                        }
-                        Err(e) => warn!("Failed to bind ephemeral port: {}", e),
-                    }
-                }
-            }
-        }
-
-        if probe_plan.is_empty() {
-            return Ok(());
-        }
-
-        // 3. Gen Config
-        let mut cfg = crate::config::SingBoxConfig::new(None, crate::config::ConfigMode::Combined);
-        // Clear DNS to avoid "outbound detour not found: proxy" since we don't have a "proxy" outbound in probe config
-        cfg.dns = None;
-
-        if let Some(route) = &mut cfg.route {
-            route.rules.clear();
-            route.default_domain_resolver = None;
-        }
-
-        // Disable cache file to avoid lock contention
-        if let Some(exp) = &mut cfg.experimental {
-            if let Some(cache) = &mut exp.cache_file {
-                cache.enabled = false;
-            }
-        }
-
-        for (node, port) in &probe_plan {
-            let inbound_tag = format!("in_{}", node.id);
-            let outbound_tag = format!("out_{}", node.id);
-
-            cfg = cfg.with_mixed_inbound(*port, &inbound_tag, false);
-
-            match node.protocol.as_str() {
-                "vmess" => {
-                    cfg = cfg.with_vmess_outbound(
-                        &outbound_tag,
-                        node.server.clone(),
-                        node.port,
-                        node.uuid.clone().unwrap_or_default(),
-                        node.cipher.clone().unwrap_or("auto".to_string()),
-                        0,
-                        node.network.clone(),
-                        node.path.clone(),
-                        node.host.clone(),
-                        node.tls,
-                    );
-                }
-                "shadowsocks" | "ss" => {
-                    cfg = cfg.with_shadowsocks_outbound(
-                        &outbound_tag,
-                        node.server.clone(),
-                        node.port,
-                        node.cipher
-                            .clone()
-                            .unwrap_or("chacha20-ietf-poly1305".to_string()),
-                        node.password.clone().unwrap_or_default(),
-                    );
-                }
-                "trojan" => {
-                    cfg = cfg.with_trojan_outbound(
-                        &outbound_tag,
-                        node.server.clone(),
-                        node.port,
-                        node.password.clone().unwrap_or_default(),
-                        node.network.clone(),
-                        node.path.clone(),
-                        node.host.clone(),
-                        node.sni.clone(),
-                        node.insecure,
-                    );
-                }
-                "vless" => {
-                    cfg = cfg.with_vless_outbound(
-                        &outbound_tag,
-                        node.server.clone(),
-                        node.port,
-                        node.uuid.clone().unwrap_or_default(),
-                        node.flow.clone(),
-                        node.network.clone(),
-                        node.path.clone(),
-                        node.host.clone(),
-                        node.tls,
-                        node.insecure,
-                        node.sni.clone(),
-                        node.alpn.clone(),
-                    );
-                }
-                "hysteria2" | "hy2" => {
-                    let up_mbps = node.up.as_ref().and_then(|s| s.parse().ok());
-                    let down_mbps = node.down.as_ref().and_then(|s| s.parse().ok());
-
-                    cfg = cfg.with_hysteria2_outbound(
-                        &outbound_tag,
-                        node.server.clone(),
-                        node.port,
-                        node.password.clone().unwrap_or_default(),
-                        node.sni.clone(),
-                        node.insecure,
-                        node.alpn.clone(),
-                        up_mbps,
-                        down_mbps,
-                        node.obfs.clone(),
-                        node.obfs_password.clone(),
-                    );
-                }
-                "tuic" => {
-                    cfg = cfg.with_tuic_outbound(
-                        &outbound_tag,
-                        node.server.clone(),
-                        node.port,
-                        node.uuid.clone().unwrap_or_default(),
-                        node.password.clone(),
-                        node.sni.clone(),
-                        node.insecure,
-                        node.alpn.clone(),
-                        None, // congestion_controller
-                        None, // udp_relay_mode
-                    );
-                }
-                _ => {
-                    // Start of next block - removing the previous fallback
-                    warn!("Skipping unsupported protocol for probe: {}", node.protocol);
-                    continue;
-                }
-            }
-
-            if let Some(route) = &mut cfg.route {
-                route.rules.push(crate::config::RouteRule {
-                    inbound: Some(vec![inbound_tag]),
-                    protocol: None,
-                    domain: None,
-                    domain_suffix: None,
-                    domain_keyword: None,
-                    ip_cidr: None,
-                    port: None,
-                    outbound: Some(outbound_tag.to_string()),
-                    rule_set: None,
-                    action: None,
-                });
-            }
-        }
-
-        let app_local_data = self.app.path().app_local_data_dir().unwrap();
-        let config_file_path = app_local_data.join("probe_config.json");
-        let json = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
-        std::fs::write(&config_file_path, &json).map_err(|e| e.to_string())?;
-
-        let core_path = self.manager.get_core_path();
-        let mut cmd = Command::new(core_path);
-        cmd.arg("run")
-            .arg("-c")
-            .arg(&config_file_path)
-            .arg("--disable-color")
-            .arg("-D")
-            .arg(&app_local_data);
-
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-        let mut child = cmd.spawn().map_err(|e| e.to_string())?;
-
-        let stderr = child.stderr.take().unwrap();
-        let stdout = child.stdout.take().unwrap();
-        let output_log = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
-        let output_log_clone = output_log.clone();
-        let output_log_clone2 = output_log.clone();
-        let output_log_clone3 = output_log.clone();
-        let output_log_clone4 = output_log.clone();
-
-        std::thread::spawn(move || {
-            use std::io::{BufRead, BufReader};
-            let reader = BufReader::new(stderr);
-            for line in reader.lines() {
-                if let Ok(l) = line {
-                    if let Ok(mut g) = output_log_clone3.lock() {
-                        g.push_str(&l);
-                        g.push('\n');
-                    }
-                }
-            }
-        });
-
-        std::thread::spawn(move || {
-            use std::io::{BufRead, BufReader};
-            let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                if let Ok(l) = line {
-                    if let Ok(mut g) = output_log_clone4.lock() {
-                        g.push_str(&l);
-                        g.push('\n');
-                    }
-                }
-            }
-        });
-
-        // Wait for startup
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-        // Parse logs for ports
-        let stdout_logs = output_log_clone2.lock().unwrap().clone();
-        let stderr_logs = output_log_clone.lock().unwrap().clone();
-
-        let all_logs = format!("{}\n{}", stdout_logs, stderr_logs);
-        let mut port_map = std::collections::HashMap::new();
-
-        for line in all_logs.lines() {
-            // Pattern 1: inbound/mixed[tag]: listen tcp 127.0.0.1:xxx
-            // Pattern 2: inbound/mixed[tag]: tcp server started at 127.0.0.1:xxx
-            if line.contains("inbound/mixed[")
-                && (line.contains("]: listen tcp 127.0.0.1:")
-                    || line.contains("]: tcp server started at 127.0.0.1:"))
-            {
-                // Extract tag
-                if let Some(start) = line.find("inbound/mixed[") {
-                    let rest = &line[start + 14..];
-                    if let Some(end) = rest.find("]:") {
-                        let tag = &rest[..end];
-                        // Extract port
-                        if let Some(port_start) = line.rfind(":") {
-                            if let Ok(port) = line[port_start + 1..].trim().parse::<u16>() {
-                                port_map.insert(tag.to_string(), port);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        let mut futures: Vec<
-            tokio::task::JoinHandle<Option<(String, crate::profile::LocationInfo)>>,
-        > = Vec::new();
-        // Client usage
-        for (node, _) in probe_plan {
-            let tag = format!("in_{}", node.id);
-            if let Some(port) = port_map.get(&tag) {
-                let proxy_url = format!("http://127.0.0.1:{}", port);
-                let node_id = node.id.clone();
-                futures.push(tokio::spawn(async move {
-                    let proxy = match reqwest::Proxy::all(&proxy_url) {
-                        Ok(p) => p,
-                        Err(_) => return None,
-                    };
-                    let client = match reqwest::Client::builder()
-                        .proxy(proxy)
-                        .timeout(std::time::Duration::from_secs(10))
-                        .build()
-                    {
-                        Ok(c) => c,
-                        Err(_) => return None,
-                    };
-
-                    let url = "http://ip-api.com/json";
-                    let start_time = std::time::Instant::now();
-
-                    match client.get(url).send().await {
-                        Ok(res) => {
-                            let duration = start_time.elapsed().as_millis() as u64;
-                            if let Ok(json) = res.json::<serde_json::Value>().await {
-                                let info = crate::profile::LocationInfo {
-                                    ip: json
-                                        .get("query")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("")
-                                        .to_string(),
-                                    country: json
-                                        .get("country")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("")
-                                        .to_string(),
-                                    city: json
-                                        .get("city")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("")
-                                        .to_string(),
-                                    lat: json.get("lat").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                                    lon: json.get("lon").and_then(|v| v.as_f64()).unwrap_or(0.0),
-                                    isp: json
-                                        .get("isp")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("")
-                                        .to_string(),
-                                    latency: duration,
-                                };
-                                Some((node_id, info))
-                            } else {
-                                None
-                            }
-                        }
-                        Err(_) => None,
-                    }
-                }));
-            }
-        }
-
-        let results = futures_util::future::join_all(futures).await;
-
-        let _ = child.kill();
-        let _ = child.wait();
-
-        let mut updates = std::collections::HashMap::new();
-        for res in results {
-            if let Ok(Some((id, info))) = res {
-                updates.insert(id, info);
-            }
-        }
-
-        for p in &mut profiles {
-            for n in &mut p.nodes {
-                if let Some(info) = updates.get(&n.id) {
-                    n.location = Some(info.clone());
-                }
-            }
-        }
-        self.manager.save_profiles(&profiles)?;
-
-        Ok(())
-    }
-
     pub async fn probe_nodes_latency(&self, node_ids: Vec<String>) -> Result<(), String> {
         let mut profiles = self.manager.load_profiles()?;
+        let mut updates = std::collections::HashMap::new();
+        let mut futures = Vec::new();
 
-        // 2. Prepare probing plan: (Node, port)
-        let mut probe_plan = Vec::new();
-        for profile in &profiles {
-            for node in &profile.nodes {
-                if node_ids.contains(&node.id) {
-                    // Alloc port
-                    match std::net::TcpListener::bind("127.0.0.1:0") {
-                        Ok(l) => {
-                            if let Ok(_) = l.local_addr() {
-                                probe_plan.push((node.clone(), 0));
-                            }
-                        }
-                        Err(e) => warn!("Failed to bind ephemeral port: {}", e),
-                    }
-                }
-            }
-        }
-
-        if probe_plan.is_empty() {
-            return Ok(());
-        }
-
-        // 3. Gen Config
-        let mut cfg = crate::config::SingBoxConfig::new(None, crate::config::ConfigMode::Combined);
-        cfg.dns = None;
-
-        if let Some(route) = &mut cfg.route {
-            route.rules.clear();
-            route.default_domain_resolver = None;
-        }
-
-        // Disable cache file
-        if let Some(exp) = &mut cfg.experimental {
-            if let Some(cache) = &mut exp.cache_file {
-                cache.enabled = false;
-            }
-        }
-
-        for (node, port) in &probe_plan {
-            let inbound_tag = format!("in_{}", node.id);
-            let outbound_tag = format!("out_{}", node.id);
-
-            cfg = cfg.with_mixed_inbound(*port, &inbound_tag, false);
-
-            match node.protocol.as_str() {
-                "vmess" => {
-                    cfg = cfg.with_vmess_outbound(
-                        &outbound_tag,
-                        node.server.clone(),
-                        node.port,
-                        node.uuid.clone().unwrap(),
-                        node.cipher.clone().unwrap_or("auto".to_string()),
-                        0, // alter_id
-                        node.network.clone(),
-                        node.path.clone(),
-                        node.host.clone(),
-                        node.tls,
-                    );
-                }
-                "shadowsocks" | "ss" => {
-                    cfg = cfg.with_shadowsocks_outbound(
-                        &outbound_tag,
-                        node.server.clone(),
-                        node.port,
-                        node.cipher
-                            .clone()
-                            .unwrap_or("chacha20-ietf-poly1305".to_string()),
-                        node.password.clone().unwrap_or_default(),
-                    );
-                }
-                "trojan" => {
-                    cfg = cfg.with_trojan_outbound(
-                        &outbound_tag,
-                        node.server.clone(),
-                        node.port,
-                        node.password.clone().unwrap_or_default(),
-                        node.network.clone(),
-                        node.path.clone(),
-                        node.host.clone(),
-                        node.sni.clone(),
-                        node.insecure,
-                    );
-                }
-                "vless" => {
-                    cfg = cfg.with_vless_outbound(
-                        &outbound_tag,
-                        node.server.clone(),
-                        node.port,
-                        node.uuid.clone().unwrap_or_default(),
-                        node.flow.clone(),
-                        node.network.clone(),
-                        node.path.clone(),
-                        node.host.clone(),
-                        node.tls,
-                        node.insecure,
-                        node.sni.clone(),
-                        node.alpn.clone(),
-                    );
-                }
-                "hysteria2" | "hy2" => {
-                    let up_mbps = node.up.as_ref().and_then(|s| s.parse().ok());
-                    let down_mbps = node.down.as_ref().and_then(|s| s.parse().ok());
-                    cfg = cfg.with_hysteria2_outbound(
-                        &outbound_tag,
-                        node.server.clone(),
-                        node.port,
-                        node.password.clone().unwrap_or_default(),
-                        node.sni.clone(),
-                        node.insecure,
-                        node.alpn.clone(),
-                        up_mbps,
-                        down_mbps,
-                        node.obfs.clone(),
-                        node.obfs_password.clone(),
-                    );
-                }
-                "tuic" => {
-                    cfg = cfg.with_tuic_outbound(
-                        &outbound_tag,
-                        node.server.clone(),
-                        node.port,
-                        node.uuid.clone().unwrap_or_default(),
-                        node.password.clone(),
-                        node.sni.clone(),
-                        node.insecure,
-                        node.alpn.clone(),
-                        None,
-                        None,
-                    );
-                }
-                _ => {
+        for p in &profiles {
+            for n in &p.nodes {
+                let node_id = n.id.clone();
+                if !node_ids.is_empty() && !node_ids.contains(&node_id) {
                     continue;
                 }
-            }
 
-            if let Some(route) = &mut cfg.route {
-                route.rules.push(crate::config::RouteRule {
-                    inbound: Some(vec![inbound_tag]),
-                    protocol: None,
-                    domain: None,
-                    domain_suffix: None,
-                    domain_keyword: None,
-                    ip_cidr: None,
-                    port: None,
-                    outbound: Some(outbound_tag.to_string()),
-                    rule_set: None,
-                    action: None,
-                });
-            }
-        }
+                let target = format!("{}:{}", n.server, n.port);
 
-        let app_local_data = self.app.path().app_local_data_dir().unwrap();
-        let config_file_path = app_local_data.join("ping_config.json");
-        let json = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
-        std::fs::write(&config_file_path, &json).map_err(|e| e.to_string())?;
-
-        let core_path = self.manager.get_core_path();
-        let mut cmd = Command::new(core_path);
-        cmd.arg("run")
-            .arg("-c")
-            .arg(&config_file_path)
-            .arg("--disable-color")
-            .arg("-D")
-            .arg(&app_local_data);
-
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-        let mut child = cmd.spawn().map_err(|e| e.to_string())?;
-
-        let stderr = child.stderr.take().unwrap();
-        let stdout = child.stdout.take().unwrap();
-        let output_log = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
-        let output_log_clone = output_log.clone();
-        let output_log_clone2 = output_log.clone();
-        let output_log_clone3 = output_log.clone();
-        let output_log_clone4 = output_log.clone();
-
-        std::thread::spawn(move || {
-            use std::io::{BufRead, BufReader};
-            let reader = BufReader::new(stderr);
-            for line in reader.lines() {
-                if let Ok(l) = line {
-                    if let Ok(mut g) = output_log_clone3.lock() {
-                        g.push_str(&l);
-                        g.push('\n');
-                    }
-                }
-            }
-        });
-
-        std::thread::spawn(move || {
-            use std::io::{BufRead, BufReader};
-            let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                if let Ok(l) = line {
-                    if let Ok(mut g) = output_log_clone4.lock() {
-                        g.push_str(&l);
-                        g.push('\n');
-                    }
-                }
-            }
-        });
-
-        // Wait for startup
-        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
-
-        let mut futures: Vec<tokio::task::JoinHandle<Option<(String, u64)>>> = Vec::new();
-
-        let mut updates: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
-        // Parse logs for ports
-        let stdout_logs = output_log_clone2.lock().unwrap().clone();
-        let stderr_logs = output_log_clone.lock().unwrap().clone();
-
-        let all_logs = format!("{}\n{}", stdout_logs, stderr_logs);
-        let mut port_map = std::collections::HashMap::new();
-
-        for line in all_logs.lines() {
-            if line.contains("inbound/mixed[")
-                && (line.contains("]: listen tcp 127.0.0.1:")
-                    || line.contains("]: tcp server started at 127.0.0.1:"))
-            {
-                // Extract tag
-                if let Some(start) = line.find("inbound/mixed[") {
-                    let rest = &line[start + 14..];
-                    if let Some(end) = rest.find("]:") {
-                        let tag = &rest[..end];
-                        // Extract port
-                        if let Some(port_start) = line.rfind(":") {
-                            if let Ok(port) = line[port_start + 1..].trim().parse::<u16>() {
-                                port_map.insert(tag.to_string(), port);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        for (node, _) in probe_plan {
-            let url = "http://www.gstatic.com/generate_204";
-            let tag = format!("in_{}", node.id);
-            if let Some(port) = port_map.get(&tag) {
-                let proxy_url = format!("http://127.0.0.1:{}", port);
-                let node_id = node.id.clone();
                 futures.push(tokio::spawn(async move {
-                    let proxy = match reqwest::Proxy::all(&proxy_url) {
-                        Ok(p) => p,
-                        Err(_) => return None,
-                    };
-                    let client = match reqwest::Client::builder()
-                        .proxy(proxy)
-                        .timeout(std::time::Duration::from_secs(5))
-                        .build()
+                    let start = std::time::Instant::now();
+                    // 3s timeout for tcp connect
+                    let timeout = std::time::Duration::from_secs(3);
+                    match tokio::time::timeout(timeout, tokio::net::TcpStream::connect(&target))
+                        .await
                     {
-                        Ok(c) => c,
-                        Err(_) => return None,
-                    };
-
-                    let start_time = std::time::Instant::now();
-
-                    match client.get(url).send().await {
-                        Ok(res) => {
-                            let duration = start_time.elapsed().as_millis() as u64;
-                            // Accept 204 or success (some captive portals return 200)
-                            if res.status().is_success() {
-                                Some((node_id, duration))
-                            } else {
-                                None
-                            }
+                        Ok(Ok(_)) => {
+                            let duration = start.elapsed().as_millis() as u64;
+                            Some((node_id, duration))
                         }
-                        Err(_) => None,
+                        _ => None,
                     }
                 }));
             }
         }
 
         let results = futures_util::future::join_all(futures).await;
-
-        let _ = child.kill();
-        let _ = child.wait();
 
         for res in results {
             if let Ok(Some((id, latency))) = res {
@@ -2809,7 +2122,6 @@ impl<R: Runtime> ProxyService<R> {
     pub async fn url_test(&self, node_id: String) -> Result<u64, String> {
         let profiles = self.manager.load_profiles()?;
         let mut target_node: Option<crate::profile::Node> = None;
-
         for p in profiles {
             for n in p.nodes {
                 if n.id == node_id {
@@ -2821,405 +2133,45 @@ impl<R: Runtime> ProxyService<R> {
                 break;
             }
         }
-
         let node = target_node.ok_or("Node not found")?;
 
-        // 0. Pre-check: Verify Core Binary works
-        let core_path = self.manager.get_core_path();
-        let version_check = Command::new(&core_path).arg("version").output();
-        match version_check {
-            Ok(out) => {
-                if !out.status.success() {
-                    let stderr = String::from_utf8_lossy(&out.stderr);
-                    return Err(format!(
-                        "Sing-box binary check failed ({}). Stderr: {}",
-                        core_path.display(),
-                        stderr
-                    ));
-                }
-            }
-            Err(e) => {
-                return Err(format!(
-                    "Failed to execute sing-box at {}: {}",
-                    core_path.display(),
-                    e
-                ));
-            }
-        }
-
-        // Check if we are testing the currently active node WHILE proxy is running
-        // Optimization: Avoid spawning new process
+        // 1. If active, use Real Proxy Test
         if self.is_proxy_running() {
             let status = self.get_status();
             if let Some(active_node) = &status.node {
                 if active_node.id == node.id {
-                    // Use mixed port from settings
                     if let Ok(settings) = self.manager.load_settings() {
                         let port = settings.mixed_port;
-                        // Perform test directly
                         let proxy_url = format!("http://127.0.0.1:{}", port);
-                        let url = "http://www.gstatic.com/generate_204";
-                        let proxy = reqwest::Proxy::all(&proxy_url).map_err(|e| e.to_string())?;
                         let client = reqwest::Client::builder()
-                            .proxy(proxy)
+                            .proxy(reqwest::Proxy::all(&proxy_url).map_err(|e| e.to_string())?)
                             .timeout(std::time::Duration::from_secs(5))
                             .build()
                             .map_err(|e| e.to_string())?;
-
-                        let start_time = std::time::Instant::now();
-                        let res = client.get(url).send().await.map_err(|e| e.to_string())?;
-
-                        if res.status().is_success() {
-                            return Ok(start_time.elapsed().as_millis() as u64);
-                        } else {
-                            return Err(format!("Check failed with status: {}", res.status()));
-                        }
+                        let start = std::time::Instant::now();
+                        let _ = client
+                            .get("http://www.gstatic.com/generate_204")
+                            .send()
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        return Ok(start.elapsed().as_millis() as u64);
                     }
                 }
             }
         }
 
-        // Gen Config
-        let mut cfg = crate::config::SingBoxConfig::new(None, crate::config::ConfigMode::Combined);
-        cfg.dns = None;
-        if let Some(route) = &mut cfg.route {
-            route.rules.clear();
-            route.default_domain_resolver = None;
-        }
-
-        // Disable cache file to avoid lock contention
-        if let Some(exp) = &mut cfg.experimental {
-            if let Some(cache) = &mut exp.cache_file {
-                cache.enabled = false;
-            }
-        }
-
-        let inbound_tag = "in_temp";
-        let outbound_tag = "out_temp";
-
-        cfg = cfg.with_mixed_inbound(0, inbound_tag, false); // Port 0 for dynamic
-
-        match node.protocol.as_str() {
-            "vmess" => {
-                cfg = cfg.with_vmess_outbound(
-                    outbound_tag,
-                    node.server.clone(),
-                    node.port,
-                    node.uuid.clone().unwrap(),
-                    node.cipher.clone().unwrap_or("auto".to_string()),
-                    0,
-                    node.network.clone(),
-                    node.path.clone(),
-                    node.host.clone(),
-                    node.tls,
-                );
-            }
-            "shadowsocks" | "ss" => {
-                cfg = cfg.with_shadowsocks_outbound(
-                    outbound_tag,
-                    node.server.clone(),
-                    node.port,
-                    node.cipher
-                        .clone()
-                        .unwrap_or("chacha20-ietf-poly1305".to_string()),
-                    node.password.clone().unwrap_or_default(),
-                );
-            }
-            "trojan" => {
-                cfg = cfg.with_trojan_outbound(
-                    &outbound_tag,
-                    node.server.clone(),
-                    node.port,
-                    node.password.clone().unwrap_or_default(),
-                    node.network.clone(),
-                    node.path.clone(),
-                    node.host.clone(),
-                    node.sni.clone(),
-                    node.insecure,
-                );
-            }
-            "vless" => {
-                cfg = cfg.with_vless_outbound(
-                    &outbound_tag,
-                    node.server.clone(),
-                    node.port,
-                    node.uuid.clone().unwrap_or_default(),
-                    node.flow.clone(),
-                    node.network.clone(),
-                    node.path.clone(),
-                    node.host.clone(),
-                    node.tls,
-                    node.insecure,
-                    node.sni.clone(),
-                    node.alpn.clone(),
-                );
-            }
-            "hysteria2" | "hy2" => {
-                let up_mbps = node.up.as_ref().and_then(|s| s.parse().ok());
-                let down_mbps = node.down.as_ref().and_then(|s| s.parse().ok());
-
-                cfg = cfg.with_hysteria2_outbound(
-                    &outbound_tag,
-                    node.server.clone(),
-                    node.port,
-                    node.password.clone().unwrap_or_default(),
-                    node.sni.clone(),
-                    node.insecure,
-                    node.alpn.clone(),
-                    up_mbps,
-                    down_mbps,
-                    node.obfs.clone(),
-                    node.obfs_password.clone(),
-                );
-            }
-            "tuic" => {
-                cfg = cfg.with_tuic_outbound(
-                    &outbound_tag,
-                    node.server.clone(),
-                    node.port,
-                    node.uuid.clone().unwrap_or_default(),
-                    node.password.clone(),
-                    node.sni.clone(),
-                    node.insecure,
-                    node.alpn.clone(),
-                    None,
-                    None,
-                );
-            }
-            _ => {
-                return Err(format!(
-                    "Unsupported protocol for latency test: {}",
-                    node.protocol
-                ));
-            }
-        }
-
-        // Add Route Rule
-        if let Some(route) = &mut cfg.route {
-            route.rules.push(crate::config::RouteRule {
-                inbound: Some(vec![inbound_tag.to_string()]),
-                outbound: Some(outbound_tag.to_string()),
-                ..Default::default()
-            });
-        }
-
-        // Define app_local_data early
-        let app_local_data = self.app.path().app_local_data_dir().unwrap();
-
-        // Set log output to file
-        let log_file_path = app_local_data.join(format!("url_test_{}.log", node.id));
-        cfg.log = Some(crate::config::LogConfig {
-            level: Some("trace".to_string()),
-            output: None, // Print to stdout/stderr
-            timestamp: Some(false),
-        });
-
-        let config_file_path = app_local_data.join(format!("url_test_{}.json", node.id));
-        let json = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
-        std::fs::write(&config_file_path, &json).map_err(|e| e.to_string())?;
-
-        let core_path = self.manager.get_core_path();
-        let mut cmd = Command::new(&core_path);
-        cmd.arg("run")
-            .arg("-c")
-            .arg(&config_file_path)
-            .arg("--disable-color")
-            .arg("-D")
-            .arg(&app_local_data);
-
-        // Pipe stdout and stderr to capture all output
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
-
-        let mut child = cmd.spawn().map_err(|e| e.to_string())?;
-
-        let stderr = child.stderr.take().unwrap();
-        let stdout = child.stdout.take().unwrap();
-        let output_log = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
-        let output_log_clone = output_log.clone();
-
-        let output_log_clone3 = output_log.clone();
-        let output_log_clone4 = output_log.clone();
-
-        std::thread::spawn(move || {
-            use std::io::{BufRead, BufReader};
-            let reader = BufReader::new(stderr);
-            for line in reader.lines() {
-                if let Ok(l) = line {
-                    if let Ok(mut g) = output_log_clone3.lock() {
-                        g.push_str(&l);
-                        g.push('\n');
-                    }
-                }
-            }
-        });
-
-        std::thread::spawn(move || {
-            use std::io::{BufRead, BufReader};
-            let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                if let Ok(l) = line {
-                    if let Ok(mut g) = output_log_clone4.lock() {
-                        g.push_str(&l);
-                        g.push('\n');
-                    }
-                }
-            }
-        });
-
-        // Wait for startup
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-        if let Ok(Some(status)) = child.try_wait() {
-            let _log_content = std::fs::read_to_string(&log_file_path).unwrap_or_default();
-            let output_content = output_log.lock().unwrap().clone();
-            return Err(format!(
-                "Test process exited early ({}). Path: {}. Output: {}. Config: {}",
-                status,
-                core_path.display(),
-                output_content,
-                config_file_path.display()
-            ));
-        }
-
-        // Parse port from logs
-        let mut port = 0;
-        let mut loop_count = 0;
-        // Wait up to 3 seconds for port allocation
-        loop {
-            if loop_count > 30 {
-                break;
-            }
-
-            let logs = output_log.lock().unwrap().clone();
-            for line in logs.lines() {
-                if line.contains("inbound/mixed[in_temp]: listen tcp 127.0.0.1:")
-                    || line.contains("inbound/mixed[in_temp]: tcp server started at 127.0.0.1:")
-                {
-                    if let Some(idx) = line.rfind(":") {
-                        if let Ok(p) = line[idx + 1..].trim().parse::<u16>() {
-                            port = p;
-                            break;
-                        }
-                    }
-                }
-            }
-            if port > 0 {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            loop_count += 1;
-        }
-
-        if port == 0 {
-            let _ = child.kill();
-            let _ = child.wait();
-            let output = output_log_clone.lock().unwrap().clone();
-            return Err(format!(
-                "Failed to parse port from sing-box log. Output: {}",
-                output
-            ));
-        }
-
-        let url = "http://www.gstatic.com/generate_204";
-        let proxy_url = format!("http://127.0.0.1:{}", port);
-
-        let client_builder = reqwest::Client::builder()
-            .no_proxy()
-            .timeout(std::time::Duration::from_secs(5));
-
-        let client = match reqwest::Proxy::all(&proxy_url) {
-            Ok(p) => client_builder.proxy(p).build(),
-            Err(e) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(e.to_string());
-            }
-        }
-        .map_err(|e| {
-            let _ = child.kill();
-            let _ = child.wait();
-            e.to_string()
-        })?;
-
+        // 2. Fallback: Tcp Ping
+        let target = format!("{}:{}", node.server, node.port);
         let start = std::time::Instant::now();
-
-        let mut attempts = 0;
-        let mut result = Err("Init".to_string());
-
-        while attempts < 3 {
-            // Check if child is still running before request
-            if let Ok(Some(status)) = child.try_wait() {
-                let output_content = output_log.lock().unwrap().clone();
-                result = Err(format!(
-                    "Process died mid-test ({}). Output: {}",
-                    status, output_content
-                ));
-                break;
-            }
-
-            result = client.get(url).send().await.map_err(|e| e.to_string());
-            if result.is_ok()
-                || result
-                    .as_ref()
-                    .err()
-                    .map_or(false, |e| !e.contains("refused") && !e.contains("reset"))
-            {
-                // If we get a response (any response) or a non-connection error, we break
-                // But we need a success for ping
-                if let Ok(res) = &result {
-                    if res.status().is_success() {
-                        break;
-                    }
-                }
-                // If not success but connected?
-                // For now let's retry connection errors only.
-                // If response status is error, we might accept it as "connected"?
-                // generate_204 returns 204 success usually.
-            }
-
-            if let Err(ref e) = result {
-                // If refused, it might be that the process hasn't bound the port yet or just died
-                if e.contains("refused") || e.contains("reset") || e.contains("closed") {
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                    attempts += 1;
-                    continue;
-                }
-            } else if let Ok(ref res) = result {
-                if !res.status().is_success() {
-                    // Connected but bad status?
-                    // Treat as success for timing?
-                    // No, let's treat as success.
-                    break;
-                }
-            }
-            break;
-        }
-
-        let _ = child.kill();
-
-        match result {
-            Ok(res) => {
-                let _ = child.wait();
-                let _ = std::fs::remove_file(&config_file_path);
-                let _ = std::fs::remove_file(&log_file_path);
-
-                if res.status().is_success() {
-                    Ok(start.elapsed().as_millis() as u64)
-                } else {
-                    // Check status
-                    Ok(start.elapsed().as_millis() as u64)
-                }
-            }
-            Err(e) => {
-                let output_content = output_log.lock().unwrap().clone();
-                // Persist config file for debug
-                Err(format!(
-                    "Request failed: {}. Output: {}. Config: {}",
-                    e,
-                    output_content,
-                    config_file_path.display()
-                ))
-            }
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            tokio::net::TcpStream::connect(&target),
+        )
+        .await
+        {
+            Ok(Ok(_)) => Ok(start.elapsed().as_millis() as u64),
+            Ok(Err(e)) => Err(format!("TCP Connect failed: {}", e)),
+            Err(_) => Err("Connection timed out".to_string()),
         }
     }
 

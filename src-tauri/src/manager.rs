@@ -16,15 +16,6 @@ impl<R: Runtime> CoreManager<R> {
         Self { app }
     }
 
-    pub fn get_core_path(&self) -> PathBuf {
-        self.app
-            .path()
-            .app_local_data_dir()
-            .expect("failed to resolve app local data dir")
-            .join("bin")
-            .join("sing-box")
-    }
-
     pub async fn ensure_databases(&self) -> Result<(), String> {
         let app_local_data = self
             .app
