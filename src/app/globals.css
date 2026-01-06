@@ -92,7 +92,7 @@
 html,
 body {
   background: transparent !important;
-  height: 100dvh;
+  height: 100vh;
   overflow: hidden;
 }
 
@@ -192,34 +192,8 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
-@layer utilities {
-  .pb-safe-area-inset-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  .pt-safe-area-inset-top {
-    padding-top: env(safe-area-inset-top);
-  }
-  
-  /* Mobile-specific scrollbar hiding */
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-}
-
 @layer base {
   * {
     border-color: var(--border-color);
-  }
-}
-
-/* Optimize touch targets on mobile */
-@media (max-width: 768px) {
-  button, [role="button"] {
-    min-height: 44px;
-    min-width: 44px;
   }
 }
