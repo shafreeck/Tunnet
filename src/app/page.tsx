@@ -311,6 +311,7 @@ export default function Home() {
         setIsConnected(result.is_running)
         setTunEnabled(result.tun_mode)
         setProxyMode(result.routing_mode as any)
+        setClashApiPort(result.clash_api_port)
 
         // Trigger IP refresh after successful sync
         setIpRefreshKey(prev => prev + 1)

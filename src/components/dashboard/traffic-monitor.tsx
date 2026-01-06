@@ -64,7 +64,7 @@ export function TrafficMonitor({ isRunning, apiPort }: TrafficMonitorProps) {
         }
     }, [isRunning, apiPort])
 
-    if (!isRunning) return null
+    // if (!isRunning) return null -- Removed to keep layout stable
 
     return (
 
