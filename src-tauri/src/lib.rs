@@ -452,41 +452,43 @@ pub fn run() {
                                 if window.is_visible().unwrap_or(false) {
                                     let _ = window.hide();
                                 } else {
-                                    // Robust positioning logic
-                                    let win_w: i32 = 320;
-                                    let win_h: i32 = 480;
-
-                                    let mut x = (position.x as i32) - (win_w / 2);
-                                    let mut y = position.y as i32;
-
                                     if let Ok(Some(monitor)) = window.current_monitor() {
-                                        let screen_size = monitor.size();
-                                        let screen_pos = monitor.position();
+                                        // Use physical sizes for all calculations
+                                        let win_size = window
+                                            .outer_size()
+                                            .unwrap_or(tauri::PhysicalSize::new(320, 480));
+                                        let win_w = win_size.width as i32;
+                                        let win_h = win_size.height as i32;
 
-                                        let screen_w = screen_size.width as i32;
-                                        let screen_h = screen_size.height as i32;
-                                        let screen_x = screen_pos.x;
-                                        let screen_y = screen_pos.y;
+                                        let workarea = monitor.work_area();
+                                        let workarea_size = workarea.size;
+                                        let workarea_pos = workarea.position;
 
-                                        // Vertical Adjustment (Flip if bottom overflow)
-                                        if y + win_h > screen_y + screen_h {
+                                        let wa_w = workarea_size.width as i32;
+                                        let wa_h = workarea_size.height as i32;
+                                        let wa_x = workarea_pos.x;
+                                        let wa_y = workarea_pos.y;
+
+                                        let mut x = (position.x as i32) - (win_w / 2);
+                                        let mut y = position.y as i32;
+
+                                        // Vertical Adjustment (Flip if overflow workarea bottom)
+                                        if y + win_h > wa_y + wa_h {
                                             y = position.y as i32 - win_h;
                                         }
 
-                                        // Horizontal Adjustment (Clamp to screen edges)
-                                        // Right edge
-                                        if x + win_w > screen_x + screen_w {
-                                            x = screen_x + screen_w - win_w;
+                                        // Horizontal Adjustment (Clamp to workarea edges)
+                                        if x + win_w > wa_x + wa_w {
+                                            x = wa_x + wa_w - win_w;
                                         }
-                                        // Left edge
-                                        if x < screen_x {
-                                            x = screen_x;
+                                        if x < wa_x {
+                                            x = wa_x;
                                         }
-                                    }
 
-                                    let _ = window.set_position(tauri::Position::Physical(
-                                        tauri::PhysicalPosition { x, y },
-                                    ));
+                                        let _ = window.set_position(tauri::Position::Physical(
+                                            tauri::PhysicalPosition { x, y },
+                                        ));
+                                    }
 
                                     let _ = window.show();
                                     let _ = window.set_focus(); // Re-enabled for blur detection
