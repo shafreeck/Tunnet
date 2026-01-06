@@ -12,6 +12,16 @@
     "sort_by_name": "名称",
     "sort_by_latency": "延迟",
     "add_node_tooltip": "添加节点",
+    "test_latency_tooltip": "测试延迟",
+    "edit_tooltip": "编辑",
+    "delete_tooltip": "删除",
+    "common": {
+        "confirm": "确定",
+        "cancel": "取消",
+        "delete": "删除"
+    },
+    "delete_node_title": "删除节点",
+    "delete_node_message": "确定要删除这个连接吗？此操作无法撤销。",
     "sidebar": {
         "network": "网络",
         "dashboard": "仪表板",
@@ -193,7 +203,9 @@
             "direct": "直连"
         },
         "auto_select": "自动选择",
-        "disconnected_tooltip": "当前连接已停止"
+        "disconnected_tooltip": "当前连接已停止",
+        "no_servers": "暂无服务器",
+        "setup_needed": "请点击添加"
     },
     "toast": {
         "import_success": "导入完成，后台正在更新节点...",

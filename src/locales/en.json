@@ -12,6 +12,16 @@
     "sort_by_name": "Name",
     "sort_by_latency": "Latency",
     "add_node_tooltip": "Add New Node",
+    "test_latency_tooltip": "Test Latency",
+    "edit_tooltip": "Edit",
+    "delete_tooltip": "Delete",
+    "common": {
+        "confirm": "Confirm",
+        "cancel": "Cancel",
+        "delete": "Delete"
+    },
+    "delete_node_title": "Delete Node",
+    "delete_node_message": "Are you sure you want to delete this connection? This action cannot be undone.",
     "sidebar": {
         "network": "NETWORK",
         "dashboard": "Dashboard",
@@ -193,7 +203,9 @@
             "direct": "Direct"
         },
         "auto_select": "Auto Select",
-        "disconnected_tooltip": "Connection is currently stopped"
+        "disconnected_tooltip": "Connection is currently stopped",
+        "no_servers": "No Servers",
+        "setup_needed": "SETUP NEEDED"
     },
     "toast": {
         "import_success": "Import completed, updating nodes in background...",

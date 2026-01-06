@@ -629,14 +629,14 @@ function ServerItem({ server, isSelected, isRunning, isLoading, connectionState,
                         <button
                             onClick={(e) => { e.stopPropagation(); onPing && onPing(server.id); }}
                             className="p-1.5 text-text-secondary hover:text-accent-green hover:bg-accent-green/10 rounded-lg transition-colors"
-                            title="Test Latency"
+                            title={t('test_latency_tooltip')}
                         >
                             <RotateCw size={14} />
                         </button>
                         <button
                             onClick={(e) => { e.stopPropagation(); onEdit(server); }}
                             className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/10 rounded-lg transition-colors"
-                            title="Edit"
+                            title={t('edit_tooltip')}
                         >
                             <Pencil size={14} />
                         </button>
@@ -646,7 +646,7 @@ function ServerItem({ server, isSelected, isRunning, isLoading, connectionState,
                                 onDelete(server.id);
                             }}
                             className="p-1.5 text-text-secondary hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                            title="Delete"
+                            title={t('delete_tooltip')}
                         >
                             <Trash2 size={14} />
                         </button>

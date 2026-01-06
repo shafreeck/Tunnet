@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { RefreshCw, Power, Wifi, Bolt, CheckCircle2, XCircle, Globe, Info } from "lucide-react"
+import { RefreshCw, Power, Wifi, Bolt, CheckCircle2, XCircle, Globe, Info, Plus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Tooltip } from "react-tooltip"
 import 'react-tooltip/dist/react-tooltip.css'
@@ -29,13 +29,14 @@ interface ConnectionStatusProps {
     activeNodeName?: string;
     isLatencyLoading?: boolean;
     connectionState?: "idle" | "connecting" | "disconnecting";
+    hasNoServers?: boolean;
 }
 
-export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, onLatencyClick, onMainToggle, connectionDetails, mode, onModeChange, tunEnabled, onTunToggle, systemProxyEnabled, onSystemProxyToggle, isLoading, targetType, groupIcon, targetId, activeNodeName, isLatencyLoading, connectionState }: ConnectionStatusProps) {
+export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, onLatencyClick, onMainToggle, connectionDetails, mode, onModeChange, tunEnabled, onTunToggle, systemProxyEnabled, onSystemProxyToggle, isLoading, targetType, groupIcon, targetId, activeNodeName, isLatencyLoading, connectionState, hasNoServers }: ConnectionStatusProps) {
     const { t } = useTranslation()
     const displayFlag = flagUrl
 
-    const displayName = isConnected ? (serverName || t('status.unknown_server')) : t('status.disconnected')
+    const displayName = hasNoServers ? t('status.no_servers') : (isConnected ? (serverName || t('status.unknown_server')) : t('status.disconnected'))
     const displaySubName = isConnected && targetType === 'group' && activeNodeName && activeNodeName !== serverName ? activeNodeName : null
 
     // Helper for status colors
@@ -45,6 +46,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
             if (connectionState === "connecting") return 'bg-yellow-500'
             return 'bg-yellow-500'
         }
+        if (hasNoServers) return 'bg-primary animate-pulse'
         return isConnected ? 'bg-accent-green' : 'bg-red-500'
     }
 
@@ -54,16 +56,21 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
             if (connectionState === "connecting") return t('status.connecting')
             return t('status.switching', { defaultValue: 'SWITCHING' })
         }
+        if (hasNoServers) return t('status.setup_needed')
         return isConnected ? t('status.active') : t('status.stopped')
     }
 
     return (
         <div className="flex flex-col items-center justify-center py-6 md:py-10 relative">
             <div className="relative mb-6 group cursor-pointer" onClick={isLoading ? undefined : onMainToggle}>
-                <span className={`animate-ping absolute inset-0 inline-flex h-full w-full rounded-full ${isConnected ? 'bg-accent-green' : 'bg-red-500'} opacity-20 duration-1000 ${isLoading ? 'hidden' : ''}`}></span>
+                <span className={`animate-ping absolute inset-0 inline-flex h-full w-full rounded-full ${hasNoServers ? 'bg-primary' : (isConnected ? 'bg-accent-green' : 'bg-red-500')} opacity-20 duration-1000 ${isLoading ? 'hidden' : ''}`}></span>
                 <div className={`relative size-28 rounded-full border border-white/10 bg-black/40 backdrop-blur-xl glow-effect flex items-center justify-center overflow-hidden shadow-2xl transition-transform duration-300 ${isLoading ? 'scale-100 cursor-not-allowed' : 'group-hover:scale-105'}`}>
                     {isLoading ? (
                         <RefreshCw className="w-1/2 h-1/2 text-white/50 animate-spin" />
+                    ) : hasNoServers ? (
+                        <div className="flex flex-col items-center justify-center">
+                            <Plus className="size-10 text-primary animate-in zoom-in duration-300" />
+                        </div>
                     ) : (
                         displayFlag ? (
                             <img
@@ -76,7 +83,9 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                         )
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                    {!isLoading && (isConnected ? (
+                    {!isLoading && (hasNoServers ? (
+                        null
+                    ) : isConnected ? (
                         <CheckCircle2 className="absolute text-white drop-shadow-lg size-9 fill-white/10" />
                     ) : (
                         <XCircle className="absolute text-white/50 drop-shadow-lg size-9 fill-white/5" />

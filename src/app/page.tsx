@@ -727,6 +727,10 @@ export default function Home() {
 
   const toggleProxy = async () => {
     if (isLoading) return
+    if (servers.length === 0) {
+      setShowAddModal(true)
+      return
+    }
     manualActionRef.current = true
     setIsLoading(true)
 
@@ -1167,6 +1171,7 @@ export default function Home() {
                 isLoading={isLoading}
                 isLatencyLoading={latencyLoading}
                 connectionState={connectionState}
+                hasNoServers={servers.length === 0}
               />
 
               <TrafficMonitor isRunning={isConnected} apiPort={clashApiPort} />
@@ -1240,9 +1245,10 @@ export default function Home() {
         />
         <ConfirmationModal
           isOpen={!!nodeToDelete}
-          title="Delete Node"
-          message="Are you sure you want to delete this connection? This action cannot be undone."
-          confirmText="Delete"
+          title={t('delete_node_title')}
+          message={t('delete_node_message')}
+          confirmText={t('common.delete')}
+          cancelText={t('common.cancel')}
           isDanger
           onConfirm={confirmDeleteNode}
           onCancel={() => setNodeToDelete(null)}
