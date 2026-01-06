@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { useTheme } from "next-themes"
 import { useCallback } from "react"
 import { useTranslation } from "react-i18next"
+import { getLatencyColor, formatLatency } from "@/lib/latency"
 
 const formatSpeed = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B/s`
@@ -140,13 +141,8 @@ export default function TrayPage() {
         }
     }, [status.is_running, settings.active_target_id, status.tun_mode, settings.system_proxy])
 
-    // Determine active node:
-    // 1. Try finding by ID from full list (Best for display details if list is fresh)
-    // 2. Fallback to status.node (Reliable if running/last used, but might be missing if cold start)
-    // 3. Fallback to first node
     const activeNode = nodes.find(n => n.id === settings.active_target_id) || status.node || nodes[0]
 
-    // Check latency for active node
     const checkLatency = useCallback(() => {
         const nodeId = activeNode?.id
         if (!nodeId) {
@@ -154,7 +150,6 @@ export default function TrayPage() {
             return
         }
 
-        // Reset latency when switching nodes or re-testing
         setLatency(null)
 
         invoke<number>("url_test", { nodeId })
@@ -166,7 +161,6 @@ export default function TrayPage() {
         checkLatency()
     }, [checkLatency])
 
-    // Traffic Monitor WebSocket
     useEffect(() => {
         if (!status.is_running || !status.clash_api_port) {
             setTraffic({ up: 0, down: 0 })
@@ -191,7 +185,6 @@ export default function TrayPage() {
                         return next
                     })
                 } catch (e) {
-                    // ignore
                 }
             }
 
@@ -200,12 +193,10 @@ export default function TrayPage() {
             }
 
             ws.onclose = () => {
-                // Simple retry logic
                 retryTimeout = setTimeout(connect, 2000)
             }
         }
 
-        // Delay connection slightly to allow core start
         setTimeout(connect, 1000)
 
         return () => {
@@ -219,27 +210,26 @@ export default function TrayPage() {
         manualActionRef.current = true
         setIsTransitioning(true)
 
-
         try {
             if (status.is_running) {
-                await invoke("stop_proxy")
+                const res: any = await invoke("stop_proxy")
+                setStatus(res)
             } else {
-                // Determine which node to connect to
                 const nodeId = settings.active_target_id
                 const node = nodes.find(n => n.id === nodeId) || nodes[0]
 
                 if (!node) {
-                    // Fallback: if no nodes available, we can't start
                     setIsTransitioning(false)
                     invoke("open_main_window")
                     return
                 }
 
-                await invoke("start_proxy", {
+                const res: any = await invoke("start_proxy", {
                     node,
                     tun: status.tun_mode,
                     routing: status.routing_mode
                 })
+                setStatus(res)
             }
         } catch (e) {
             console.error("Tray: Operation failed", e)
@@ -248,8 +238,6 @@ export default function TrayPage() {
             setTimeout(() => { manualActionRef.current = false }, 1000)
         }
     }
-
-
 
     const setMode = async (mode: "rule" | "global" | "direct") => {
         if (isTransitioning) return
@@ -276,33 +264,30 @@ export default function TrayPage() {
         manualActionRef.current = true
         setIsTransitioning(true)
 
-
         const newTunMode = !status.tun_mode
         try {
             if (status.is_running) {
-                // If running, restart with new mode
                 const activeNode = nodes.find(n => n.id === settings.active_target_id) || nodes[0]
-                await invoke("start_proxy", {
+                const res: any = await invoke("start_proxy", {
                     node: activeNode,
                     tun: newTunMode,
                     routing: status.routing_mode
                 })
+                setStatus(res)
             } else {
-                // Just update local status state so next start uses it
                 setStatus({ ...status, tun_mode: newTunMode })
-                // Emit sync event for Dashboard (when stopped)
                 emit("tun-mode-updated", newTunMode)
-                setIsTransitioning(false)
             }
         } catch (e) {
             console.error("Tun toggle failed", e)
+            if (!status.is_running) {
+                setStatus({ ...status, tun_mode: !newTunMode })
+            }
         } finally {
-
             setIsTransitioning(false)
             setTimeout(() => { manualActionRef.current = false }, 1000)
         }
     }
-
 
     const handleQuit = useCallback(async () => {
         if (isQuitting) return
@@ -315,15 +300,12 @@ export default function TrayPage() {
         }
     }, [isQuitting])
 
-
-
     const isDark = mounted && resolvedTheme === "dark"
 
     if (!mounted) return null
 
     return (
         <div className="h-screen w-full flex flex-col select-none transition-colors duration-300 bg-transparent text-text-primary">
-            {/* Header */}
             <div className="h-16 flex items-center justify-between px-4 border-b border-white/[0.03] dark:border-white/[0.03] bg-black/5 dark:bg-white/5">
                 <div className="flex items-center gap-2">
                     <div className={cn(
@@ -343,7 +325,6 @@ export default function TrayPage() {
                 </button>
             </div>
 
-            {/* Main Control */}
             <div className="p-4 flex flex-col gap-5">
                 <button
                     onClick={toggleConnection}
@@ -398,9 +379,7 @@ export default function TrayPage() {
                     )}
                 </button>
 
-                {/* Status & Actions Container */}
                 <div className="flex flex-col gap-3">
-                    {/* Routing Modes */}
                     <div className={cn(
                         "flex gap-2",
                         isTransitioning && "opacity-50 pointer-events-none"
@@ -434,14 +413,13 @@ export default function TrayPage() {
                         ))}
                     </div>
 
-                    {/* Proxy Mode Toggles */}
                     <div className="grid grid-cols-2 gap-2">
                         <button
                             onClick={toggleSystemProxy}
                             className={cn(
                                 "flex items-center justify-between px-3 py-2 rounded-2xl transition-all border",
                                 settings.system_proxy
-                                    ? "bg-primary/5 border-primary/20 text-text-primary"
+                                    ? "bg-primary/10 border-primary/30 text-text-primary"
                                     : "bg-black/5 dark:bg-white/5 border-transparent text-text-secondary"
                             )}
                         >
@@ -460,7 +438,7 @@ export default function TrayPage() {
                             className={cn(
                                 "flex items-center justify-between px-3 py-2 rounded-2xl transition-all border",
                                 status.tun_mode
-                                    ? "bg-primary/5 border-primary/20 text-text-primary"
+                                    ? "bg-primary/10 border-primary/30 text-text-primary"
                                     : "bg-black/5 dark:bg-white/5 border-transparent text-text-secondary"
                             )}
                         >
@@ -475,11 +453,8 @@ export default function TrayPage() {
                         </button>
                     </div>
 
-                    {/* Active Node Info */}
-                    {/* Active Node Info */}
                     {activeNode && (
                         <div className="px-1 pt-3 pb-1 flex flex-col gap-2 border-t border-white/[0.03]">
-                            {/* Row 1: Node Name & Latency */}
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2.5 max-w-[70%]">
                                     <div className="size-6 bg-primary/10 rounded-lg flex items-center justify-center text-primary shrink-0">
@@ -493,17 +468,14 @@ export default function TrayPage() {
                                     onClick={checkLatency}
                                     className={cn(
                                         "text-[11px] font-mono font-bold px-2 py-1 rounded-lg bg-black/5 dark:bg-white/5 transition-all hover:bg-black/10 dark:hover:bg-white/10 active:scale-95 cursor-pointer shrink-0",
-                                        latency
-                                            ? (latency < 100 ? "text-green-500" : latency < 300 ? "text-yellow-500" : "text-red-500")
-                                            : "text-text-tertiary"
+                                        getLatencyColor(latency)
                                     )}
                                     title="Click to re-test latency"
                                 >
-                                    {latency ? `${latency}ms` : "..."}
+                                    {formatLatency(latency)}
                                 </button>
                             </div>
 
-                            {/* Row 2: IP Info */}
                             {(status.is_running) && (
                                 <div className="flex items-center gap-2 pl-[34px] text-[11px] text-text-secondary">
                                     {checkingIp ? (
@@ -528,7 +500,6 @@ export default function TrayPage() {
                         </div>
                     )}
 
-                    {/* Traffic Monitor */}
                     {status.is_running && (
                         <div className="px-1 pt-2 border-t border-white/[0.03] flex flex-col gap-1">
                             <div className="flex items-center justify-between text-[10px] font-mono">
@@ -550,7 +521,6 @@ export default function TrayPage() {
                                             className="flex-1 flex flex-col justify-end bg-black/5 dark:bg-white/5 rounded-t-[1px] overflow-hidden relative"
                                             style={{ height: `${Math.max(totalHeight, 1)}%` }}
                                         >
-                                            {/* Stacked Bars: Up (Green) top, Down (Blue) bottom */}
                                             <div
                                                 className="w-full bg-emerald-500 transition-all duration-300"
                                                 style={{ height: `${upRatio * 100}%` }}
@@ -568,7 +538,6 @@ export default function TrayPage() {
                 </div>
             </div>
 
-            {/* Footer */}
             <div className="mt-auto px-4 py-3 border-t border-white/[0.03] flex items-center justify-between bg-black/5 dark:bg-white/5">
                 <span className="text-[10px] font-mono opacity-20 whitespace-nowrap overflow-hidden max-w-[80px]">V0.1.0</span>
                 <button

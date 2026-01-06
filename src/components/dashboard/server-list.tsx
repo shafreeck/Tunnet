@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
+import { getLatencyColor, formatLatency } from "@/lib/latency"
 
 interface Server {
     id: string
@@ -576,9 +577,9 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
                     <div className="text-right flex flex-col items-end group-hover:hidden transition-all duration-200">
                         <span className={cn(
                             "font-mono text-xs font-bold",
-                            server.ping === 0 ? "text-accent-red" : server.ping < 150 ? "text-accent-green" : server.ping < 300 ? "text-accent-orange" : "text-accent-red"
+                            getLatencyColor(server.ping)
                         )}>
-                            {server.ping > 0 ? `${server.ping}ms` : '-'}
+                            {formatLatency(server.ping)}
                         </span>
                     </div>
 

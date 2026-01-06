@@ -5,6 +5,7 @@ import { RefreshCw, Power, Wifi, Bolt, CheckCircle2, XCircle, Globe, Info } from
 import { useTranslation } from "react-i18next"
 import { Tooltip } from "react-tooltip"
 import 'react-tooltip/dist/react-tooltip.css'
+import { getLatencyColor, formatLatency } from "@/lib/latency"
 
 interface ConnectionStatusProps {
     isConnected: boolean;
@@ -25,11 +26,11 @@ interface ConnectionStatusProps {
     targetType?: 'node' | 'group';
     groupIcon?: string;
     targetId?: string | null;
-    targetId?: string | null;
     activeNodeName?: string;
+    isLatencyLoading?: boolean;
 }
 
-export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, onLatencyClick, onMainToggle, connectionDetails, mode, onModeChange, tunEnabled, onTunToggle, systemProxyEnabled, onSystemProxyToggle, isLoading, targetType, groupIcon, targetId, activeNodeName }: ConnectionStatusProps) {
+export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, onLatencyClick, onMainToggle, connectionDetails, mode, onModeChange, tunEnabled, onTunToggle, systemProxyEnabled, onSystemProxyToggle, isLoading, targetType, groupIcon, targetId, activeNodeName, isLatencyLoading }: ConnectionStatusProps) {
     const { t } = useTranslation()
     const displayFlag = flagUrl
 
@@ -124,21 +125,23 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                 </span>
                 <span className="w-px h-3 bg-border-color"></span>
                 <span
-                    onClick={isConnected ? onLatencyClick : undefined}
-                    className={`flex items-center gap-1.5 font-mono text-text-secondary ${isConnected ? 'cursor-pointer hover:text-text-primary transition-colors active:scale-95' : ''}`}
+                    onClick={isConnected && !isLatencyLoading ? onLatencyClick : undefined}
+                    className={`flex items-center gap-1.5 ${isConnected ? `cursor-pointer transition-colors active:scale-95 ${getLatencyColor(latency)}` : 'text-text-secondary'} ${isLatencyLoading ? 'opacity-70 cursor-wait' : ''}`}
                     title={isConnected ? t('dashboard.node_info') : undefined} // Or a specific ping tooltip
                 >
-                    <Bolt className={`size-3.5 ${isConnected ? 'text-text-primary' : ''}`} />
-                    {isConnected ? (latency !== undefined && latency > 0 ? `${latency} ms` : '-- ms') : '--'}
+                    <Bolt className={`size-3.5 ${isConnected ? 'text-text-primary' : ''} ${isLatencyLoading ? 'animate-spin' : ''}`} />
+                    <span className="font-mono pt-[1.5px] leading-none">
+                        {isConnected ? formatLatency(latency) : '--'}
+                    </span>
                 </span>
                 <span className="w-px h-3 bg-border-color"></span>
 
                 <button
                     onClick={onSystemProxyToggle}
-                    className="flex items-center gap-1.5 transition-colors hover:text-text-primary text-text-secondary"
+                    className={`flex items-center gap-1.5 transition-colors hover:text-text-primary ${systemProxyEnabled ? 'text-text-primary' : 'text-text-secondary'}`}
                     title="Toggle System Proxy"
                 >
-                    <div className={`size-2 rounded-full ${systemProxyEnabled ? (isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-text-secondary/80') : 'bg-gray-500/30'} transition-all duration-300`} />
+                    <div className={`size-2 rounded-full ${systemProxyEnabled ? (isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-primary/50') : 'bg-gray-500/30'} transition-all duration-300`} />
                     <span className="text-[11px] md:text-xs font-semibold tracking-wide">
                         {t('status.system_proxy_switch')}
                     </span>
@@ -146,10 +149,10 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                 <span className="w-px h-3 bg-border-color"></span>
                 <button
                     onClick={onTunToggle}
-                    className="flex items-center gap-1.5 transition-colors hover:text-text-primary text-text-secondary"
+                    className={`flex items-center gap-1.5 transition-colors hover:text-text-primary ${tunEnabled ? 'text-text-primary' : 'text-text-secondary'}`}
                     title="Toggle TUN Mode"
                 >
-                    <div className={`size-2 rounded-full ${tunEnabled ? (isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-text-secondary/80') : 'bg-gray-500/30'} transition-all duration-300`} />
+                    <div className={`size-2 rounded-full ${tunEnabled ? (isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-primary/50') : 'bg-gray-500/30'} transition-all duration-300`} />
                     <span className="text-[11px] md:text-xs font-semibold tracking-wide">
                         {t('status.tun_mode_switch')}
                     </span>

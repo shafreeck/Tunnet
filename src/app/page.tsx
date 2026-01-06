@@ -43,6 +43,7 @@ export default function Home() {
 
   const [isConnected, setIsConnected] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [latencyLoading, setLatencyLoading] = useState(false)
   const isLoadingRef = useRef(false)
   const manualActionRef = useRef(false)
   useEffect(() => { isLoadingRef.current = isLoading }, [isLoading])
@@ -773,6 +774,14 @@ export default function Home() {
       return
     }
 
+    // Determine if we are pinging the active node (displayed in header)
+    // We check against original id (which might be activeServerId) OR targetPingId (resolved sub-node)
+    const isPingingActive = (id === activeServerId || id === activeAutoNodeId || targetPingId === activeAutoNodeId);
+
+    if (isPingingActive) {
+      setLatencyLoading(true)
+    }
+
     try {
       const ping: number = await invoke("url_test", { nodeId: targetPingId })
       setServers(prev => prev.map(s => s.id === id ? { ...s, ping } : s))
@@ -783,6 +792,10 @@ export default function Home() {
     } catch (e) {
       console.error("Ping failed:", e)
       toast.error(t('toast.action_failed', { error: "Latency test failed" }))
+    } finally {
+      if (isPingingActive) {
+        setLatencyLoading(false)
+      }
     }
   }
 
@@ -1137,6 +1150,7 @@ export default function Home() {
                 systemProxyEnabled={systemProxyEnabled}
                 onSystemProxyToggle={toggleSystemProxy}
                 isLoading={isLoading}
+                isLatencyLoading={latencyLoading}
               />
 
               <TrafficMonitor isRunning={isConnected} apiPort={clashApiPort} />
