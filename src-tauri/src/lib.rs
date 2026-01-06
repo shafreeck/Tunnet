@@ -452,12 +452,40 @@ pub fn run() {
                                 if window.is_visible().unwrap_or(false) {
                                     let _ = window.hide();
                                 } else {
-                                    // Calculate position
+                                    // Robust positioning logic
+                                    let win_w: i32 = 320;
+                                    let win_h: i32 = 480;
+
+                                    let mut x = (position.x as i32) - (win_w / 2);
+                                    let mut y = position.y as i32;
+
+                                    if let Ok(Some(monitor)) = window.current_monitor() {
+                                        let screen_size = monitor.size();
+                                        let screen_pos = monitor.position();
+
+                                        let screen_w = screen_size.width as i32;
+                                        let screen_h = screen_size.height as i32;
+                                        let screen_x = screen_pos.x;
+                                        let screen_y = screen_pos.y;
+
+                                        // Vertical Adjustment (Flip if bottom overflow)
+                                        if y + win_h > screen_y + screen_h {
+                                            y = position.y as i32 - win_h;
+                                        }
+
+                                        // Horizontal Adjustment (Clamp to screen edges)
+                                        // Right edge
+                                        if x + win_w > screen_x + screen_w {
+                                            x = screen_x + screen_w - win_w;
+                                        }
+                                        // Left edge
+                                        if x < screen_x {
+                                            x = screen_x;
+                                        }
+                                    }
+
                                     let _ = window.set_position(tauri::Position::Physical(
-                                        tauri::PhysicalPosition {
-                                            x: (position.x as i32) - 160,
-                                            y: (position.y as i32) + 0,
-                                        },
+                                        tauri::PhysicalPosition { x, y },
                                     ));
 
                                     let _ = window.show();
