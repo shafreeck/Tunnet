@@ -743,8 +743,19 @@ impl<R: Runtime> ProxyService<R> {
             log.level = Some(settings.log_level.clone());
         }
 
+        // Synchronize DNS strategy with app settings
+        if let Some(dns) = &mut cfg.dns {
+            let strategy = match settings.dns_strategy.as_str() {
+                "ipv4" | "only4" => "ipv4_only".to_string(),
+                "ipv6" | "only6" => "ipv6_only".to_string(),
+                s => s.to_string(),
+            };
+            dns.strategy = Some(strategy);
+        }
+
         if tun_mode {
-            cfg = cfg.with_tun_inbound(settings.tun_mtu);
+            let ipv6_enabled = !matches!(settings.dns_strategy.as_str(), "ipv4" | "only4");
+            cfg = cfg.with_tun_inbound(settings.tun_mtu, settings.tun_stack.clone(), ipv6_enabled);
         }
 
         let listen = if settings.allow_lan {
@@ -825,6 +836,8 @@ impl<R: Runtime> ProxyService<R> {
                 // Helper closure or inline to add node
                 match node.protocol.as_str() {
                     "vmess" => {
+                        let packet_encoding =
+                            node.packet_encoding.clone().or(Some("xudp".to_string()));
                         cfg = cfg.with_vmess_outbound(
                             &tag,
                             node.server.clone(),
@@ -836,6 +849,7 @@ impl<R: Runtime> ProxyService<R> {
                             node.path.clone(),
                             node.host.clone(),
                             node.tls,
+                            packet_encoding,
                         );
                     }
                     "shadowsocks" | "ss" => {
@@ -863,6 +877,8 @@ impl<R: Runtime> ProxyService<R> {
                         );
                     }
                     "vless" => {
+                        let packet_encoding =
+                            node.packet_encoding.clone().or(Some("xudp".to_string()));
                         cfg = cfg.with_vless_outbound(
                             &tag,
                             node.server.clone(),
@@ -876,6 +892,7 @@ impl<R: Runtime> ProxyService<R> {
                             node.insecure,
                             node.sni.clone(),
                             node.alpn.clone(),
+                            packet_encoding,
                         );
                     }
                     "hysteria2" | "hy2" => {
@@ -1020,6 +1037,8 @@ impl<R: Runtime> ProxyService<R> {
                 let mut added = true;
                 match node.protocol.as_str() {
                     "vmess" => {
+                        let packet_encoding =
+                            node.packet_encoding.clone().or(Some("xudp".to_string()));
                         cfg = cfg.with_vmess_outbound(
                             &proxy_target,
                             node.server.clone(),
@@ -1031,9 +1050,12 @@ impl<R: Runtime> ProxyService<R> {
                             node.path.clone(),
                             node.host.clone(),
                             node.tls,
+                            packet_encoding,
                         );
                     }
                     "vless" => {
+                        let packet_encoding =
+                            node.packet_encoding.clone().or(Some("xudp".to_string()));
                         cfg = cfg.with_vless_outbound(
                             &proxy_target,
                             node.server.clone(),
@@ -1047,6 +1069,7 @@ impl<R: Runtime> ProxyService<R> {
                             node.insecure,
                             node.sni.clone(),
                             node.alpn.clone(),
+                            packet_encoding,
                         );
                     }
                     "shadowsocks" | "ss" => {
@@ -1163,6 +1186,29 @@ impl<R: Runtime> ProxyService<R> {
                     action: Some("sniff".to_string()),
                 },
             );
+        }
+
+        // IPv4 Only Logic: Explicitly reject IPv6 traffic to prevent blackholing/timeout
+        if settings.dns_strategy == "ipv4" || settings.dns_strategy == "only4" {
+            // Find insertion point: after sniff rule if exists
+            let insert_idx = if tun_mode { 1 } else { 0 };
+            if insert_idx <= final_rules.len() {
+                final_rules.insert(
+                    insert_idx,
+                    crate::config::RouteRule {
+                        inbound: None,
+                        protocol: None,
+                        domain: None,
+                        domain_suffix: None,
+                        domain_keyword: None,
+                        ip_cidr: Some(vec!["::/0".to_string()]),
+                        port: None,
+                        outbound: None,
+                        rule_set: None,
+                        action: Some("reject".to_string()),
+                    },
+                );
+            }
         }
 
         let mut default_policy = "proxy".to_string(); // Default fallback
@@ -2304,6 +2350,7 @@ impl<R: Runtime> ProxyService<R> {
 
         match node.protocol.as_str() {
             "vmess" => {
+                let packet_encoding = node.packet_encoding.clone().or(Some("xudp".to_string()));
                 cfg = cfg.with_vmess_outbound(
                     &tag,
                     node.server.clone(),
@@ -2315,9 +2362,11 @@ impl<R: Runtime> ProxyService<R> {
                     node.path.clone(),
                     node.host.clone(),
                     node.tls,
+                    packet_encoding,
                 );
             }
             "vless" => {
+                let packet_encoding = node.packet_encoding.clone().or(Some("xudp".to_string()));
                 cfg = cfg.with_vless_outbound(
                     &tag,
                     node.server.clone(),
@@ -2331,6 +2380,7 @@ impl<R: Runtime> ProxyService<R> {
                     node.insecure,
                     node.sni.clone(),
                     node.alpn.clone(),
+                    packet_encoding,
                 );
             }
             "shadowsocks" | "ss" => {

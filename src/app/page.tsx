@@ -168,7 +168,7 @@ export default function Home() {
             emit("connection-details-update", details)
           }
         } catch (err) {
-          console.error(`Failed to fetch IP (retries left: ${retries}):`, err)
+          console.warn(`Failed to fetch IP (retries left: ${retries}):`, err)
           if (retries > 0 && isConnected) {
             timer = setTimeout(() => checkIpWithRetry(retries - 1), 2000)
           }

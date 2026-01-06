@@ -55,6 +55,9 @@ pub struct Inbound {
     pub auto_route: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub strict_route: Option<bool>,
+    // Added for compatibility with Hiddify / P2P
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint_independent_nat: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub address: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -67,6 +70,10 @@ pub struct Inbound {
     pub interface_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mtu: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sniff: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sniff_override_destination: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -95,6 +102,8 @@ pub struct Outbound {
     pub transport: Option<TransportConfig>, // Replaces 'network'
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tls: Option<OutboundTls>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub packet_encoding: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub connect_timeout: Option<String>,
     // Hysteria2 / TUIC fields
@@ -220,6 +229,8 @@ pub struct CacheFileConfig {
 pub struct DnsConfig {
     pub servers: Vec<DnsServer>,
     pub rules: Vec<DnsRule>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strategy: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -235,8 +246,6 @@ pub struct DnsServer {
     pub server_port: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub address_resolver: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub address_strategy: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub address_fallback_delay: Option<u32>,
     pub detour: Option<String>,
@@ -276,7 +285,6 @@ impl SingBoxConfig {
                     server: Some("8.8.8.8".to_string()),
                     server_port: Some(53),
                     address_resolver: None,
-                    address_strategy: None,
                     address_fallback_delay: None,
                     detour: Some("proxy".to_string()),
                 },
@@ -288,7 +296,6 @@ impl SingBoxConfig {
                     server_port: Some(53),
 
                     address_resolver: None,
-                    address_strategy: None,
                     address_fallback_delay: None,
                     detour: Some("direct".to_string()),
                 },
@@ -308,6 +315,7 @@ impl SingBoxConfig {
                 server: Some("google".to_string()),
                 action: Some("route".to_string()),
             }],
+            strategy: None,
         };
 
         let mut experimental = ExperimentalConfig {
@@ -337,20 +345,34 @@ impl SingBoxConfig {
             inbounds: vec![],
             outbounds: vec![],
             route: Some(Route {
-                rules: vec![
-                    RouteRule {
-                        inbound: Some(vec!["tun-in".to_string()]),
-                        protocol: Some(vec!["dns".to_string()]),
-                        domain: None,
-                        domain_suffix: None,
-                        domain_keyword: None,
-                        ip_cidr: None,
-                        port: Some(vec![53]),
-                        outbound: None,
-                        rule_set: None,
-                        action: Some("hijack-dns".to_string()), // Use action 'hijack-dns'
-                    },
-                    RouteRule {
+                rules: match mode {
+                    ConfigMode::TunOnly | ConfigMode::Combined => vec![
+                        RouteRule {
+                            inbound: Some(vec!["tun-in".to_string()]),
+                            protocol: Some(vec!["dns".to_string()]),
+                            domain: None,
+                            domain_suffix: None,
+                            domain_keyword: None,
+                            ip_cidr: None,
+                            port: Some(vec![53]),
+                            outbound: None,
+                            rule_set: None,
+                            action: Some("hijack-dns".to_string()),
+                        },
+                        RouteRule {
+                            inbound: None,
+                            protocol: None,
+                            domain: None,
+                            domain_suffix: None,
+                            domain_keyword: None,
+                            ip_cidr: None,
+                            port: None,
+                            outbound: Some("proxy".to_string()),
+                            rule_set: None,
+                            action: None,
+                        },
+                    ],
+                    _ => vec![RouteRule {
                         inbound: None,
                         protocol: None,
                         domain: None,
@@ -361,8 +383,8 @@ impl SingBoxConfig {
                         outbound: Some("proxy".to_string()),
                         rule_set: None,
                         action: None,
-                    },
-                ],
+                    }],
+                },
                 rule_set: None,
                 final_outbound: None,
                 auto_detect_interface: Some(true),
@@ -383,17 +405,26 @@ impl SingBoxConfig {
             reuse_addr: None,
             auto_route: None,
             strict_route: None,
+            endpoint_independent_nat: None,
             address: None,
             route_address: None,
             route_exclude_address: None,
             stack: None,
             interface_name: None,
             mtu: None,
+            sniff: Some(true),
+            sniff_override_destination: Some(true),
         });
         self
     }
 
-    pub fn with_tun_inbound(mut self, mtu: u16) -> Self {
+    pub fn with_tun_inbound(mut self, mtu: u16, stack: String, ipv6_enabled: bool) -> Self {
+        let addresses = if ipv6_enabled {
+            vec!["172.19.0.1/30".to_string(), "fd00::1/126".to_string()]
+        } else {
+            vec!["172.19.0.1/30".to_string()]
+        };
+
         self.inbounds.push(Inbound {
             inbound_type: "tun".to_string(),
             tag: "tun-in".to_string(),
@@ -404,12 +435,15 @@ impl SingBoxConfig {
             reuse_addr: None,
             auto_route: Some(true),
             strict_route: Some(true),
-            address: Some(vec!["172.19.0.1/30".to_string()]),
+            endpoint_independent_nat: None,
+            address: Some(addresses),
             route_address: None,
             route_exclude_address: None,
-            stack: Some("gvisor".to_string()),
+            stack: Some(stack),
             interface_name: None,
             mtu: Some(mtu),
+            sniff: Some(true),
+            sniff_override_destination: None,
         });
         self
     }
@@ -443,6 +477,7 @@ impl SingBoxConfig {
             url: None,
             interval: None,
             tolerance: None,
+            packet_encoding: None,
         });
         self
     }
@@ -498,6 +533,7 @@ impl SingBoxConfig {
             url: None,
             interval: None,
             tolerance: None,
+            packet_encoding: None,
         });
         self
     }
@@ -514,6 +550,7 @@ impl SingBoxConfig {
         path: Option<String>,
         host: Option<String>,
         tls: bool,
+        packet_encoding: Option<String>,
     ) -> Self {
         let mut transport_config = None;
         if let Some(t_type) = transport {
@@ -562,6 +599,7 @@ impl SingBoxConfig {
             url: None,
             interval: None,
             tolerance: None,
+            packet_encoding,
         });
         self
     }
@@ -580,6 +618,7 @@ impl SingBoxConfig {
         insecure: bool,
         sni: Option<String>,
         alpn: Option<Vec<String>>,
+        packet_encoding: Option<String>,
     ) -> Self {
         let mut transport_config = None;
         if let Some(t_type) = transport {
@@ -627,6 +666,7 @@ impl SingBoxConfig {
             url: None,
             interval: None,
             tolerance: None,
+            packet_encoding,
         });
         self
     }
@@ -678,6 +718,7 @@ impl SingBoxConfig {
             url: None,
             interval: None,
             tolerance: None,
+            packet_encoding: None,
         });
         self
     }
@@ -726,6 +767,7 @@ impl SingBoxConfig {
             url: None,
             interval: None,
             tolerance: None,
+            packet_encoding: None,
         });
         self
     }
@@ -784,6 +826,7 @@ impl SingBoxConfig {
             url: None,
             interval: None,
             tolerance: None,
+            packet_encoding: None,
         });
         self
     }
@@ -810,6 +853,7 @@ impl SingBoxConfig {
             url: None,
             interval: None,
             tolerance: None,
+            packet_encoding: None,
         });
         self
     }
@@ -843,6 +887,7 @@ impl SingBoxConfig {
             url: url.or(Some("http://www.gstatic.com/generate_204".to_string())),
             interval: interval.or(Some("10m".to_string())),
             tolerance: tolerance.or(Some(50)),
+            packet_encoding: None,
         });
         self
     }

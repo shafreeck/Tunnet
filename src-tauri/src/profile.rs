@@ -67,6 +67,7 @@ pub struct Node {
     pub obfs_password: Option<String>,
     #[serde(default)]
     pub ping: Option<u64>,
+    pub packet_encoding: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -217,6 +218,7 @@ pub mod parser {
                         obfs: None,
                         obfs_password: None,
                         ping: None,
+                        packet_encoding: None,
                     };
 
                     // Map specific fields
@@ -354,6 +356,7 @@ pub mod parser {
                         obfs: None,
                         obfs_password: None,
                         ping: None,
+                        packet_encoding: None,
                     });
                 } else {
                     // Try legacy format: security:uuid@host:port
@@ -419,6 +422,7 @@ pub mod parser {
                                     obfs: None,
                                     obfs_password: None,
                                     ping: None,
+                                    packet_encoding: None,
                                 });
                             }
                         }
@@ -470,6 +474,7 @@ pub mod parser {
                             obfs: None,
                             obfs_password: None,
                             ping: None,
+                            packet_encoding: None,
                         };
 
                         if let Some(q) = query {
@@ -490,6 +495,7 @@ pub mod parser {
                                         "fp" => {}  // fingerprint, not currently used
                                         "pbk" => {} // reality public key, TODO
                                         "sid" => {} // reality short id, TODO
+                                        "packetEncoding" => node.packet_encoding = Some(v),
                                         _ => {}
                                     }
                                 }
@@ -545,6 +551,7 @@ pub mod parser {
                             obfs: None,
                             obfs_password: None,
                             ping: None,
+                            packet_encoding: None,
                         };
 
                         if let Some(q) = query {
@@ -615,6 +622,7 @@ pub mod parser {
                             obfs: None,
                             obfs_password: None,
                             ping: None,
+                            packet_encoding: None,
                         };
 
                         if let Some(q) = query {
@@ -679,6 +687,7 @@ pub mod parser {
                             obfs: None,
                             obfs_password: None,
                             ping: None,
+                            packet_encoding: None,
                         };
 
                         if let Some(q) = query {
