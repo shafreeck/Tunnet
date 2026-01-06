@@ -1417,7 +1417,7 @@ impl<R: Runtime> ProxyService<R> {
         let clash_api_config = if let Some(port) = clash_api_port {
             Some(crate::config::ClashApiConfig {
                 external_controller: format!("127.0.0.1:{}", port),
-                external_ui: Some("ui".to_string()),
+                external_ui: Some(app_local_data.join("ui").to_string_lossy().to_string()),
                 secret: None,
             })
         } else {
