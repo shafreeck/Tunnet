@@ -158,7 +158,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
 
                 <button
                     onClick={onSystemProxyToggle}
-                    className={`flex items-center gap-1.5 transition-colors hover:text-text-primary ${systemProxyEnabled ? 'text-text-primary' : 'text-text-secondary'}`}
+                    className={`flex items-center gap-1.5 transition-colors hover:text-text-primary ${systemProxyEnabled ? 'text-text-primary' : 'text-text-secondary'} cursor-pointer`}
                     title="Toggle System Proxy"
                 >
                     <div className={`size-2 rounded-full ${systemProxyEnabled ? (isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-primary/50') : 'bg-gray-500/30'} transition-all duration-300`} />
@@ -169,7 +169,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                 <span className="w-px h-3 bg-border-color"></span>
                 <button
                     onClick={onTunToggle}
-                    className={`flex items-center gap-1.5 transition-colors hover:text-text-primary ${tunEnabled ? 'text-text-primary' : 'text-text-secondary'}`}
+                    className={`flex items-center gap-1.5 transition-colors hover:text-text-primary ${tunEnabled ? 'text-text-primary' : 'text-text-secondary'} cursor-pointer`}
                     title="Toggle TUN Mode"
                 >
                     <div className={`size-2 rounded-full ${tunEnabled ? (isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-primary/50') : 'bg-gray-500/30'} transition-all duration-300`} />
