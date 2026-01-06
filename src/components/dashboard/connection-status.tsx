@@ -25,6 +25,7 @@ interface ConnectionStatusProps {
     targetType?: 'node' | 'group';
     groupIcon?: string;
     targetId?: string | null;
+    targetId?: string | null;
     activeNodeName?: string;
 }
 

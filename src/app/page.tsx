@@ -23,6 +23,7 @@ import { NodeEditor, Node } from "@/components/dashboard/node-editor"
 import { ConfirmationModal } from "@/components/ui/confirmation-modal"
 import { AddNodeModal } from "@/components/dashboard/add-node-modal"
 import { InputModal } from "@/components/ui/input-modal"
+import { TrafficMonitor } from "@/components/dashboard/traffic-monitor"
 
 export default function Home() {
   const { t } = useTranslation()
@@ -102,6 +103,7 @@ export default function Home() {
   // Settings State
   const [settings, setSettings] = useState<AppSettings>(defaultSettings)
   const [systemProxyEnabled, setSystemProxyEnabled] = useState(false)
+  const [clashApiPort, setClashApiPort] = useState<number | null>(null)
 
   // Sync derived state
   useEffect(() => {
@@ -373,6 +375,7 @@ export default function Home() {
           setProxyMode(status.routing_mode)
         }
         setTunEnabled(status.tun_mode)
+        setClashApiPort(status.clash_api_port)
 
         // Prevent immediate reload by setting lastAppliedConfigRef
         const targetId = status.target_id
@@ -405,6 +408,7 @@ export default function Home() {
         setProxyMode(status.routing_mode)
       }
       setTunEnabled(status.tun_mode)
+      setClashApiPort(status.clash_api_port)
       // Sync ref to avoid restart loop
       if (status.target_id) {
         lastAppliedConfigRef.current = `${status.target_id}:${status.routing_mode}:${status.tun_mode}`
@@ -1134,6 +1138,8 @@ export default function Home() {
                 onSystemProxyToggle={toggleSystemProxy}
                 isLoading={isLoading}
               />
+
+              <TrafficMonitor isRunning={isConnected} apiPort={clashApiPort} />
 
               <ServerList
                 servers={displayedServers}
