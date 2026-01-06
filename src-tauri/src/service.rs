@@ -2,6 +2,7 @@ use crate::manager::CoreManager;
 use log::{debug, error, info, warn};
 use std::collections::HashSet;
 use std::ffi::{CStr, CString};
+use std::io::{BufRead, BufReader};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
@@ -30,6 +31,11 @@ pub struct ProxyNodeStatus {
     pub delay: Option<u16>,
     pub now: Option<String>, // currently selected node name for selector
 }
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct LogEvent {
+    pub source: String, // "local" or "helper"
+    pub message: String,
+}
 
 pub struct ProxyService<R: Runtime> {
     app: AppHandle<R>,
@@ -43,6 +49,8 @@ pub struct ProxyService<R: Runtime> {
     start_lock: tokio::sync::Mutex<()>, // Ensure serialized start operations
     internal_client: reqwest::Client,
     active_network_services: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    local_log_writer: Mutex<Option<os_pipe::PipeWriter>>,
+    log_running: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl<R: Runtime> ProxyService<R> {
@@ -67,6 +75,8 @@ impl<R: Runtime> ProxyService<R> {
             manager,
             internal_client,
             active_network_services: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+            local_log_writer: Mutex::new(None),
+            log_running: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -279,14 +289,55 @@ impl<R: Runtime> ProxyService<R> {
             }
 
             let startup_result = async {
-                // 1. Start Main App Proxy (Port Listener)
+                // 1. Prepare local log pipe
+                let (reader, writer) = os_pipe::pipe().map_err(|e| e.to_string())?;
+
+                #[cfg(unix)]
+                let log_fd = {
+                    use std::os::unix::io::AsRawFd;
+                    writer.as_raw_fd() as i64
+                };
+                #[cfg(windows)]
+                let log_fd = {
+                    use std::os::windows::io::AsRawHandle;
+                    writer.as_raw_handle() as i64
+                };
+
+                // Store writer to keep FD alive
+                *self.local_log_writer.lock().unwrap() = Some(writer);
+                self.log_running
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+
+                // Spawn local log forwarder
+                let app_clone = self.app.clone();
+                let log_running_clone = self.log_running.clone();
+                std::thread::spawn(move || {
+                    let reader = BufReader::new(reader);
+                    for line in reader.lines() {
+                        if !log_running_clone.load(std::sync::atomic::Ordering::SeqCst) {
+                            break;
+                        }
+                        if let Ok(l) = line {
+                            let _ = app_clone.emit(
+                                "proxy-log",
+                                LogEvent {
+                                    source: "local".to_string(),
+                                    message: l,
+                                },
+                            );
+                        }
+                    }
+                    debug!("Local log forwarder terminated.");
+                });
+
+                // 2. Start Main App Proxy (Port Listener)
                 info!("Starting local proxy instance (attempt {})...", attempt);
                 let config_str =
                     std::fs::read_to_string(&config_file_path).map_err(|e| e.to_string())?;
                 let c_config = CString::new(config_str).map_err(|_| "Config holds null bytes")?;
 
                 unsafe {
-                    let err_ptr = libbox::LibboxStart(c_config.as_ptr());
+                    let err_ptr = libbox::LibboxStart(c_config.as_ptr(), log_fd);
                     if !err_ptr.is_null() {
                         let err_msg = CStr::from_ptr(err_ptr).to_string_lossy().into_owned();
                         error!("Local LibboxStart failed: {}", err_msg);
@@ -295,7 +346,19 @@ impl<R: Runtime> ProxyService<R> {
                 }
                 *self.local_proxy_running.lock().unwrap() = true;
 
-                // 2. Start TUN Instance (Specialized Port-less config) if requested
+                // Make sure writer stays alive as long as Libbox needs it?
+                // Actually Libbox Start returns, but the Go instance stays running.
+                // Go's os.NewFile(fd) will keep the FD alive.
+                // But Rust's `writer` will be dropped here.
+                // We should probably leak the writer or keep it in the ProxyService.
+                // Or Go's os.NewFile might duplicate the FD?
+                // In Go, os.NewFile doesn't dup. It just wraps.
+                // So if we drop `writer` in Rust, the FD is closed.
+                // We must keep it alive.
+                // Let's drop it explicitly after Stop.
+                // But for now, let's just leak it or or put it in a global.
+
+                // 3. Start TUN Instance (Specialized Port-less config) if requested
                 // ON WINDOWS: We skipped generating helper_config, so we skip this block.
                 #[cfg(not(target_os = "windows"))]
                 if tun_mode {
@@ -306,6 +369,84 @@ impl<R: Runtime> ProxyService<R> {
                     let client = crate::helper_client::HelperClient::new();
                     let helper_config_str =
                         std::fs::read_to_string(&helper_config_path).map_err(|e| e.to_string())?;
+
+                    let helper_log_path = self
+                        .app
+                        .path()
+                        .app_local_data_dir()
+                        .unwrap()
+                        .join("logs")
+                        .join("helper.log");
+
+                    // Ensure logs dir exists
+                    if let Some(p) = helper_log_path.parent() {
+                        let _ = std::fs::create_dir_all(p);
+                    }
+
+                    // Tailing Helper Log
+                    let log_path_clone = helper_log_path.clone();
+                    let app_clone = self.app.clone();
+                    let log_running_clone = self.log_running.clone();
+                    tokio::spawn(async move {
+                        info!("Helper log tailer started for {:?}", log_path_clone);
+                        
+                        let mut file = None;
+                        for i in 0..20 {
+                            if !log_running_clone.load(std::sync::atomic::Ordering::SeqCst) {
+                                return;
+                            }
+                            match tokio::fs::File::open(&log_path_clone).await {
+                                Ok(f) => {
+                                    file = Some(f);
+                                    break;
+                                }
+                                Err(e) => {
+                                    if i % 5 == 0 {
+                                        debug!("Waiting for helper log file (attempt {}): {}. Path: {:?}", i, e, log_path_clone);
+                                    }
+                                }
+                            }
+                            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+                        }
+
+                        if let Some(mut file) = file {
+                            use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader as AsyncBufReader, SeekFrom};
+                            let _ = file.seek(SeekFrom::End(0)).await;
+                            let mut reader = AsyncBufReader::new(file);
+                            loop {
+                                if !log_running_clone.load(std::sync::atomic::Ordering::SeqCst) {
+                                    break;
+                                }
+                                let mut line = String::new();
+                                match reader.read_line(&mut line).await {
+                                    Ok(0) => {
+                                        tokio::time::sleep(tokio::time::Duration::from_millis(200))
+                                            .await;
+                                    }
+                                    Ok(_) => {
+                                        let message = line.trim();
+                                        if !message.is_empty() {
+                                            let _ = app_clone.emit(
+                                                "proxy-log",
+                                                LogEvent {
+                                                    source: "helper".to_string(),
+                                                    message: message.to_string(),
+                                                },
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        error!("Error reading helper log: {}", e);
+                                        break;
+                                    }
+                                }
+                            }
+                        } else {
+                            error!("Failed to open helper log file after 20 attempts. Path: {:?}", log_path_clone);
+                        }
+                        info!("Helper log tailer terminated.");
+                    });
+
                     let result = client
                         .start_proxy(
                             helper_config_str,
@@ -316,6 +457,7 @@ impl<R: Runtime> ProxyService<R> {
                                 .unwrap()
                                 .to_string_lossy()
                                 .to_string(),
+                            helper_log_path.to_string_lossy().to_string(),
                         )
                         .map_err(|e| e.to_string());
 
@@ -1554,6 +1696,10 @@ impl<R: Runtime> ProxyService<R> {
             *self.local_proxy_running.lock().unwrap() = false;
         }
 
+        self.log_running
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        *self.local_log_writer.lock().unwrap() = None;
+
         // 2. Stop Helper managed process (if any)
         info!("Notifying helper to stop proxy...");
         crate::helper_client::HelperClient::new().stop_proxy().ok();
@@ -1612,6 +1758,9 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         *self.clash_api_port.lock().unwrap() = None;
+        self.log_running
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        *self.local_log_writer.lock().unwrap() = None;
         if broadcast {
             let _ = self.app.emit("proxy-status-change", self.get_status());
         }

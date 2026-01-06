@@ -22,6 +22,7 @@ struct StartPayload {
     config: String,
     core_path: String,
     working_dir: String,
+    log_path: String,
 }
 
 pub struct HelperClient;
@@ -93,11 +94,13 @@ impl HelperClient {
         config: String,
         core_path: String,
         working_dir: String,
+        log_path: String,
     ) -> Result<(), Box<dyn Error>> {
         let payload = StartPayload {
             config,
             core_path,
             working_dir,
+            log_path,
         };
         let payload_str = serde_json::to_string(&payload)?;
 

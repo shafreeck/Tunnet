@@ -1,7 +1,8 @@
 {
     "server_list": "Server List",
     "logs": "Logs",
-    "logs_copied": "Logs copied to clipboard",
+    "logs_system": "System Proxy",
+    "logs_tun": "TUN Mode",
     "logs_copied": "Logs copied to clipboard",
     "loading": "Loading...",
     "filter_placeholder": "Search...",

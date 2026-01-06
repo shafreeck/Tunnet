@@ -32,6 +32,7 @@ use std::io::BufWriter;
 struct AppState {
     log_writer: Mutex<Option<BufWriter<File>>>,
     proxy_running: Mutex<bool>,
+    libbox_log_file: Mutex<Option<File>>,
 }
 
 fn log(state: &Arc<AppState>, msg: &str) {
@@ -42,6 +43,7 @@ fn log(state: &Arc<AppState>, msg: &str) {
             .unwrap()
             .as_secs();
         let _ = writeln!(writer, "[{}] {}", timestamp, msg);
+        let _ = writer.flush();
     }
 }
 
@@ -65,6 +67,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let app_state = Arc::new(AppState {
         log_writer: Mutex::new(log_file),
         proxy_running: Mutex::new(false),
+        libbox_log_file: Mutex::new(None),
     });
 
     // Verify Libbox linkage
@@ -169,9 +172,9 @@ struct StartPayload {
     config: String,
     // working_dir and core_path are kept for compatibility with Request struct but ignored in FFI mode
     #[serde(default)]
-    core_path: String,
-    #[serde(default)]
     working_dir: String,
+    #[serde(default)]
+    log_path: String,
 }
 
 fn start_libbox(payload: StartPayload, state: &Arc<AppState>) -> Response {
@@ -215,8 +218,54 @@ fn start_libbox(payload: StartPayload, state: &Arc<AppState>) -> Response {
         }
     };
 
+    let mut log_fd = 0;
+
+    if !payload.log_path.is_empty() {
+        if let Some(parent) = Path::new(&payload.log_path).parent() {
+            let _ = fs::create_dir_all(parent);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o777));
+            }
+        }
+        match fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&payload.log_path)
+        {
+            Ok(file) => {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let _ = file.set_permissions(fs::Permissions::from_mode(0o666));
+                }
+
+                #[cfg(unix)]
+                {
+                    use std::os::unix::io::AsRawFd;
+                    log_fd = file.as_raw_fd() as i64;
+                }
+                #[cfg(windows)]
+                {
+                    use std::os::windows::io::AsRawHandle;
+                    log_fd = file.as_raw_handle() as i64;
+                }
+                *state.libbox_log_file.lock().unwrap() = Some(file);
+                log(state, &format!("Logging libbox to {}", payload.log_path));
+            }
+            Err(e) => {
+                log(
+                    state,
+                    &format!("Failed to open log file {}: {}", payload.log_path, e),
+                );
+            }
+        }
+    }
+
     unsafe {
-        let err_ptr = libbox::LibboxStart(c_config.as_ptr());
+        let err_ptr = libbox::LibboxStart(c_config.as_ptr(), log_fd);
         if !err_ptr.is_null() {
             let err_msg = CStr::from_ptr(err_ptr).to_string_lossy().into_owned();
             log(state, &format!("LibboxStart failed: {}", err_msg));
@@ -253,6 +302,7 @@ fn stop_libbox(state: &Arc<AppState>) -> Response {
         }
     }
     *state.proxy_running.lock().unwrap() = false;
+    *state.libbox_log_file.lock().unwrap() = None;
 
     log(state, "LibboxStop success");
     Response {
@@ -300,7 +350,7 @@ fn handle_request(req: Request, state: &Arc<AppState>) -> Response {
 
         "version" => Response {
             status: "success".into(),
-            message: "2.0.12".into(),
+            message: "2.0.14".into(),
         },
 
         "kill_port" => Response {

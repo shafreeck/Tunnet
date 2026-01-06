@@ -72,7 +72,7 @@ export default function Home() {
   const [editingNode, setEditingNode] = useState<Node | null>(null)
 
   // Logs State
-  const [logs, setLogs] = useState<string[]>([])
+  const [logs, setLogs] = useState<{ local: string[], helper: string[] }>({ local: [], helper: [] })
   const [showLogs, setShowLogs] = useState(false)
   const [showAddSubscription, setShowAddSubscription] = useState(false)
 
@@ -352,11 +352,13 @@ export default function Home() {
 
   useEffect(() => {
     // Init: Load logs listener
-    const unlisten = listen<string>("proxy-log", (event) => {
+    const unlisten = listen<{ source: string, message: string }>("proxy-log", (event) => {
+      const { source, message } = event.payload
       setLogs(prev => {
-        const newLogs = [...prev, event.payload]
-        if (newLogs.length > 1000) return newLogs.slice(-1000) // Keep last 1000 lines
-        return newLogs
+        const stream = source === "helper" ? "helper" : "local"
+        const newStream = [...prev[stream], message]
+        const limitedStream = newStream.length > 1000 ? newStream.slice(-1000) : newStream
+        return { ...prev, [stream]: limitedStream }
       })
     })
 
@@ -1092,7 +1094,7 @@ export default function Home() {
                   showLogs={showLogs}
                   setShowLogs={setShowLogs}
                   logs={logs}
-                  onClearLogs={() => setLogs([])}
+                  onClearLogs={() => setLogs({ local: [], helper: [] })}
                   onPing={handlePingNode}
                   activeAutoNodeId={activeAutoNodeId}
                   connectionState={connectionState}
@@ -1191,7 +1193,7 @@ export default function Home() {
                 showLogs={showLogs}
                 setShowLogs={setShowLogs}
                 logs={logs}
-                onClearLogs={() => setLogs([])}
+                onClearLogs={() => setLogs({ local: [], helper: [] })}
                 onPing={handlePingNode}
                 activeAutoNodeId={activeAutoNodeId}
                 isLoading={isLoading}

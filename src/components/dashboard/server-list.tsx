@@ -48,7 +48,7 @@ interface ServerListProps {
     onDelete: (id: string) => void
     showLogs: boolean
     setShowLogs: (show: boolean) => void
-    logs: string[]
+    logs: { local: string[], helper: string[] }
     onClearLogs: () => void
     onPing?: (id: string) => Promise<void>
     hideHeader?: boolean
@@ -88,6 +88,7 @@ export function ServerList({
     const [loading, setLoading] = useState(false)
     const [logFilter, setLogFilter] = useState("")
     const [autoScroll, setAutoScroll] = useState(true)
+    const [logSource, setLogSource] = useState<"local" | "helper">("local")
 
     // Deferred Pinning Logic
     // We only change the "visual" pinned ID when the user scrolls to the top.
@@ -248,7 +249,7 @@ export function ServerList({
     }, [isSearchOpen])
 
     const handleCopyLogs = () => {
-        const text = logs.join("\n")
+        const text = logs[logSource].join("\n")
         navigator.clipboard.writeText(text)
         toast.success(t('logs_copied', { defaultValue: "Logs copied to clipboard" }))
     }
@@ -303,6 +304,29 @@ export function ServerList({
                             {t('logs', { defaultValue: 'Logs' })}
                             <div className={cn("size-1.5 rounded-full transition-colors", showLogs ? "bg-accent-green" : "bg-text-tertiary/20")} />
                         </button>
+
+                        {showLogs && (
+                            <div className="flex gap-1 p-0.5 bg-black/5 dark:bg-white/5 rounded-lg">
+                                <button
+                                    onClick={() => setLogSource("local")}
+                                    className={cn(
+                                        "px-2 py-0.5 text-[9px] font-bold uppercase tracking-tighter rounded transition-all",
+                                        logSource === "local" ? "bg-white dark:bg-white/10 text-primary shadow-sm" : "text-tertiary hover:text-secondary"
+                                    )}
+                                >
+                                    {t('logs_system', { defaultValue: 'System' })}
+                                </button>
+                                <button
+                                    onClick={() => setLogSource("helper")}
+                                    className={cn(
+                                        "px-2 py-0.5 text-[9px] font-bold uppercase tracking-tighter rounded transition-all",
+                                        logSource === "helper" ? "bg-white dark:bg-white/10 text-primary shadow-sm" : "text-tertiary hover:text-secondary"
+                                    )}
+                                >
+                                    {t('logs_tun', { defaultValue: 'TUN' })}
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {!showLogs ? (
@@ -464,7 +488,7 @@ export function ServerList({
             <div className="flex-1">
                 {showLogs ? (
                     <LogViewer
-                        logs={logs}
+                        logs={logs[logSource]}
                         onClear={onClearLogs}
                         filter={logFilter}
                         autoScroll={autoScroll}

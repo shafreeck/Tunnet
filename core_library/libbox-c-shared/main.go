@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"os"
+
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
@@ -29,9 +31,15 @@ func LibboxHello() *C.char {
 }
 
 //export LibboxStart
-func LibboxStart(configJSON *C.char) *C.char {
+func LibboxStart(configJSON *C.char, logFD C.longlong) *C.char {
 	mu.Lock()
 	defer mu.Unlock()
+
+	if logFD > 0 {
+		f := os.NewFile(uintptr(logFD), "log")
+		os.Stdout = f
+		os.Stderr = f
+	}
 
 	if instance != nil {
 		return C.CString("service already running")
@@ -102,9 +110,15 @@ func LibboxStop() *C.char {
 }
 
 //export LibboxStartMobile
-func LibboxStartMobile(fd C.int, configJSON *C.char) *C.char {
+func LibboxStartMobile(fd C.int, configJSON *C.char, logFD C.longlong) *C.char {
 	mu.Lock()
 	defer mu.Unlock()
+
+	if logFD > 0 {
+		f := os.NewFile(uintptr(logFD), "log")
+		os.Stdout = f
+		os.Stderr = f
+	}
 
 	if instance != nil {
 		return C.CString("service already running")

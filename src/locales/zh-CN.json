@@ -1,7 +1,8 @@
 {
     "server_list": "节点列表",
     "logs": "日志",
-    "logs_copied": "日志已复制到剪贴板",
+    "logs_system": "系统代理",
+    "logs_tun": "TUN 模式",
     "logs_copied": "日志已复制到剪贴板",
     "loading": "加载中...",
     "filter_placeholder": "搜索...",
