@@ -226,12 +226,35 @@ impl<R: Runtime> ProxyService<R> {
         {
             // macOS/Linux: Dual Instance (Privileged Helper for TUN)
             if tun_mode {
+                // Allocate a separate port for Helper API
+                let mut helper_port = None;
+                for _ in 0..3 {
+                    if let Ok(l) = std::net::TcpListener::bind("127.0.0.1:0") {
+                        if let Ok(addr) = l.local_addr() {
+                            helper_port = Some(addr.port());
+                            break;
+                        }
+                    }
+                }
+                if helper_port.is_none() {
+                    // Fallback to clash_port + 1 (safe guess)
+                    helper_port = clash_port.map(|p| p + 1);
+                }
+
+                info!("Allocated Helper API port: {:?}", helper_port);
+
+                // CRITICAL FIX: In TUN mode, the frontend needs to connect to the HELPER's API port
+                // to see traffic stats. We must update the shared state to reflect this.
+                if let Some(hp) = helper_port {
+                    *self.clash_api_port.lock().unwrap() = Some(hp);
+                }
+
                 self.write_config(
                     node_opt.as_ref(),
                     crate::config::ConfigMode::TunOnly,
                     &routing_mode,
                     &settings,
-                    None,
+                    helper_port,
                 )?;
                 std::fs::rename(&config_file_path, &helper_config_path)
                     .map_err(|e| e.to_string())?;
@@ -659,12 +682,26 @@ impl<R: Runtime> ProxyService<R> {
             return None;
         }
 
-        let config_file_path = self
+        let mut config_file_path = self
             .app
             .path()
             .app_local_data_dir()
             .unwrap()
             .join("config.json");
+
+        if *self.tun_mode.lock().unwrap() {
+            // In TUN mode, prefer the helper config which has the traffic-monitoring API port
+            let helper_path = self
+                .app
+                .path()
+                .app_local_data_dir()
+                .unwrap()
+                .join("helper_config.json");
+            if helper_path.exists() {
+                config_file_path = helper_path;
+                debug!("ensure_clash_port: checking helper_config.json for API port");
+            }
+        }
 
         if let Ok(content) = std::fs::read_to_string(&config_file_path) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
@@ -1377,6 +1414,16 @@ impl<R: Runtime> ProxyService<R> {
         } else {
             "cache.db"
         };
+        let clash_api_config = if let Some(port) = clash_api_port {
+            Some(crate::config::ClashApiConfig {
+                external_controller: format!("127.0.0.1:{}", port),
+                external_ui: Some("ui".to_string()),
+                secret: None,
+            })
+        } else {
+            cfg.experimental.and_then(|e| e.clash_api) // Preserve clash_api if already set and no new port provided
+        };
+
         cfg.experimental = Some(crate::config::ExperimentalConfig {
             cache_file: Some(crate::config::CacheFileConfig {
                 enabled: true,
@@ -1385,7 +1432,7 @@ impl<R: Runtime> ProxyService<R> {
                     .to_string_lossy()
                     .to_string(),
             }),
-            clash_api: cfg.experimental.and_then(|e| e.clash_api), // Preserve clash_api if already set
+            clash_api: clash_api_config,
         });
 
         let json = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
@@ -1468,7 +1515,7 @@ impl<R: Runtime> ProxyService<R> {
             target_type,
             tun_mode: current_tun,
             routing_mode: self.latest_routing_mode.lock().unwrap().clone(),
-            clash_api_port: *self.clash_api_port.lock().unwrap(),
+            clash_api_port: self.ensure_clash_port(), // Use recovered port
         }
     }
 
