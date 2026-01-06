@@ -28,14 +28,34 @@ interface ConnectionStatusProps {
     targetId?: string | null;
     activeNodeName?: string;
     isLatencyLoading?: boolean;
+    connectionState?: "idle" | "connecting" | "disconnecting";
 }
 
-export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, onLatencyClick, onMainToggle, connectionDetails, mode, onModeChange, tunEnabled, onTunToggle, systemProxyEnabled, onSystemProxyToggle, isLoading, targetType, groupIcon, targetId, activeNodeName, isLatencyLoading }: ConnectionStatusProps) {
+export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, onLatencyClick, onMainToggle, connectionDetails, mode, onModeChange, tunEnabled, onTunToggle, systemProxyEnabled, onSystemProxyToggle, isLoading, targetType, groupIcon, targetId, activeNodeName, isLatencyLoading, connectionState }: ConnectionStatusProps) {
     const { t } = useTranslation()
     const displayFlag = flagUrl
 
     const displayName = isConnected ? (serverName || t('status.unknown_server')) : t('status.disconnected')
     const displaySubName = isConnected && targetType === 'group' && activeNodeName && activeNodeName !== serverName ? activeNodeName : null
+
+    // Helper for status colors
+    const getStatusColor = () => {
+        if (isLoading) {
+            if (connectionState === "disconnecting") return 'bg-red-500'
+            if (connectionState === "connecting") return 'bg-yellow-500'
+            return 'bg-yellow-500'
+        }
+        return isConnected ? 'bg-accent-green' : 'bg-red-500'
+    }
+
+    const getStatusText = () => {
+        if (isLoading) {
+            if (connectionState === "disconnecting") return t('status.disconnecting')
+            if (connectionState === "connecting") return t('status.connecting')
+            return t('status.switching', { defaultValue: 'SWITCHING' })
+        }
+        return isConnected ? t('status.active') : t('status.stopped')
+    }
 
     return (
         <div className="flex flex-col items-center justify-center py-6 md:py-10 relative">
@@ -63,9 +83,9 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                     ))}
                 </div>
                 <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-card-bg backdrop-blur-md border border-border-color pl-1 pr-2 py-0.5 rounded-full shadow-lg flex items-center gap-1">
-                    <span className={`size-2 rounded-full ${isLoading ? 'bg-yellow-500' : (isConnected ? 'bg-accent-green' : 'bg-red-500')} ${isLoading ? 'animate-bounce' : 'animate-pulse'}`}></span>
-                    <span className={`${isLoading ? 'text-yellow-500' : (isConnected ? 'text-accent-green' : 'text-red-500')} text-[10px] font-bold tracking-wider uppercase whitespace-nowrap`}>
-                        {isLoading ? t('status.switching', { defaultValue: 'SWITCHING' }) : (isConnected ? t('status.active') : t('status.stopped'))}
+                    <span className={`size-2 rounded-full ${getStatusColor()} ${isLoading ? 'animate-bounce' : 'animate-pulse'}`}></span>
+                    <span className={`${isLoading ? (connectionState === "disconnecting" ? 'text-red-500' : 'text-yellow-500') : (isConnected ? 'text-accent-green' : 'text-red-500')} text-[10px] font-bold tracking-wider uppercase whitespace-nowrap`}>
+                        {getStatusText()}
                     </span>
                 </div>
             </div>

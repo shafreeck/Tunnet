@@ -184,6 +184,8 @@
         "switching": "切换中...",
         "disconnect": "断开连接",
         "connect": "连接",
+        "connecting": "正在连接...",
+        "disconnecting": "正在断开...",
         "mode": {
             "global": "全局",
             "rule": "规则",

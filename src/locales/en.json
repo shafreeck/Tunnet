@@ -184,6 +184,8 @@
         "switching": "SWITCHING...",
         "disconnect": "DISCONNECT",
         "connect": "CONNECT",
+        "connecting": "Connecting...",
+        "disconnecting": "Disconnecting...",
         "mode": {
             "global": "Global",
             "rule": "Rule",

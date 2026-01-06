@@ -33,6 +33,7 @@ interface ProxiesViewProps {
     onAddSubscription: () => void
     onSelectSubscription: (id: string) => void
     onUpdateAllSubscriptions: () => void
+    connectionState?: "idle" | "connecting" | "disconnecting"
 }
 
 export function ProxiesView(props: ProxiesViewProps) {
@@ -81,6 +82,7 @@ export function ProxiesView(props: ProxiesViewProps) {
                         onRefresh={props.onRefresh}
                         onPing={props.onPing}
                         activeAutoNodeId={props.activeAutoNodeId}
+                        connectionState={props.connectionState}
                     />
                 )}
                 {subTab === "groups" && (

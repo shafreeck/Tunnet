@@ -42,6 +42,7 @@ export default function Home() {
   }, [])
 
   const [isConnected, setIsConnected] = useState(false)
+  const [connectionState, setConnectionState] = useState<"idle" | "connecting" | "disconnecting">("idle")
   const [isLoading, setIsLoading] = useState(false)
   const [latencyLoading, setLatencyLoading] = useState(false)
   const isLoadingRef = useRef(false)
@@ -218,6 +219,7 @@ export default function Home() {
         if (lastAppliedConfigRef.current) {
           console.log("Disconnecting proxy...")
           setIsLoading(true)
+          setConnectionState("disconnecting")
           try {
             const result: any = await invoke("stop_proxy")
             if (pulseId !== lastPulseIdRef.current) return
@@ -264,6 +266,7 @@ export default function Home() {
       }
 
       setIsLoading(true)
+      setConnectionState("connecting")
       console.log("Syncing proxy config...", { proxyMode, tunEnabled, node: node.name })
 
       const isOnlyTunUpdate = lastAppliedConfigRef.current &&
@@ -322,8 +325,10 @@ export default function Home() {
         // If start_proxy fails, we are disconnected because it stops the previous instance first.
         setIsConnected(false)
         lastAppliedConfigRef.current = null
+        lastAppliedConfigRef.current = null
       } finally {
         setIsLoading(false)
+        setConnectionState("idle")
         setTimeout(() => { manualActionRef.current = false }, 1000)
       }
     }
@@ -726,6 +731,7 @@ export default function Home() {
     try {
       if (isConnected) {
         // Just update state, the useEffect takes care of the backend
+        setConnectionState("disconnecting")
         setIsConnected(false)
       } else {
         // Find active service node
@@ -750,11 +756,13 @@ export default function Home() {
           }
         }
 
+        setConnectionState("connecting")
         setIsConnected(true)
       }
     } catch (error: any) {
       console.error(error)
       toast.error(t('toast.action_failed', { error: error.message || "Failed to toggle proxy" }))
+      setConnectionState("idle")
     } finally {
       setIsLoading(false)
     }
@@ -813,6 +821,7 @@ export default function Home() {
 
     // Otherwise -> Connect to this server (Switching or Starting)
     setIsLoading(true)
+    setConnectionState("connecting")
     try {
       setActiveServerId(id) // Update selection UI immediately
 
@@ -981,6 +990,7 @@ export default function Home() {
             }}
             onDelete={handleDeleteNode}
             onPing={handlePingNode}
+            connectionState={connectionState}
           />
         )
       case "groups":
@@ -1019,6 +1029,7 @@ export default function Home() {
               onAddSubscription={() => setShowAddSubscription(true)}
               onSelectSubscription={handleSubscriptionSelect}
               onUpdateAllSubscriptions={handleUpdateAll}
+              connectionState={connectionState}
             />
           )
         }
@@ -1084,6 +1095,7 @@ export default function Home() {
                   onClearLogs={() => setLogs([])}
                   onPing={handlePingNode}
                   activeAutoNodeId={activeAutoNodeId}
+                  connectionState={connectionState}
                   hideHeader={true}
                 />
               </div>
@@ -1152,6 +1164,7 @@ export default function Home() {
                 onSystemProxyToggle={toggleSystemProxy}
                 isLoading={isLoading}
                 isLatencyLoading={latencyLoading}
+                connectionState={connectionState}
               />
 
               <TrafficMonitor isRunning={isConnected} apiPort={clashApiPort} />
@@ -1181,6 +1194,8 @@ export default function Home() {
                 onClearLogs={() => setLogs([])}
                 onPing={handlePingNode}
                 activeAutoNodeId={activeAutoNodeId}
+                isLoading={isLoading}
+                connectionState={connectionState}
               />
             </div>
           </div>

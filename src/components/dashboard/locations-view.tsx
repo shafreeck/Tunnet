@@ -24,6 +24,7 @@ interface LocationsViewProps {
     onRefresh: () => void
     onPing: (id: string) => Promise<void>
     activeAutoNodeId?: string | null
+    connectionState?: "idle" | "connecting" | "disconnecting"
 }
 
 export function LocationsView({
@@ -37,7 +38,8 @@ export function LocationsView({
     onImport,
     onRefresh,
     onPing,
-    activeAutoNodeId
+    activeAutoNodeId,
+    connectionState
 }: LocationsViewProps) {
     const { t } = useTranslation()
     const [viewMode, setViewMode] = useState<"grid" | "map">("map")
@@ -313,6 +315,8 @@ export function LocationsView({
                             setShowLogs={() => { }}
                             logs={[]}
                             onClearLogs={() => { }}
+                            isFiltered={!!searchQuery || !!selectedCountry}
+                            connectionState={connectionState}
                             hideHeader={true}
                         />
                     </div>

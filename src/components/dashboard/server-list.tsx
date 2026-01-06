@@ -57,6 +57,8 @@ interface ServerListProps {
     filterName?: string
     isFiltered?: boolean
     onClearFilter?: () => void
+    isLoading?: boolean
+    connectionState?: "idle" | "connecting" | "disconnecting"
 }
 
 export function ServerList({
@@ -78,7 +80,9 @@ export function ServerList({
     activeAutoNodeId,
     filterName,
     isFiltered,
-    onClearFilter
+    onClearFilter,
+    isLoading = false,
+    connectionState
 }: ServerListProps) {
     const { t } = useTranslation()
     const [loading, setLoading] = useState(false)
@@ -481,6 +485,7 @@ export function ServerList({
                                     server={server}
                                     isSelected={isSelected}
                                     isRunning={isRunning}
+                                    isLoading={isLoading && isSelected}
                                     onClick={() => onSelect(server.id)}
                                     onToggle={() => onToggle(server.id)}
                                     onEdit={onEdit}
@@ -488,6 +493,7 @@ export function ServerList({
                                     onPing={onPing}
                                     isAutoSelected={activeAutoNodeId === server.id || activeAutoNodeId === server.name}
                                     t={t}
+                                    connectionState={connectionState}
                                 />
                             )
                         })}
@@ -504,16 +510,18 @@ interface ServerItemProps {
     server: Server
     isSelected: boolean
     isRunning: boolean
+    isLoading?: boolean
+    connectionState?: "idle" | "connecting" | "disconnecting"
     onClick: () => void
     onToggle: () => void
     onEdit: (server: Server) => void
     onDelete: (id: string) => void
     onPing?: (id: string) => void
     isAutoSelected?: boolean
-    t: any // Using specific type TFunction is better but 'any' works for quick fix to match immediate error context, or import TFunction. Let's use 'any' to avoid import hassle or `ReturnType<typeof useTranslation>['t']`.
+    t: any
 }
 
-function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, onDelete, onPing, isAutoSelected, t }: ServerItemProps) {
+function ServerItem({ server, isSelected, isRunning, isLoading, connectionState, onClick, onToggle, onEdit, onDelete, onPing, isAutoSelected, t }: ServerItemProps) {
     return (
         <div
             onClick={onClick}
@@ -551,7 +559,16 @@ function ServerItem({ server, isSelected, isRunning, onClick, onToggle, onEdit, 
                             AUTO
                         </span>
                     )}
-                    {isRunning ? (
+                    {isLoading ? (
+                        <span className={cn(
+                            "px-1.5 py-0.5 rounded text-[9px] font-semibold border animate-pulse",
+                            connectionState === "disconnecting"
+                                ? "bg-red-500/20 text-red-500 border-red-500/20"
+                                : "bg-yellow-500/20 text-yellow-500 border-yellow-500/20"
+                        )}>
+                            {connectionState === "disconnecting" ? t('status.disconnecting') : t('status.connecting')}
+                        </span>
+                    ) : isRunning ? (
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold border bg-accent-green/20 text-accent-green border-accent-green/20 animate-pulse">
                             {t('status.connected')}
                         </span>
