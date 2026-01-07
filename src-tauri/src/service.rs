@@ -933,7 +933,9 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         if tun_mode {
-            let ipv6_enabled = !matches!(settings.dns_strategy.as_str(), "ipv4" | "only4");
+            // CRITICAL FIX: To prevent IPv6 leak, we must enable IPv6 address for TUN
+            // even if dns_strategy is "prefer_ipv4". Only disable if explicitly "only4".
+            let ipv6_enabled = settings.dns_strategy != "only4";
             cfg = cfg.with_tun_inbound(settings.tun_mtu, settings.tun_stack.clone(), ipv6_enabled);
         }
 
@@ -1367,28 +1369,7 @@ impl<R: Runtime> ProxyService<R> {
             );
         }
 
-        // IPv4 Only Logic: Explicitly reject IPv6 traffic to prevent blackholing/timeout
-        if settings.dns_strategy == "ipv4" || settings.dns_strategy == "only4" {
-            // Find insertion point: after sniff rule if exists
-            let insert_idx = if tun_mode { 1 } else { 0 };
-            if insert_idx <= final_rules.len() {
-                final_rules.insert(
-                    insert_idx,
-                    crate::config::RouteRule {
-                        inbound: None,
-                        protocol: None,
-                        domain: None,
-                        domain_suffix: None,
-                        domain_keyword: None,
-                        ip_cidr: Some(vec!["::/0".to_string()]),
-                        port: None,
-                        outbound: None,
-                        rule_set: None,
-                        action: Some("reject".to_string()),
-                    },
-                );
-            }
-        }
+        // (Removed early IPv6 reject rule to allow user rules and global proxy to take precedence)
 
         let mut default_policy = "proxy".to_string(); // Default fallback
 
@@ -1510,6 +1491,23 @@ impl<R: Runtime> ProxyService<R> {
                 }
             }
         }
+        // IPv6 Fallback: Only reject IPv6 traffic if the user explicitly chose "Only IPv4".
+        // For "Prefer IPv4", we allow it to fall through to the proxy/direct fallback,
+        // which now has 'domain_strategy: prefer_ipv4' to handle it gracefully.
+        if settings.dns_strategy == "only4" {
+            final_rules.push(crate::config::RouteRule {
+                inbound: None,
+                protocol: None,
+                domain: None,
+                domain_suffix: None,
+                domain_keyword: None,
+                ip_cidr: Some(vec!["::/0".to_string()]),
+                port: None,
+                outbound: None,
+                rule_set: None,
+                action: Some("reject".to_string()),
+            });
+        }
 
         // 3. Add the ultimate fallback rule
         // Validate ultimate default_policy too (just in case no rule set it or it was invalid)
@@ -1576,6 +1574,26 @@ impl<R: Runtime> ProxyService<R> {
             }),
             clash_api: clash_api_config,
         });
+
+        // 5.5 Set Domain Strategy for all proxy outbounds
+        let domain_strategy = match settings.dns_strategy.as_str() {
+            "ipv4" | "only4" => Some("prefer_ipv4".to_string()),
+            "ipv6" | "only6" => Some("prefer_ipv6".to_string()),
+            _ => None,
+        };
+
+        if let Some(strategy) = domain_strategy {
+            for outbound in &mut cfg.outbounds {
+                // Apply ONLY to protocol outbounds. 
+                // selector, urltest, direct, block, dns do not support domain_strategy at the outbound level.
+                if matches!(
+                    outbound.outbound_type.as_str(),
+                    "vmess" | "vless" | "shadowsocks" | "trojan" | "hysteria2" | "tuic"
+                ) {
+                    outbound.domain_strategy = Some(strategy.clone());
+                }
+            }
+        }
 
         let json = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
         let config_path = app_local_data.join("config.json");

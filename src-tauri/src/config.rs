@@ -99,6 +99,8 @@ pub struct Outbound {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub flow: Option<String>, // vless: xtls-rprx-vision
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub domain_strategy: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub transport: Option<TransportConfig>, // Replaces 'network'
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tls: Option<OutboundTls>,
@@ -478,6 +480,7 @@ impl SingBoxConfig {
             interval: None,
             tolerance: None,
             packet_encoding: None,
+            domain_strategy: None,
         });
         self
     }
@@ -534,6 +537,7 @@ impl SingBoxConfig {
             interval: None,
             tolerance: None,
             packet_encoding: None,
+            domain_strategy: None,
         });
         self
     }
@@ -600,6 +604,7 @@ impl SingBoxConfig {
             interval: None,
             tolerance: None,
             packet_encoding,
+            domain_strategy: None,
         });
         self
     }
@@ -667,6 +672,7 @@ impl SingBoxConfig {
             interval: None,
             tolerance: None,
             packet_encoding,
+            domain_strategy: None,
         });
         self
     }
@@ -719,6 +725,7 @@ impl SingBoxConfig {
             interval: None,
             tolerance: None,
             packet_encoding: None,
+            domain_strategy: None,
         });
         self
     }
@@ -768,6 +775,7 @@ impl SingBoxConfig {
             interval: None,
             tolerance: None,
             packet_encoding: None,
+            domain_strategy: None,
         });
         self
     }
@@ -827,6 +835,7 @@ impl SingBoxConfig {
             interval: None,
             tolerance: None,
             packet_encoding: None,
+            domain_strategy: None,
         });
         self
     }
@@ -854,6 +863,7 @@ impl SingBoxConfig {
             interval: None,
             tolerance: None,
             packet_encoding: None,
+            domain_strategy: None,
         });
         self
     }
@@ -888,6 +898,7 @@ impl SingBoxConfig {
             interval: interval.or(Some("10m".to_string())),
             tolerance: tolerance.or(Some(50)),
             packet_encoding: None,
+            domain_strategy: None,
         });
         self
     }
