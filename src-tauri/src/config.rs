@@ -365,7 +365,7 @@ impl SingBoxConfig {
 
         Self {
             log: Some(LogConfig {
-                level: Some("debug".to_string()),
+                level: Some("info".to_string()),
                 output: None,
                 timestamp: Some(false),
             }),

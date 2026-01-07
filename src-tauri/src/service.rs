@@ -931,7 +931,9 @@ impl<R: Runtime> ProxyService<R> {
 
         // Synchronize log level with app settings
         if let Some(log) = &mut cfg.log {
-            log.level = Some(settings.log_level.clone());
+            let level = settings.log_level.to_lowercase();
+            info!("Configuring SingBox log level: {}", level);
+            log.level = Some(level);
         }
 
         // Synchronize DNS strategy with app settings
