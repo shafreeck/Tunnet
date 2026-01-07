@@ -3,10 +3,11 @@
 import React, { useState, useMemo } from "react"
 // @ts-ignore
 import { invoke } from "@tauri-apps/api/core"
-import { Search, RotateCcw, Map as MapIcon, LayoutGrid, Star, Globe as GlobeIcon, Zap, X, Target } from "lucide-react"
+import { Search, RotateCcw, Map as MapIcon, LayoutGrid, Globe as GlobeIcon, Zap, X, Target } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { getCountryName } from "@/lib/flags"
 
 import { LocationsMap } from "./locations-map"
 import { LocationGrid } from "./location-grid"
@@ -43,7 +44,7 @@ export function LocationsView({
     connectionState,
     testingNodeIds = []
 }: LocationsViewProps) {
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation()
     const [viewMode, setViewMode] = useState<"grid" | "map">("map")
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedRegion, setSelectedRegion] = useState("All Regions")
@@ -195,7 +196,7 @@ export function LocationsView({
                                 />
                             </div>
                             <div className="flex bg-card-bg p-1 rounded-xl border border-border-color overflow-hidden">
-                                {["All Regions", "Asia Pacific", "Europe", "Americas", "Favorites"].map((region) => (
+                                {["All Regions", "Asia Pacific", "Europe", "Americas"].map((region) => (
                                     <button
                                         key={region}
                                         onClick={() => setSelectedRegion(region)}
@@ -240,6 +241,17 @@ export function LocationsView({
                             setSelectedCountry(c)
                             if (c) setShowListValues(true)
                         }}
+                        onSelectServer={(id) => {
+                            const node = servers.find(s => s.id === id)
+                            if (node) {
+                                setSelectedCountry(node.country)
+                                setShowListValues(true)
+                                onSelect(id)
+                            }
+                        }}
+                        onToggleServer={(id) => {
+                            onToggle(id)
+                        }}
                     />
                 )}
 
@@ -257,7 +269,7 @@ export function LocationsView({
                             </div>
                             <div className="flex flex-col overflow-hidden">
                                 <span className="text-sm font-black text-text-primary uppercase tracking-tight flex items-center gap-2 truncate">
-                                    {selectedCountry || t('locations.drawer.region_nodes')}
+                                    {selectedCountry ? getCountryName(selectedCountry, i18n.language) : t('locations.drawer.region_nodes')}
                                     {activeAutoNode && (
                                         <span className="text-[9px] font-normal normal-case bg-accent-green/10 text-accent-green px-1.5 py-0.5 rounded opacity-80 whitespace-nowrap">
                                             {activeAutoNode.name}

@@ -6,8 +6,10 @@ import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "re
 import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
 // @ts-ignore
-import { X, RefreshCw } from "lucide-react"
+import { X, RefreshCw, Target } from "lucide-react"
 import { getCountryCoordinates } from "@/lib/country-coords"
+import { useTranslation } from "react-i18next"
+import { getCountryName } from "@/lib/flags"
 
 // URL to a valid TopoJSON file
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"
@@ -33,14 +35,19 @@ interface LocationsMapProps {
     activeServerId: string | null
     selectedCountry: string | null
     onSelectCountry: (country: string | null) => void
+    onSelectServer: (id: string) => void
+    onToggleServer: (id: string) => void
 }
 
 export function LocationsMap({
     servers,
     activeServerId,
     selectedCountry,
-    onSelectCountry
+    onSelectCountry,
+    onSelectServer,
+    onToggleServer
 }: LocationsMapProps) {
+    const { i18n } = useTranslation()
     const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null)
 
     // Get unique countries from servers to highlight them
@@ -110,8 +117,9 @@ export function LocationsMap({
                                         }}
                                         onMouseEnter={(e) => {
                                             const count = activeCountries[countryName] || 0
+                                            const localizedName = getCountryName(REVERSE_NAME_MAPPING[countryName] || countryName, i18n.language)
                                             setTooltip({
-                                                content: count > 0 ? `${countryName} • ${count} Nodes` : countryName,
+                                                content: count > 0 ? `${localizedName} • ${count} Nodes` : localizedName,
                                                 x: e.clientX,
                                                 y: e.clientY
                                             })
@@ -145,7 +153,13 @@ export function LocationsMap({
                             })
                         }
                     </Geographies>
-                    {filteredServers.map((server) => {
+                    {/* Sort servers: render verified (lat/lon) markers after country-center markers so they are on top */}
+                    {[...filteredServers].sort((a, b) => {
+                        const aV = (a.location?.lat && a.location?.lon) ? 1 : 0
+                        const bV = (b.location?.lat && b.location?.lon) ? 1 : 0
+                        return aV - bV
+                    }).map((server) => {
+                        const isSelected = server.id === activeServerId
                         let coords: [number, number] | null = null
                         let isVerified = false
 
@@ -161,9 +175,11 @@ export function LocationsMap({
                                 <Marker
                                     key={server.id}
                                     coordinates={coords}
+                                    onClick={() => onSelectServer(server.id)}
                                     onMouseEnter={(e) => {
+                                        const locationStr = server.location?.city || getCountryName(server.location?.country || server.country, i18n.language) || "Unknown Location"
                                         setTooltip({
-                                            content: `${server.location?.city || server.location?.country || server.country || "Unknown Location"} • ${server.location?.isp || "ISP"} • ${server.location?.latency ? server.location.latency + " ms" : "N/A"}`,
+                                            content: `${server.name} • ${locationStr} • ${server.ping ? server.ping + " ms" : "N/A"}`,
                                             x: e.clientX,
                                             y: e.clientY
                                         })
@@ -171,21 +187,36 @@ export function LocationsMap({
                                     onMouseLeave={() => setTooltip(null)}
                                 >
                                     <g
+                                        className="cursor-pointer transition-all duration-300"
                                         onMouseMove={(e) => {
                                             setTooltip(prev => prev ? ({ ...prev, x: e.clientX, y: e.clientY }) : null)
                                         }}
                                     >
-                                        {/* Diffusing Glow effect (Ping) - Only for verified */}
-                                        {isVerified && <circle r={6} fill="#22c55e" className="animate-ping opacity-75" style={{ animationDuration: '2s' }} />}
+                                        {/* Glow effect for Active Server */}
+                                        {isSelected && (
+                                            <circle r={12} fill="#22c55e20" className="animate-pulse" />
+                                        )}
+
+                                        {/* Diffusing Glow effect (Ping) - Only for verified or selected */}
+                                        {(isVerified || isSelected) && (
+                                            <circle r={isSelected ? 10 : 6} fill={isSelected ? "#22c55e" : "#22c55e"} className="animate-ping opacity-75" style={{ animationDuration: '2s' }} />
+                                        )}
 
                                         {/* Core marker */}
                                         <circle
-                                            r={isVerified ? 6 : 4}
-                                            fill={isVerified ? "#22c55e" : nodeDisconnected}
-                                            stroke={isVerified ? "#000" : nodeStroke}
-                                            strokeWidth={1}
-                                            style={{ opacity: isVerified ? 1 : 0.8 }}
+                                            r={isSelected ? 6 : (isVerified ? 5 : 4)}
+                                            fill={isSelected ? "#22c55e" : (isVerified ? "#22c55e" : nodeDisconnected)}
+                                            stroke={isSelected ? "#fff" : (isVerified ? "#000" : nodeStroke)}
+                                            strokeWidth={isSelected ? 2 : 1}
+                                            style={{ opacity: (isVerified || isSelected) ? 1 : 0.8 }}
                                         />
+
+                                        {/* Active Target Indicator */}
+                                        {isSelected && (
+                                            <g transform="translate(-4, -4) scale(0.5)">
+                                                <Target size={16} className="text-white" />
+                                            </g>
+                                        )}
                                     </g>
                                 </Marker>
                             )

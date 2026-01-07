@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { ServerCard } from "./server-card"
 import { getRegionForCountry } from "@/lib/regions"
 import { cn } from "@/lib/utils"
+import { getCountryName } from "@/lib/flags"
 
 interface LocationGridProps {
     servers: any[]
@@ -12,7 +13,7 @@ interface LocationGridProps {
 }
 
 export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCountry }: LocationGridProps) {
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation()
 
     // 1. Group servers by Country first (aggregated view)
     const countries = useMemo(() => {
@@ -23,6 +24,7 @@ export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCou
             avgPing: number
             region: string
             provider: string
+            displayName: string
         }>()
 
         servers.forEach(s => {
@@ -37,7 +39,8 @@ export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCou
                     count: 0,
                     avgPing: 0,
                     region,
-                    provider: s.provider || t('locations.unknown', { defaultValue: 'Unknown' })
+                    provider: s.provider || t('locations.unknown', { defaultValue: 'Unknown' }),
+                    displayName: getCountryName(country, i18n.language)
                 })
             }
 
@@ -60,15 +63,11 @@ export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCou
     // 2. Filter by Search & Region
     const filteredCountries = useMemo(() => {
         return countries.filter(c => {
-            const matchesSearch = c.country.toLowerCase().includes(searchQuery.toLowerCase())
-            const matchesRegion = selectedRegion === "All Regions" || selectedRegion === "Favorites"
+            const matchesSearch = c.country.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                c.displayName.toLowerCase().includes(searchQuery.toLowerCase())
+            const matchesRegion = selectedRegion === "All Regions"
                 ? true
                 : c.region === selectedRegion
-
-            if (selectedRegion === "Favorites") {
-                // Mock: Return false for now or check some favorite flag
-                return false
-            }
 
             return matchesSearch && matchesRegion
         })
@@ -113,7 +112,7 @@ export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCou
                         {group.items.map((country) => (
                             <ServerCard
                                 key={country.country}
-                                countryName={country.country}
+                                countryName={country.displayName}
                                 flagUrl={country.flagUrl}
                                 locationCount={country.count}
                                 providerName={country.provider} // Display one provider or "Multiple"

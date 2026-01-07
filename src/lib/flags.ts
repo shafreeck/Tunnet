@@ -148,15 +148,15 @@ export const getFlagUrl = (nodeName: string): string => {
     return getFlagUrlFromCode(code)
 }
 
-export const getCountryName = (nodeName: string): string => {
+export const getCountryName = (nodeName: string, locale: string = 'en'): string => {
     const code = getCountryCode(nodeName)
     try {
         if (code && code !== 'un') {
-            const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
-            return regionNames.of(code.toUpperCase()) || "Unknown Location"
+            const regionNames = new Intl.DisplayNames([locale], { type: 'region' });
+            return regionNames.of(code.toUpperCase()) || nodeName
         }
     } catch (e) {
         // Fallback or old browser support
     }
-    return "Unknown Location"
+    return nodeName || "Unknown Location"
 }
