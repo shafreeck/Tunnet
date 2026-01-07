@@ -297,7 +297,7 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget }: GroupsV
                                                     className="px-3 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-text-secondary hover:text-text-primary text-[10px] font-bold uppercase transition-all flex items-center gap-1.5 border border-white/5"
                                                     title={t('groups.select_as_exit')}
                                                 >
-                                                    <Zap size={12} />
+                                                    <Target size={12} />
                                                     {t('groups.select_as_exit')}
                                                 </button>
                                             )}

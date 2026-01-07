@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react"
 // @ts-ignore
 import { invoke } from "@tauri-apps/api/core"
-import { Search, RotateCcw, Map as MapIcon, LayoutGrid, Star, Globe as GlobeIcon, Zap } from "lucide-react"
+import { Search, RotateCcw, Map as MapIcon, LayoutGrid, Star, Globe as GlobeIcon, Zap, X, Target } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -22,7 +22,7 @@ interface LocationsViewProps {
     onDelete: (id: string) => void
     onImport: (url: string) => Promise<void>
     onRefresh: () => void
-    onPing: (id: string) => Promise<void>
+    onPing: (id: string | string[]) => Promise<void>
     activeAutoNodeId?: string | null
     connectionState?: "idle" | "connecting" | "disconnecting"
     testingNodeIds?: string[]
@@ -250,43 +250,66 @@ export function LocationsView({
                     "hover:bg-white/95 hover:dark:bg-black/95 hover:backdrop-blur-xl hover:shadow-2xl", // Hover: Solid & Focused
                     (showListValues || (viewMode === 'map' && selectedCountry)) ? "translate-x-0 opacity-100" : "translate-x-full md:translate-x-[120%] opacity-0"
                 )}>
-                    <div className="p-8 border-b border-border-color bg-card-bg flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                            <div className="size-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary">
-                                <GlobeIcon size={20} />
+                    <div className="px-6 py-4 border-b border-border-color bg-card-bg flex items-center justify-between shrink-0">
+                        <div className="flex items-center gap-3 overflow-hidden">
+                            <div className="size-9 rounded-xl bg-primary/20 flex items-center justify-center text-primary shrink-0">
+                                <GlobeIcon size={18} />
                             </div>
-                            <div className="flex flex-col">
-                                <span className="text-sm font-black text-text-primary uppercase tracking-tight flex items-center gap-2">
+                            <div className="flex flex-col overflow-hidden">
+                                <span className="text-sm font-black text-text-primary uppercase tracking-tight flex items-center gap-2 truncate">
                                     {selectedCountry || t('locations.drawer.region_nodes')}
                                     {activeAutoNode && (
-                                        <span className="text-[9px] font-normal normal-case bg-accent-green/10 text-accent-green px-1.5 py-0.5 rounded opacity-80">
+                                        <span className="text-[9px] font-normal normal-case bg-accent-green/10 text-accent-green px-1.5 py-0.5 rounded opacity-80 whitespace-nowrap">
                                             {activeAutoNode.name}
                                         </span>
                                     )}
                                 </span>
-                                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest">
+                                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest leading-none">
                                     {t('locations.drawer.nodes_ready', { count: filteredServersForList.length })}
                                 </span>
                             </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                            {/* Actions Group */}
+                            <div className="flex items-center bg-black/5 dark:bg-white/5 p-1 rounded-xl mr-1">
+                                {/* Test Latency All */}
+                                <button
+                                    onClick={() => {
+                                        const ids = filteredServersForList.map(s => s.id);
+                                        if (ids.length > 0) {
+                                            onPing(ids);
+                                        }
+                                    }}
+                                    className="size-7 flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 rounded-lg text-text-secondary hover:text-accent-orange transition-all active:scale-95"
+                                    title={t('test_latency_tooltip')}
+                                >
+                                    <Zap size={14} className={cn(filteredServersForList.some(s => testingNodeIds.includes(s.id)) && "animate-pulse text-accent-orange")} fill={filteredServersForList.some(s => testingNodeIds.includes(s.id)) ? "currentColor" : "none"} />
+                                </button>
+
+                                {/* Auto Select */}
+                                <button
+                                    onClick={handleAutoSelect}
+                                    className={cn(
+                                        "size-7 flex items-center justify-center rounded-lg transition-all active:scale-95",
+                                        isAutoActive
+                                            ? "bg-accent-green/10 text-accent-green shadow-sm shadow-accent-green/20"
+                                            : "hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary hover:text-accent-green"
+                                    )}
+                                    title={t('auto_select_tooltip')}
+                                >
+                                    <Target size={14} fill={isAutoActive ? "currentColor" : "none"} />
+                                </button>
+                            </div>
+
+                            {/* Close Button - Distinct */}
                             <button
-                                onClick={handleAutoSelect}
-                                className={cn(
-                                    "size-10 flex items-center justify-center rounded-full transition-all active:scale-95",
-                                    isAutoActive
-                                        ? "bg-accent-green/10 text-accent-green"
-                                        : "hover:bg-accent-green/10 text-text-secondary hover:text-accent-green"
-                                )}
-                                title={t('auto_select_tooltip')}
+                                onClick={() => { setShowListValues(false); setSelectedCountry(null); }}
+                                className="size-8 flex items-center justify-center hover:bg-red-500/10 rounded-xl text-text-secondary hover:text-red-500 transition-all active:scale-90"
                             >
-                                <Zap size={20} fill={isAutoActive ? "currentColor" : "none"} />
+                                <X size={18} />
                             </button>
                         </div>
-                        <button
-                            onClick={() => { setShowListValues(false); setSelectedCountry(null); }}
-                            className="size-10 flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 rounded-full text-text-secondary hover:text-text-primary transition-all active:scale-90"
-                        >
-                            <LayoutGrid size={20} className="rotate-45" />
-                        </button>
                     </div>
 
                     {/* Search inside Drawer */}

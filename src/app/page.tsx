@@ -810,9 +810,15 @@ export default function Home() {
     }
   }
 
-  const handlePingNode = async (id: string) => {
+  const handlePingNode = async (id: string | string[]) => {
     if (id === "ALL") {
       await checkLatency(servers, true)
+      return
+    }
+
+    if (Array.isArray(id)) {
+      const targetNodes = servers.filter(s => id.includes(s.id))
+      await checkLatency(targetNodes, true)
       return
     }
 

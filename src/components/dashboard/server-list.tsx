@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
-import { ArrowUpDown, Filter, Play, Square, Plus, Pencil, Trash2, Globe, RotateCw, Search, Scroll, Pause, Copy, Zap, X } from "lucide-react"
+import { ArrowUpDown, Filter, Play, Square, Plus, Pencil, Trash2, Globe, RotateCw, Search, Scroll, Pause, Copy, Zap, X, Target } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
 import { useTranslation } from "react-i18next"
@@ -358,12 +358,12 @@ export function ServerList({
                                     disabled={isPinging}
                                     className={cn(
                                         "p-1.5 transition-colors rounded hover:bg-black/5 dark:hover:bg-white/5",
-                                        "text-text-secondary hover:text-accent-orange",
+                                        isPinging ? "text-accent-orange" : "text-text-secondary hover:text-accent-orange",
                                         isPinging && "opacity-70 cursor-wait"
                                     )}
                                     title={t('check_latency_all', { defaultValue: 'Check All Latency' })}
                                 >
-                                    <RotateCw size={16} className={cn(isPinging && "animate-spin")} />
+                                    <Zap size={16} className={cn(isPinging && "animate-pulse")} fill={isPinging ? "currentColor" : "none"} />
                                 </button>
                             )}
 
@@ -380,7 +380,7 @@ export function ServerList({
                                 )}
                                 title={!!filterText ? t('auto_select_unavailable_filter') : t('auto_select_tooltip')}
                             >
-                                <Zap size={16} fill={activeServerId === "system:global" ? "currentColor" : "none"} />
+                                <Target size={16} fill={activeServerId === "system:global" ? "currentColor" : "none"} />
                             </button>
 
                             {/* Search Trigger */}
@@ -647,7 +647,7 @@ function ServerItem({ server, isSelected, isRunning, isLoading, connectionState,
                             )}
                             title={t('test_latency_tooltip')}
                         >
-                            <RotateCw size={14} className={cn(isTestingLatency && "animate-spin")} />
+                            <Zap size={14} className={cn(isTestingLatency && "animate-pulse")} fill={isTestingLatency ? "currentColor" : "none"} />
                         </button>
                         <button
                             onClick={(e) => { e.stopPropagation(); onEdit(server); }}
