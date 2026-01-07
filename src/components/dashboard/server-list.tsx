@@ -635,29 +635,19 @@ function ServerItem({ server, isSelected, isRunning, isLoading, connectionState,
             </div>
 
             <div className="flex items-center gap-1.5 sm:gap-5 mr-1 md:mr-2">
-                <div className="flex items-center justify-end min-w-[50px] md:min-w-[60px]">
-                    {/* Latency - Hidden on hover */}
-                    <div className="text-right flex flex-col items-end group-hover:hidden transition-all duration-200">
-                        <span className={cn(
-                            "font-mono text-xs font-bold",
-                            isTestingLatency ? "text-text-tertiary" : getLatencyColor(server.ping)
-                        )}>
-                            {isTestingLatency ? (
-                                <RotateCw size={12} className="animate-spin" />
-                            ) : (
-                                formatLatency(server.ping)
-                            )}
-                        </span>
-                    </div>
-
-                    {/* Action Buttons - Visible on hover, replaces Latency */}
-                    <div className="hidden group-hover:flex items-center gap-1 transition-all duration-200 animate-in fade-in slide-in-from-right-1">
+                <div className="flex items-center justify-end gap-2">
+                    {/* Action Buttons - Visible on hover */}
+                    <div className="hidden group-hover:flex items-center gap-1 transition-all duration-300 animate-in fade-in slide-in-from-right-4">
                         <button
                             onClick={(e) => { e.stopPropagation(); onPing && onPing(server.id); }}
-                            className="p-1.5 text-text-secondary hover:text-accent-green hover:bg-accent-green/10 rounded-lg transition-colors"
+                            disabled={isTestingLatency}
+                            className={cn(
+                                "p-1.5 text-text-secondary hover:text-accent-green hover:bg-accent-green/10 rounded-lg transition-colors",
+                                isTestingLatency && "cursor-wait opacity-70"
+                            )}
                             title={t('test_latency_tooltip')}
                         >
-                            <RotateCw size={14} />
+                            <RotateCw size={14} className={cn(isTestingLatency && "animate-spin")} />
                         </button>
                         <button
                             onClick={(e) => { e.stopPropagation(); onEdit(server); }}
@@ -676,6 +666,20 @@ function ServerItem({ server, isSelected, isRunning, isLoading, connectionState,
                         >
                             <Trash2 size={14} />
                         </button>
+                    </div>
+
+                    {/* Latency - Always visible */}
+                    <div className="text-right flex flex-col items-end min-w-[48px]">
+                        <span className={cn(
+                            "font-mono text-xs font-bold",
+                            isTestingLatency ? "text-text-tertiary" : getLatencyColor(server.ping)
+                        )}>
+                            {isTestingLatency ? (
+                                <RotateCw size={12} className="animate-spin" />
+                            ) : (
+                                formatLatency(server.ping)
+                            )}
+                        </span>
                     </div>
                 </div>
 

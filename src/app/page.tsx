@@ -1140,6 +1140,7 @@ export default function Home() {
                   activeAutoNodeId={activeAutoNodeId}
                   connectionState={connectionState}
                   hideHeader={true}
+                  testingNodeIds={testingNodeIds}
                 />
               </div>
             </div>
@@ -1240,6 +1241,7 @@ export default function Home() {
                 activeAutoNodeId={activeAutoNodeId}
                 isLoading={isLoading}
                 connectionState={connectionState}
+                testingNodeIds={testingNodeIds}
               />
             </div>
           </div>
