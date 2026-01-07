@@ -225,21 +225,21 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                             return (
                                 <div key={profile.id} onClick={() => onSelect && onSelect(profile.id)} className="glass-card flex flex-col p-6 rounded-[2rem] bg-card-bg hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-500 group border border-border-color relative overflow-hidden cursor-pointer shadow-sm hover:shadow-xl">
                                     {/* Header Section */}
-                                    <div className="flex justify-between items-start mb-8">
-                                        <div className="flex items-center gap-4 min-w-0">
+                                    <div className="flex items-start justify-between mb-8 gap-4 overflow-hidden">
+                                        <div className="flex items-center gap-4 min-w-0 flex-1">
                                             <div className="size-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0 group-hover:scale-110 transition-transform duration-500 shadow-inner">
                                                 <Globe size={24} />
                                             </div>
-                                            <div className="flex flex-col gap-0.5 min-w-0">
-                                                <h3 className="font-bold text-text-primary text-base group-hover:text-primary transition-colors uppercase tracking-tight truncate">{getDisplayName(profile.name)}</h3>
+                                            <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                                                <h3 className="font-bold text-text-primary text-base group-hover:text-primary transition-colors uppercase tracking-tight truncate leading-tight">{getDisplayName(profile.name)}</h3>
                                                 <span className="text-[10px] font-medium text-text-tertiary truncate opacity-60" title={profile.url}>
                                                     {profile.url ? profile.url.replace(/^https?:\/\//, '') : t('subscriptions.local_profile')}
                                                 </span>
                                             </div>
                                         </div>
 
-                                        {/* Action Buttons - Moved to top for better space balance */}
-                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
+                                        {/* Action Buttons - Animated width to give space to title when hidden */}
+                                        <div className="flex items-center gap-1 transition-all duration-300 max-w-0 group-hover:max-w-[160px] overflow-hidden opacity-0 group-hover:opacity-100 shrink-0">
                                             {profile.url && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); onUpdate(profile.id); }}
