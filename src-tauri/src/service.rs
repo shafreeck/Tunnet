@@ -6,6 +6,7 @@ use std::io::{BufRead, BufReader};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
+
 use crate::libbox;
 
 #[derive(serde::Serialize, Clone, Debug)]
@@ -495,6 +496,17 @@ impl<R: Runtime> ProxyService<R> {
                 }
 
                 let _ = self.app.emit("proxy-status-change", self.get_status());
+
+                if let Some(node) = node_opt.as_ref() {
+                    let node_id = node.id.clone();
+                    let handle = self.app.clone();
+                    tokio::spawn(async move {
+                        if let Some(service) = handle.try_state::<ProxyService<R>>() {
+                            let _ = service.probe_nodes_location(vec![node_id]).await;
+                        }
+                    });
+                }
+
                 Ok(())
             }
             .await;
@@ -1012,108 +1024,15 @@ impl<R: Runtime> ProxyService<R> {
         for profile in &profiles {
             for node in &profile.nodes {
                 let tag = node.id.clone(); // Use UUID as tag
-                let mut added = true;
+                let is_supported = match node.protocol.as_str() {
+                    "vmess" | "vless" | "shadowsocks" | "ss" | "trojan" | "hysteria2" | "hy2"
+                    | "tuic" => true,
+                    _ => false,
+                };
 
-                // Helper closure or inline to add node
-                match node.protocol.as_str() {
-                    "vmess" => {
-                        let packet_encoding =
-                            node.packet_encoding.clone().or(Some("xudp".to_string()));
-                        cfg = cfg.with_vmess_outbound(
-                            &tag,
-                            node.server.clone(),
-                            node.port,
-                            node.uuid.clone().unwrap_or_default(),
-                            node.cipher.clone().unwrap_or("auto".to_string()),
-                            0,
-                            node.network.clone(),
-                            node.path.clone(),
-                            node.host.clone(),
-                            node.tls,
-                            packet_encoding,
-                        );
-                    }
-                    "shadowsocks" | "ss" => {
-                        cfg = cfg.with_shadowsocks_outbound(
-                            &tag,
-                            node.server.clone(),
-                            node.port,
-                            node.cipher
-                                .clone()
-                                .unwrap_or("chacha20-ietf-poly1305".to_string()),
-                            node.password.clone().unwrap_or_default(),
-                        );
-                    }
-                    "trojan" => {
-                        cfg = cfg.with_trojan_outbound(
-                            &tag,
-                            node.server.clone(),
-                            node.port,
-                            node.password.clone().unwrap_or_default(),
-                            node.network.clone(),
-                            node.path.clone(),
-                            node.host.clone(),
-                            node.sni.clone(),
-                            node.insecure,
-                        );
-                    }
-                    "vless" => {
-                        let packet_encoding =
-                            node.packet_encoding.clone().or(Some("xudp".to_string()));
-                        cfg = cfg.with_vless_outbound(
-                            &tag,
-                            node.server.clone(),
-                            node.port,
-                            node.uuid.clone().unwrap_or_default(),
-                            node.flow.clone(),
-                            node.network.clone(),
-                            node.path.clone(),
-                            node.host.clone(),
-                            node.tls,
-                            node.insecure,
-                            node.sni.clone(),
-                            node.alpn.clone(),
-                            packet_encoding,
-                        );
-                    }
-                    "hysteria2" | "hy2" => {
-                        let up_mbps = node.up.as_ref().and_then(|s| s.parse().ok());
-                        let down_mbps = node.down.as_ref().and_then(|s| s.parse().ok());
-                        cfg = cfg.with_hysteria2_outbound(
-                            &tag,
-                            node.server.clone(),
-                            node.port,
-                            node.password.clone().unwrap_or_default(),
-                            node.sni.clone(),
-                            node.insecure,
-                            node.alpn.clone(),
-                            up_mbps,
-                            down_mbps,
-                            node.obfs.clone(),
-                            node.obfs_password.clone(),
-                        );
-                    }
-                    "tuic" => {
-                        cfg = cfg.with_tuic_outbound(
-                            &tag,
-                            node.server.clone(),
-                            node.port,
-                            node.uuid.clone().unwrap_or_default(),
-                            node.password.clone(),
-                            node.sni.clone(),
-                            node.insecure,
-                            node.alpn.clone(),
-                            None,
-                            None,
-                        );
-                    }
-                    _ => {
-                        // Skip unsupported
-                        added = false;
-                    }
-                }
-
-                if added {
+                if is_supported {
+                    let outbound = self.node_to_outbound(node);
+                    cfg.outbounds.push(outbound);
                     valid_tags.insert(tag);
                 }
             }
@@ -1215,109 +1134,18 @@ impl<R: Runtime> ProxyService<R> {
             if !valid_tags.contains(&proxy_target) {
                 info!("Manual node addition safety net for: {}", node.name);
                 // It might be a temp node? Add it manually (legacy behavior fallback)
-                let mut added = true;
-                match node.protocol.as_str() {
-                    "vmess" => {
-                        let packet_encoding =
-                            node.packet_encoding.clone().or(Some("xudp".to_string()));
-                        cfg = cfg.with_vmess_outbound(
-                            &proxy_target,
-                            node.server.clone(),
-                            node.port,
-                            node.uuid.clone().unwrap_or_default(),
-                            node.cipher.clone().unwrap_or("auto".to_string()),
-                            0,
-                            node.network.clone(),
-                            node.path.clone(),
-                            node.host.clone(),
-                            node.tls,
-                            packet_encoding,
-                        );
-                    }
-                    "vless" => {
-                        let packet_encoding =
-                            node.packet_encoding.clone().or(Some("xudp".to_string()));
-                        cfg = cfg.with_vless_outbound(
-                            &proxy_target,
-                            node.server.clone(),
-                            node.port,
-                            node.uuid.clone().unwrap_or_default(),
-                            node.flow.clone(),
-                            node.network.clone(),
-                            node.path.clone(),
-                            node.host.clone(),
-                            node.tls,
-                            node.insecure,
-                            node.sni.clone(),
-                            node.alpn.clone(),
-                            packet_encoding,
-                        );
-                    }
-                    "shadowsocks" | "ss" => {
-                        cfg = cfg.with_shadowsocks_outbound(
-                            &proxy_target,
-                            node.server.clone(),
-                            node.port,
-                            node.cipher
-                                .clone()
-                                .unwrap_or("chacha20-ietf-poly1305".to_string()),
-                            node.password.clone().unwrap_or_default(),
-                        );
-                    }
-                    "trojan" => {
-                        cfg = cfg.with_trojan_outbound(
-                            &proxy_target,
-                            node.server.clone(),
-                            node.port,
-                            node.password.clone().unwrap_or_default(),
-                            node.network.clone(),
-                            node.path.clone(),
-                            node.host.clone(),
-                            node.sni.clone(),
-                            node.insecure,
-                        );
-                    }
-                    "hysteria2" | "hy2" => {
-                        let up_mbps = node.up.as_ref().and_then(|s| s.parse().ok());
-                        let down_mbps = node.down.as_ref().and_then(|s| s.parse().ok());
-                        cfg = cfg.with_hysteria2_outbound(
-                            &proxy_target,
-                            node.server.clone(),
-                            node.port,
-                            node.password.clone().unwrap_or_default(),
-                            node.sni.clone(),
-                            node.insecure,
-                            node.alpn.clone(),
-                            up_mbps,
-                            down_mbps,
-                            node.obfs.clone(),
-                            node.obfs_password.clone(),
-                        );
-                    }
-                    "tuic" => {
-                        cfg = cfg.with_tuic_outbound(
-                            &proxy_target,
-                            node.server.clone(),
-                            node.port,
-                            node.uuid.clone().unwrap_or_default(),
-                            node.password.clone(),
-                            node.sni.clone(),
-                            node.insecure,
-                            node.alpn.clone(),
-                            None,
-                            None,
-                        );
-                    }
-                    _ => {
-                        added = false;
-                        warn!(
-                            "Unsupported protocol '{}' for manual node addition",
-                            node.protocol
-                        );
-                    }
-                }
+                let is_supported = match node.protocol.as_str() {
+                    "vmess" | "vless" | "shadowsocks" | "ss" | "trojan" | "hysteria2" | "hy2"
+                    | "tuic" => true,
+                    _ => false,
+                };
 
-                if added {
+                if is_supported {
+                    // Use the helper to add node with the custom tag pointing to actual node
+                    // But here tag is 'proxy_target' which is node.id
+                    let mut outbound = self.node_to_outbound(node);
+                    outbound.tag = proxy_target.clone();
+                    cfg.outbounds.push(outbound);
                     valid_tags.insert(proxy_target.clone());
                 } else {
                     proxy_target = "direct".to_string();
@@ -1989,9 +1817,19 @@ impl<R: Runtime> ProxyService<R> {
         // Remove existing profile with same URL or ID if logic requires,
         // but for now we just append. Maybe check for duplicate URL?
         // Let's allow duplicates for now to be safe, user can delete.
+        // Trigger location probe for new nodes
+        let node_ids: Vec<String> = new_profile.nodes.iter().map(|n| n.id.clone()).collect();
         profiles.push(new_profile);
         info!("Imported subscription. Total profiles: {}", profiles.len());
         self.manager.save_profiles(&profiles)?;
+
+        let handle = self.app.clone();
+        tokio::spawn(async move {
+            if let Some(service) = handle.try_state::<ProxyService<R>>() {
+                let _ = service.probe_nodes_location(node_ids).await;
+            }
+        });
+
         Ok(id_clone)
     }
 
@@ -2028,8 +1866,17 @@ impl<R: Runtime> ProxyService<R> {
                 // Let's reuse the old ID.
                 let mut p = updated_profile;
                 p.id = profiles[pos].id.clone();
+                let node_ids = p.nodes.iter().map(|n| n.id.clone()).collect();
                 profiles[pos] = p;
                 self.manager.save_profiles(&profiles)?;
+
+                let handle = self.app.clone();
+                tokio::spawn(async move {
+                    if let Some(service) = handle.try_state::<ProxyService<R>>() {
+                        let _ = service.probe_nodes_location(node_ids).await;
+                    }
+                });
+
                 return Ok(());
             }
         }
@@ -2388,7 +2235,7 @@ impl<R: Runtime> ProxyService<R> {
         Ok(())
     }
 
-    pub fn add_node(&self, node: crate::profile::Node) -> Result<(), String> {
+    pub async fn add_node(&self, node: crate::profile::Node) -> Result<(), String> {
         let mut profiles = self.manager.load_profiles()?;
 
         // Find or create "Local" profile
@@ -2396,6 +2243,7 @@ impl<R: Runtime> ProxyService<R> {
             .iter()
             .position(|p| p.name == "Local" && p.url.is_none());
 
+        let node_id = node.id.clone();
         if let Some(idx) = local_idx {
             profiles[idx].nodes.push(node);
         } else {
@@ -2410,16 +2258,26 @@ impl<R: Runtime> ProxyService<R> {
                 expire: None,
             });
         }
-        self.manager.save_profiles(&profiles)
+        self.manager.save_profiles(&profiles)?;
+
+        let handle = self.app.clone();
+        tokio::spawn(async move {
+            if let Some(service) = handle.try_state::<ProxyService<R>>() {
+                let _ = service.probe_nodes_location(vec![node_id]).await;
+            }
+        });
+
+        Ok(())
     }
 
-    pub fn update_node(&self, node: crate::profile::Node) -> Result<(), String> {
+    pub async fn update_node(&self, node: crate::profile::Node) -> Result<(), String> {
         let mut profiles = self.manager.load_profiles()?;
         let mut found = false;
 
+        let node_id = node.id.clone();
         for p in &mut profiles {
-            if let Some(pos) = p.nodes.iter().position(|n| n.id == node.id) {
-                p.nodes[pos] = node.clone();
+            if let Some(pos) = p.nodes.iter().position(|n| n.id == node_id) {
+                p.nodes[pos] = node;
                 found = true;
                 break;
             }
@@ -2427,6 +2285,14 @@ impl<R: Runtime> ProxyService<R> {
 
         if found {
             self.manager.save_profiles(&profiles)?;
+
+            let handle = self.app.clone();
+            tokio::spawn(async move {
+                if let Some(service) = handle.try_state::<ProxyService<R>>() {
+                    let _ = service.probe_nodes_location(vec![node_id]).await;
+                }
+            });
+
             Ok(())
         } else {
             Err("Node not found".to_string())
@@ -2451,6 +2317,93 @@ impl<R: Runtime> ProxyService<R> {
     pub async fn probe_nodes_latency(&self, node_ids: Vec<String>) -> Result<(), String> {
         let mut profiles = self.manager.load_profiles()?;
         let mut updates = std::collections::HashMap::new();
+
+        // 1. Prepare target nodes
+        let mut target_nodes = Vec::new();
+        for p in &profiles {
+            for n in &p.nodes {
+                if !node_ids.is_empty() && !node_ids.contains(&n.id) {
+                    continue;
+                }
+                target_nodes.push(n.clone());
+            }
+        }
+
+        if target_nodes.is_empty() {
+            return Ok(());
+        }
+
+        // Unified Native URLTest Strategy (Hiddify-like)
+        // Uses sing-box native `URLTest` group for max performance and consistency.
+        // Works in both Running and Stopped states without "double proxy" issues in TUN mode.
+        
+        debug!("probe_nodes_latency: using Native URLTest Batch strategy");
+        let mut outbounds = Vec::new();
+        for node in &target_nodes {
+            let mut outbound = self.node_to_outbound(node);
+            // Tag must match Node ID for result mapping
+            outbound.tag = node.id.clone(); 
+            outbounds.push(outbound);
+        }
+            
+        if !outbounds.is_empty() {
+             let json_str = serde_json::to_string(&outbounds).unwrap_or("[]".to_string());
+             let outbound_c = std::ffi::CString::new(json_str).unwrap();
+             // URL is configured in Go URLTest group now (but we pass it anyway for compatibility if needed)
+             let target_c = std::ffi::CString::new("http://cp.cloudflare.com/generate_204").unwrap();
+             
+             // Run FFI in a blocking thread
+             let updates_clone = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+             let updates_c = updates_clone.clone();
+             
+             tokio::task::spawn_blocking(move || {
+                 let res_ptr = unsafe {
+                     crate::libbox::LibboxTestBatch(
+                         outbound_c.as_ptr(),
+                         target_c.as_ptr(),
+                         5000 // 5s timeout
+                     )
+                 };
+                 
+                 if !res_ptr.is_null() {
+                      let res_str = unsafe {
+                         std::ffi::CStr::from_ptr(res_ptr)
+                             .to_string_lossy()
+                             .into_owned()
+                     };
+                     
+                     if let Ok(results) = serde_json::from_str::<std::collections::HashMap<String, u64>>(&res_str) {
+                         let mut u = updates_c.lock().unwrap();
+                         for (id, latency) in results {
+                             u.insert(id, latency);
+                         }
+                     }
+                 }
+             }).await.map_err(|e| e.to_string())?;
+             
+             let u = updates_clone.lock().unwrap();
+             for (id, latency) in u.iter() {
+                 updates.insert(id.clone(), *latency);
+             }
+        }
+
+        // 3. Apply updates
+        for p in &mut profiles {
+            for n in &mut p.nodes {
+                if let Some(ping) = updates.get(&n.id) {
+                    n.ping = Some(*ping);
+                }
+            }
+        }
+        self.manager.save_profiles(&profiles)?;
+        let _ = self.app.emit("profiles-update", None::<()>);
+
+        Ok(())
+    }
+
+    pub async fn probe_nodes_location(&self, node_ids: Vec<String>) -> Result<(), String> {
+        let mut profiles = self.manager.load_profiles()?;
+        let mut updates = std::collections::HashMap::new();
         let mut futures = Vec::new();
 
         for p in &profiles {
@@ -2465,14 +2418,13 @@ impl<R: Runtime> ProxyService<R> {
 
                 futures.push(tokio::spawn(async move {
                     let outbound_c = std::ffi::CString::new(outbound_json).unwrap();
-                    let target_c =
-                        std::ffi::CString::new("http://www.gstatic.com/generate_204").unwrap();
+                    let target_c = std::ffi::CString::new("http://ip-api.com/json").unwrap();
 
                     let res_ptr = unsafe {
-                        crate::libbox::LibboxTestOutbound(
+                        crate::libbox::LibboxFetch(
                             outbound_c.as_ptr(),
                             target_c.as_ptr(),
-                            5000, // 5s timeout
+                            10000, // 10s timeout
                         )
                     };
 
@@ -2486,11 +2438,21 @@ impl<R: Runtime> ProxyService<R> {
                             .into_owned()
                     };
 
-                    if let Ok(latency) = res_str.parse::<u64>() {
-                        Some((node_id, latency))
-                    } else {
-                        None
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&res_str) {
+                        if val["status"] == "success" {
+                            let loc = crate::profile::LocationInfo {
+                                ip: val["query"].as_str().unwrap_or_default().to_string(),
+                                country: val["countryCode"].as_str().unwrap_or_default().to_string(),
+                                city: val["city"].as_str().unwrap_or_default().to_string(),
+                                lat: val["lat"].as_f64().unwrap_or_default(),
+                                lon: val["lon"].as_f64().unwrap_or_default(),
+                                isp: val["isp"].as_str().unwrap_or_default().to_string(),
+                                latency: 0,
+                            };
+                            return Some((node_id, loc));
+                        }
                     }
+                    None
                 }));
             }
         }
@@ -2498,64 +2460,40 @@ impl<R: Runtime> ProxyService<R> {
         let results = futures_util::future::join_all(futures).await;
 
         for res in results {
-            if let Ok(Some((id, latency))) = res {
-                updates.insert(id, latency);
+            if let Ok(Some((id, loc))) = res {
+                updates.insert(id, loc);
             }
         }
 
         for p in &mut profiles {
             for n in &mut p.nodes {
-                if let Some(ping) = updates.get(&n.id) {
-                    n.ping = Some(*ping);
+                if let Some(loc) = updates.get(&n.id) {
+                    n.location = Some(loc.clone());
                 }
             }
         }
         self.manager.save_profiles(&profiles)?;
+        let _ = self.app.emit("profiles-update", None::<()>);
 
         Ok(())
     }
 
     pub async fn url_test(&self, node_id: String) -> Result<u64, String> {
+        // Reuse the batch strategy (filtering for just this node)
+        // This ensures the same Native URLTest mechanism is used.
+        self.probe_nodes_latency(vec![node_id.clone()]).await?;
+
+        // Retrieve the updated latency
         let profiles = self.manager.load_profiles()?;
-        let mut target_node: Option<crate::profile::Node> = None;
         for p in profiles {
             for n in p.nodes {
                 if n.id == node_id {
-                    target_node = Some(n);
-                    break;
+                    let ping = n.ping.ok_or("No latency result found")?;
+                    return Ok(ping);
                 }
             }
-            if target_node.is_some() {
-                break;
-            }
         }
-        let node = target_node.ok_or("Node not found")?;
-
-        let outbound = self.node_to_outbound(&node);
-        let outbound_json = serde_json::to_string(&outbound).map_err(|e| e.to_string())?;
-
-        let outbound_c = std::ffi::CString::new(outbound_json).unwrap();
-        let target_c = std::ffi::CString::new("http://www.gstatic.com/generate_204").unwrap();
-
-        let res_ptr = unsafe {
-            crate::libbox::LibboxTestOutbound(
-                outbound_c.as_ptr(),
-                target_c.as_ptr(),
-                5000, // 5s timeout
-            )
-        };
-
-        if res_ptr.is_null() {
-            return Err("Latency test returned null pointer".to_string());
-        }
-
-        let res_str = unsafe { CStr::from_ptr(res_ptr).to_string_lossy().into_owned() };
-
-        // Try to parse as u64 (latency)
-        match res_str.parse::<u64>() {
-            Ok(latency) => Ok(latency),
-            Err(_) => Err(res_str), // Return as error message
-        }
+        Err("Node not found after test".to_string())
     }
 
     fn node_to_outbound(&self, node: &crate::profile::Node) -> crate::config::Outbound {
@@ -2576,6 +2514,7 @@ impl<R: Runtime> ProxyService<R> {
                     node.path.clone(),
                     node.host.clone(),
                     node.tls,
+                    node.insecure,
                     packet_encoding,
                 );
             }
@@ -2595,6 +2534,9 @@ impl<R: Runtime> ProxyService<R> {
                     node.sni.clone(),
                     node.alpn.clone(),
                     packet_encoding,
+                    node.fingerprint.clone(),
+                    node.public_key.clone(),
+                    node.short_id.clone(),
                 );
             }
             "shadowsocks" | "ss" => {
@@ -2617,8 +2559,13 @@ impl<R: Runtime> ProxyService<R> {
                     node.network.clone(),
                     node.path.clone(),
                     node.host.clone(),
-                    node.sni.clone(),
+                    node.tls,
                     node.insecure,
+                    node.sni.clone(),
+                    node.alpn.clone(),
+                    node.fingerprint.clone(),
+                    node.public_key.clone(),
+                    node.short_id.clone(),
                 );
             }
             "hysteria2" | "hy2" => {
@@ -2636,6 +2583,7 @@ impl<R: Runtime> ProxyService<R> {
                     down_mbps,
                     node.obfs.clone(),
                     node.obfs_password.clone(),
+                    node.fingerprint.clone(),
                 );
             }
             "tuic" => {
@@ -2650,6 +2598,9 @@ impl<R: Runtime> ProxyService<R> {
                     node.alpn.clone(),
                     None,
                     None,
+                    None,
+                    None,
+                    node.fingerprint.clone(),
                 );
             }
             _ => {

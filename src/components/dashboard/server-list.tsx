@@ -59,6 +59,7 @@ interface ServerListProps {
     onClearFilter?: () => void
     isLoading?: boolean
     connectionState?: "idle" | "connecting" | "disconnecting"
+    testingNodeIds?: string[]
 }
 
 export function ServerList({
@@ -82,7 +83,8 @@ export function ServerList({
     isFiltered,
     onClearFilter,
     isLoading = false,
-    connectionState
+    connectionState,
+    testingNodeIds = []
 }: ServerListProps) {
     const { t } = useTranslation()
     const [loading, setLoading] = useState(false)
@@ -518,6 +520,7 @@ export function ServerList({
                                     isAutoSelected={activeAutoNodeId === server.id || activeAutoNodeId === server.name}
                                     t={t}
                                     connectionState={connectionState}
+                                    isTestingLatency={isPinging || testingNodeIds.includes(server.id)}
                                 />
                             )
                         })}
@@ -543,9 +546,10 @@ interface ServerItemProps {
     onPing?: (id: string) => void
     isAutoSelected?: boolean
     t: any
+    isTestingLatency?: boolean
 }
 
-function ServerItem({ server, isSelected, isRunning, isLoading, connectionState, onClick, onToggle, onEdit, onDelete, onPing, isAutoSelected, t }: ServerItemProps) {
+function ServerItem({ server, isSelected, isRunning, isLoading, connectionState, onClick, onToggle, onEdit, onDelete, onPing, isAutoSelected, t, isTestingLatency }: ServerItemProps) {
     return (
         <div
             onClick={onClick}
@@ -618,9 +622,13 @@ function ServerItem({ server, isSelected, isRunning, isLoading, connectionState,
                     <div className="text-right flex flex-col items-end group-hover:hidden transition-all duration-200">
                         <span className={cn(
                             "font-mono text-xs font-bold",
-                            getLatencyColor(server.ping)
+                            isTestingLatency ? "text-text-tertiary" : getLatencyColor(server.ping)
                         )}>
-                            {formatLatency(server.ping)}
+                            {isTestingLatency ? (
+                                <RotateCw size={12} className="animate-spin" />
+                            ) : (
+                                formatLatency(server.ping)
+                            )}
                         </span>
                     </div>
 

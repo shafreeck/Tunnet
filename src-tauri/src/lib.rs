@@ -98,7 +98,7 @@ async fn add_node(
     node: crate::profile::Node,
     service: State<'_, ProxyService<tauri::Wry>>,
 ) -> Result<(), String> {
-    service.add_node(node)
+    service.add_node(node).await
 }
 
 #[tauri::command]
@@ -111,7 +111,7 @@ async fn update_node(
     // Ensure Node has the ID
     let mut n = node;
     n.id = id;
-    service.update_node(n)
+    service.update_node(n).await
 }
 
 #[tauri::command]
@@ -127,7 +127,7 @@ async fn check_node_locations(
     node_ids: Vec<String>,
     service: State<'_, ProxyService<tauri::Wry>>,
 ) -> Result<(), String> {
-    service.probe_nodes_latency(node_ids).await
+    service.probe_nodes_location(node_ids).await
 }
 
 use installer::HelperInstaller;

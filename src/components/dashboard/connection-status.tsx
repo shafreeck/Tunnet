@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 import { Tooltip } from "react-tooltip"
 import 'react-tooltip/dist/react-tooltip.css'
 import { getLatencyColor, formatLatency } from "@/lib/latency"
+import { getFlagUrlFromCode } from "@/lib/flags"
 
 interface ConnectionStatusProps {
     isConnected: boolean;
@@ -15,7 +16,7 @@ interface ConnectionStatusProps {
     latency?: number;
     onLatencyClick?: () => void;
     onMainToggle?: () => void;
-    connectionDetails?: { ip: string; country: string; isp?: string };
+    connectionDetails?: { ip: string; country: string; countryCode?: string; isp?: string };
     mode: 'global' | 'rule' | 'direct';
     onModeChange: (mode: 'global' | 'rule' | 'direct') => void;
     tunEnabled: boolean;
@@ -34,7 +35,8 @@ interface ConnectionStatusProps {
 
 export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, onLatencyClick, onMainToggle, connectionDetails, mode, onModeChange, tunEnabled, onTunToggle, systemProxyEnabled, onSystemProxyToggle, isLoading, targetType, groupIcon, targetId, activeNodeName, isLatencyLoading, connectionState, hasNoServers }: ConnectionStatusProps) {
     const { t } = useTranslation()
-    const displayFlag = flagUrl
+    const realFlagUrl = connectionDetails?.countryCode ? getFlagUrlFromCode(connectionDetails.countryCode) : null
+    const displayFlag = (isConnected && realFlagUrl) ? realFlagUrl : flagUrl
 
     const displayName = hasNoServers ? t('status.no_servers') : (isConnected ? (serverName || t('status.unknown_server')) : t('status.disconnected'))
     const displaySubName = isConnected && targetType === 'group' && activeNodeName && activeNodeName !== serverName ? activeNodeName : null
@@ -65,22 +67,27 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
             <div className="relative mb-6 group cursor-pointer" onClick={isLoading ? undefined : onMainToggle}>
                 <span className={`animate-ping absolute inset-0 inline-flex h-full w-full rounded-full ${hasNoServers ? 'bg-primary' : (isConnected ? 'bg-accent-green' : 'bg-red-500')} opacity-20 duration-1000 ${isLoading ? 'hidden' : ''}`}></span>
                 <div className={`relative size-28 rounded-full border border-white/10 bg-black/40 backdrop-blur-xl glow-effect flex items-center justify-center overflow-hidden shadow-2xl transition-transform duration-300 ${isLoading ? 'scale-100 cursor-not-allowed' : 'group-hover:scale-105'}`}>
-                    {isLoading ? (
-                        <RefreshCw className="w-1/2 h-1/2 text-white/50 animate-spin" />
-                    ) : hasNoServers ? (
+                    {hasNoServers ? (
                         <div className="flex flex-col items-center justify-center">
                             <Plus className="size-10 text-primary animate-in zoom-in duration-300" />
                         </div>
                     ) : (
-                        displayFlag ? (
-                            <img
-                                className={`w-full h-full object-cover ${isConnected ? 'opacity-60' : 'opacity-20 grayscale'}`}
-                                alt="Country Flag"
-                                src={displayFlag}
-                            />
-                        ) : (
-                            <Globe className={`w-1/2 h-1/2 ${isConnected ? 'text-accent-green opacity-60' : 'text-gray-500 opacity-20'}`} />
-                        )
+                        <>
+                            {displayFlag ? (
+                                <img
+                                    className={`w-full h-full object-cover transition-all duration-700 ${isConnected ? 'opacity-60 scale-110' : 'opacity-20 grayscale scale-100'}`}
+                                    alt="Country Flag"
+                                    src={displayFlag}
+                                />
+                            ) : (
+                                <Globe className={`w-1/2 h-1/2 transition-colors duration-500 ${isConnected ? 'text-accent-green opacity-60' : 'text-gray-500 opacity-20'}`} />
+                            )}
+                            {isLoading && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[2px]">
+                                    <RefreshCw className="w-10 h-10 text-white animate-spin drop-shadow-lg" />
+                                </div>
+                            )}
+                        </>
                     )}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                     {!isLoading && (hasNoServers ? (

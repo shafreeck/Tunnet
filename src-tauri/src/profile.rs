@@ -55,12 +55,15 @@ pub struct Node {
     pub host: Option<String>,    // Host header for ws/grpc
     pub location: Option<LocationInfo>,
 
-    // New fields for VLESS / Hysteria / TUIC
+    // New fields for VLESS / Hysteria / TUIC / Reality
     pub flow: Option<String>,
     pub alpn: Option<Vec<String>>,
     #[serde(default)]
     pub insecure: bool,
     pub sni: Option<String>,
+    pub public_key: Option<String>,
+    pub short_id: Option<String>,
+    pub fingerprint: Option<String>,
     pub up: Option<String>, // Bandwidth hint
     pub down: Option<String>,
     pub obfs: Option<String>, // Obfs type
@@ -213,6 +216,9 @@ pub mod parser {
                         alpn: None,
                         insecure: p.skip_cert_verify.unwrap_or(false),
                         sni: None,
+                        public_key: None,
+                        short_id: None,
+                        fingerprint: None,
                         up: None,
                         down: None,
                         obfs: None,
@@ -349,8 +355,15 @@ pub mod parser {
                         location: None,
                         flow: None,
                         alpn: None,
-                        insecure: false,
+                        insecure: v
+                            .get("insecure")
+                            .or(v.get("allowInsecure"))
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false),
                         sni: v.get("sni").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                        public_key: None,
+                        short_id: None,
+                        fingerprint: None,
                         up: None,
                         down: None,
                         obfs: None,
@@ -371,6 +384,7 @@ pub mod parser {
                                 let mut path = None;
                                 let mut host_header = None;
                                 let mut sni = None;
+                                let mut insecure = false;
 
                                 if let Some(query_start) = link.find('?') {
                                     let query = &link[query_start + 1..];
@@ -390,6 +404,9 @@ pub mod parser {
                                                     })
                                                 }
                                                 "tls" => tls = v == "1",
+                                                "insecure" | "allowInsecure" => {
+                                                    insecure = v == "1" || v == "true";
+                                                }
                                                 "path" => path = Some(v.to_string()),
                                                 "obfsParam" => host_header = Some(v.to_string()),
                                                 "peer" => sni = Some(v.to_string()),
@@ -415,8 +432,11 @@ pub mod parser {
                                     location: None,
                                     flow: None,
                                     alpn: None,
-                                    insecure: false,
+                                    insecure,
                                     sni,
+                                    public_key: None,
+                                    short_id: None,
+                                    fingerprint: None,
                                     up: None,
                                     down: None,
                                     obfs: None,
@@ -469,6 +489,9 @@ pub mod parser {
                             alpn: None,
                             insecure: false,
                             sni: None,
+                            public_key: None,
+                            short_id: None,
+                            fingerprint: None,
                             up: None,
                             down: None,
                             obfs: None,
@@ -489,13 +512,22 @@ pub mod parser {
                                         "host" => node.host = Some(v),
                                         "sni" => node.sni = Some(v),
                                         "alpn" => {
-                                            node.alpn =
-                                                Some(v.split(',').map(|s| s.to_string()).collect())
+                                            let list: Vec<String> = v
+                                                .split(',')
+                                                .map(|s| s.trim().to_string())
+                                                .filter(|s| !s.is_empty())
+                                                .collect();
+                                            if !list.is_empty() {
+                                                node.alpn = Some(list);
+                                            }
                                         }
-                                        "fp" => {}  // fingerprint, not currently used
-                                        "pbk" => {} // reality public key, TODO
-                                        "sid" => {} // reality short id, TODO
+                                        "fp" => node.fingerprint = Some(v),
+                                        "pbk" => node.public_key = Some(v),
+                                        "sid" => node.short_id = Some(v),
                                         "packetEncoding" => node.packet_encoding = Some(v),
+                                        "insecure" | "allowInsecure" => {
+                                            node.insecure = v == "1" || v == "true"
+                                        }
                                         _ => {}
                                     }
                                 }
@@ -546,6 +578,9 @@ pub mod parser {
                             alpn: None,
                             insecure: false,
                             sni: None,
+                            public_key: None,
+                            short_id: None,
+                            fingerprint: None,
                             up: None,
                             down: None,
                             obfs: None,
@@ -559,7 +594,9 @@ pub mod parser {
                                 if let Some((k, v)) = pair.split_once('=') {
                                     let v = urlencoding::decode(v).unwrap_or(v.into()).to_string();
                                     match k {
-                                        "insecure" => node.insecure = v == "1",
+                                        "insecure" | "allowInsecure" => {
+                                            node.insecure = v == "1" || v == "true"
+                                        }
                                         "sni" => node.sni = Some(v),
                                         "obfs" => node.obfs = Some(v), // type
                                         "obfs-password" => node.obfs_password = Some(v),
@@ -617,6 +654,9 @@ pub mod parser {
                             alpn: None,
                             insecure: false,
                             sni: None,
+                            public_key: None,
+                            short_id: None,
+                            fingerprint: None,
                             up: None,
                             down: None,
                             obfs: None,
@@ -635,7 +675,9 @@ pub mod parser {
                                             node.alpn =
                                                 Some(v.split(',').map(|s| s.to_string()).collect())
                                         }
-                                        "allow_insecure" => node.insecure = v == "1",
+                                        "allow_insecure" | "insecure" | "allowInsecure" => {
+                                            node.insecure = v == "1" || v == "true"
+                                        }
                                         "congestion_control" => {} // TODO
                                         _ => {}
                                     }
@@ -682,6 +724,9 @@ pub mod parser {
                             alpn: None,
                             insecure: false,
                             sni: None,
+                            public_key: None,
+                            short_id: None,
+                            fingerprint: None,
                             up: None,
                             down: None,
                             obfs: None,
@@ -701,8 +746,14 @@ pub mod parser {
                                         "path" => node.path = Some(v),
                                         "host" => node.host = Some(v),
                                         "alpn" => {
-                                            node.alpn =
-                                                Some(v.split(',').map(|s| s.to_string()).collect())
+                                            let list: Vec<String> = v
+                                                .split(',')
+                                                .map(|s| s.trim().to_string())
+                                                .filter(|s| !s.is_empty())
+                                                .collect();
+                                            if !list.is_empty() {
+                                                node.alpn = Some(list);
+                                            }
                                         }
                                         _ => {}
                                     }

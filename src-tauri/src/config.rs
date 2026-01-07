@@ -115,6 +115,15 @@ pub struct Outbound {
     pub down_mbps: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub obfs: Option<ObfsConfig>,
+    // TUIC specific
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub congestion_controller: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub udp_relay_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zero_rtt_handshake: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub heartbeat: Option<String>,
     // Selector / URLTest fields
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outbounds: Option<Vec<String>>,
@@ -152,6 +161,23 @@ pub struct OutboundTls {
     pub insecure: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alpn: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub utls: Option<UtlsConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reality: Option<RealityConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UtlsConfig {
+    pub enabled: bool,
+    pub fingerprint: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RealityConfig {
+    pub enabled: bool,
+    pub public_key: String,
+    pub short_id: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -475,6 +501,10 @@ impl SingBoxConfig {
             up_mbps: None,
             down_mbps: None,
             obfs: None,
+            congestion_controller: None,
+            udp_relay_mode: None,
+            zero_rtt_handshake: None,
+            heartbeat: None,
             outbounds: None,
             url: None,
             interval: None,
@@ -532,6 +562,10 @@ impl SingBoxConfig {
             up_mbps: None,
             down_mbps: None,
             obfs: None,
+            congestion_controller: None,
+            udp_relay_mode: None,
+            zero_rtt_handshake: None,
+            heartbeat: None,
             outbounds: None,
             url: None,
             interval: None,
@@ -554,6 +588,7 @@ impl SingBoxConfig {
         path: Option<String>,
         host: Option<String>,
         tls: bool,
+        insecure: bool,
         packet_encoding: Option<String>,
     ) -> Self {
         let mut transport_config = None;
@@ -588,8 +623,10 @@ impl SingBoxConfig {
                 Some(OutboundTls {
                     enabled: true,
                     server_name: sni,
-                    insecure: Some(true),
+                    insecure: Some(insecure),
                     alpn: None,
+                    utls: None,
+                    reality: None,
                 })
             } else {
                 None
@@ -599,6 +636,10 @@ impl SingBoxConfig {
             up_mbps: None,
             down_mbps: None,
             obfs: None,
+            congestion_controller: None,
+            udp_relay_mode: None,
+            zero_rtt_handshake: None,
+            heartbeat: None,
             outbounds: None,
             url: None,
             interval: None,
@@ -624,6 +665,9 @@ impl SingBoxConfig {
         sni: Option<String>,
         alpn: Option<Vec<String>>,
         packet_encoding: Option<String>,
+        fingerprint: Option<String>,
+        public_key: Option<String>,
+        short_id: Option<String>,
     ) -> Self {
         let mut transport_config = None;
         if let Some(t_type) = transport {
@@ -659,6 +703,19 @@ impl SingBoxConfig {
                     server_name: sni.or(host).or(Some(server)),
                     insecure: Some(insecure),
                     alpn,
+                    utls: fingerprint.map(|f| UtlsConfig {
+                        enabled: true,
+                        fingerprint: f,
+                    }),
+                    reality: if public_key.is_some() {
+                        Some(RealityConfig {
+                            enabled: true,
+                            public_key: public_key.unwrap_or_default(),
+                            short_id: short_id.unwrap_or_default(),
+                        })
+                    } else {
+                        None
+                    },
                 })
             } else {
                 None
@@ -667,6 +724,10 @@ impl SingBoxConfig {
             up_mbps: None,
             down_mbps: None,
             obfs: None,
+            congestion_controller: None,
+            udp_relay_mode: None,
+            zero_rtt_handshake: None,
+            heartbeat: None,
             outbounds: None,
             url: None,
             interval: None,
@@ -690,6 +751,7 @@ impl SingBoxConfig {
         down: Option<u32>,
         obfs: Option<String>,
         obfs_password: Option<String>,
+        fingerprint: Option<String>,
     ) -> Self {
         self.outbounds.push(Outbound {
             outbound_type: "hysteria2".to_string(),
@@ -707,7 +769,16 @@ impl SingBoxConfig {
                 enabled: true,
                 server_name: sni.or(Some(server)),
                 insecure: Some(insecure),
-                alpn,
+                alpn: if alpn.is_none() || alpn.as_ref().unwrap().is_empty() {
+                    Some(vec!["h3".to_string()])
+                } else {
+                    alpn
+                },
+                utls: fingerprint.map(|f| UtlsConfig {
+                    enabled: true,
+                    fingerprint: f,
+                }),
+                reality: None,
             }),
             connect_timeout: None,
             up_mbps: up,
@@ -720,6 +791,10 @@ impl SingBoxConfig {
             } else {
                 None
             },
+            congestion_controller: None,
+            udp_relay_mode: None,
+            zero_rtt_handshake: None,
+            heartbeat: None,
             outbounds: None,
             url: None,
             interval: None,
@@ -740,8 +815,11 @@ impl SingBoxConfig {
         sni: Option<String>,
         insecure: bool,
         alpn: Option<Vec<String>>,
-        _congestion_controller: Option<String>,
-        _udp_relay_mode: Option<String>,
+        congestion_controller: Option<String>,
+        udp_relay_mode: Option<String>,
+        zero_rtt_handshake: Option<bool>,
+        heartbeat: Option<String>,
+        fingerprint: Option<String>,
     ) -> Self {
         self.outbounds.push(Outbound {
             outbound_type: "tuic".to_string(),
@@ -759,17 +837,25 @@ impl SingBoxConfig {
                 enabled: true,
                 server_name: sni.or(Some(server)),
                 insecure: Some(insecure),
-                alpn,
+                alpn: if alpn.is_none() || alpn.as_ref().unwrap().is_empty() {
+                    Some(vec!["h3".to_string()])
+                } else {
+                    alpn
+                },
+                utls: fingerprint.map(|f| UtlsConfig {
+                    enabled: true,
+                    fingerprint: f,
+                }),
+                reality: None,
             }),
             connect_timeout: None,
             up_mbps: None,
             down_mbps: None,
             obfs: None,
-            // TUIC specific fields currently mapped to generic or new fields if needed
-            // For now minimal TUIC support.
-            // congestion_controller & udp_relay_mode are specific.
-            // We might need to extend Outbound struct if we strictly need them.
-            // But basic connectivity often works with defaults.
+            congestion_controller,
+            udp_relay_mode,
+            zero_rtt_handshake,
+            heartbeat,
             outbounds: None,
             url: None,
             interval: None,
@@ -789,8 +875,13 @@ impl SingBoxConfig {
         transport: Option<String>,
         path: Option<String>,
         host: Option<String>,
-        sni: Option<String>,
+        tls: bool,
         insecure: bool,
+        sni: Option<String>,
+        alpn: Option<Vec<String>>,
+        fingerprint: Option<String>,
+        public_key: Option<String>,
+        short_id: Option<String>,
     ) -> Self {
         let mut transport_config = None;
         if let Some(t_type) = transport {
@@ -820,16 +911,37 @@ impl SingBoxConfig {
             flow: None,
             alter_id: None,
             transport: transport_config,
-            tls: Some(OutboundTls {
-                enabled: true,
-                server_name: sni.or(host).or(Some(server)),
-                insecure: Some(insecure),
-                alpn: None,
-            }),
+            tls: if tls {
+                Some(OutboundTls {
+                    enabled: true,
+                    server_name: sni.or(host).or(Some(server)),
+                    insecure: Some(insecure),
+                    alpn,
+                    utls: fingerprint.map(|f| UtlsConfig {
+                        enabled: true,
+                        fingerprint: f,
+                    }),
+                    reality: if public_key.is_some() {
+                        Some(RealityConfig {
+                            enabled: true,
+                            public_key: public_key.unwrap_or_default(),
+                            short_id: short_id.unwrap_or_default(),
+                        })
+                    } else {
+                        None
+                    },
+                })
+            } else {
+                None
+            },
             connect_timeout: None,
             up_mbps: None,
             down_mbps: None,
             obfs: None,
+            congestion_controller: None,
+            udp_relay_mode: None,
+            zero_rtt_handshake: None,
+            heartbeat: None,
             outbounds: None,
             url: None,
             interval: None,
@@ -858,6 +970,10 @@ impl SingBoxConfig {
             up_mbps: None,
             down_mbps: None,
             obfs: None,
+            congestion_controller: None,
+            udp_relay_mode: None,
+            zero_rtt_handshake: None,
+            heartbeat: None,
             outbounds: Some(outbounds),
             url: None,
             interval: None,
@@ -893,6 +1009,10 @@ impl SingBoxConfig {
             up_mbps: None,
             down_mbps: None,
             obfs: None,
+            congestion_controller: None,
+            udp_relay_mode: None,
+            zero_rtt_handshake: None,
+            heartbeat: None,
             outbounds: Some(outbounds),
             url: url.or(Some("http://www.gstatic.com/generate_204".to_string())),
             interval: interval.or(Some("10m".to_string())),

@@ -441,12 +441,18 @@ export default function Home() {
       }
     })
 
+    // Listen for profile updates (latency or location probes finished)
+    const unlistenProfiles = listen("profiles-update", () => {
+      fetchProfiles(false)
+    })
+
     return () => {
       unlisten.then(f => f())
       unlistenStatus.then(f => f())
       unlistenIp.then(f => f())
       unlistenIpRequest.then(f => f())
       unlistenSettings.then(f => f())
+      unlistenProfiles.then(f => f())
     }
   }, [])
 
@@ -487,19 +493,33 @@ export default function Home() {
       }
 
       if (checkPing && allNodes.length > 0) {
-        checkLatency(allNodes)
+        checkLatency(allNodes, true)
       }
     }).catch(console.error)
   }
 
-  const checkLatency = async (nodes: any[]) => {
+  const [testingNodeIds, setTestingNodeIds] = useState<string[]>([])
+
+  const checkLatency = async (nodes: any[], checkLocations = false) => {
     const ids = nodes.map((n: any) => n.id)
+    if (ids.length === 0) return
+
+    setTestingNodeIds(prev => [...prev, ...ids])
     try {
+      // 1. Check Pings (Always)
       await invoke("check_node_pings", { nodeIds: ids })
-      // Reload to reflect pings
+
+      // 2. Check Locations (Optional, Sequential to avoid race condition)
+      if (checkLocations) {
+        await invoke("check_node_locations", { nodeIds: ids })
+      }
+
+      // Reload to reflect pings and locations
       fetchProfiles(false)
     } catch (e) {
       console.error(e)
+    } finally {
+      setTestingNodeIds(prev => prev.filter(id => !ids.includes(id)))
     }
   }
 
@@ -796,6 +816,7 @@ export default function Home() {
     if (isPingingActive) {
       setLatencyLoading(true)
     }
+    setTestingNodeIds(prev => [...prev, id])
 
     try {
       const ping: number = await invoke("url_test", { nodeId: targetPingId })
@@ -808,9 +829,8 @@ export default function Home() {
       console.error("Ping failed:", e)
       toast.error(t('toast.action_failed', { error: "Latency test failed" }))
     } finally {
-      if (isPingingActive) {
-        setLatencyLoading(false)
-      }
+      setLatencyLoading(false)
+      setTestingNodeIds(prev => prev.filter(tid => tid !== id))
     }
   }
 
@@ -997,6 +1017,7 @@ export default function Home() {
             onDelete={handleDeleteNode}
             onPing={handlePingNode}
             connectionState={connectionState}
+            testingNodeIds={testingNodeIds}
           />
         )
       case "groups":

@@ -62,7 +62,7 @@ export default function DesignDebugPage() {
                         onDelete={() => { }}
                         showLogs={false}
                         setShowLogs={() => { }}
-                        logs={[]}
+                        logs={{ local: [], helper: [] }}
                         onClearLogs={() => { }}
                     />
                 </div>
