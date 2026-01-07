@@ -47,6 +47,15 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
         return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
     }
 
+    const getRemainingDays = (expire?: number) => {
+        if (!expire || expire === 0) return null
+        const now = Math.floor(Date.now() / 1000)
+        const diff = expire - now
+        if (diff <= 0) return t('subscriptions.expired', { defaultValue: 'Expired' })
+        const days = Math.ceil(diff / (24 * 3600))
+        return t('subscriptions.remaining_days', { count: days, defaultValue: `Remaining ${days} days` })
+    }
+
     const itemsValid = (n?: number) => n !== undefined && n !== null && !isNaN(n)
 
     const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -214,104 +223,107 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                             const percent = total > 0 ? Math.min(100, (used / total) * 100) : 0
 
                             return (
-                                <div key={profile.id} onClick={() => onSelect && onSelect(profile.id)} className="glass-card flex flex-col p-6 rounded-[2rem] bg-card-bg hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-500 group border border-border-color relative overflow-hidden cursor-pointer">
-                                    <div className="flex justify-between items-start mb-6">
-                                        <div className="flex items-start gap-4 overflow-hidden">
-                                            <div className="size-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0 group-hover:scale-110 transition-transform duration-500">
-                                                <Globe size={28} />
+                                <div key={profile.id} onClick={() => onSelect && onSelect(profile.id)} className="glass-card flex flex-col p-6 rounded-[2rem] bg-card-bg hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-500 group border border-border-color relative overflow-hidden cursor-pointer shadow-sm hover:shadow-xl">
+                                    {/* Header Section */}
+                                    <div className="flex justify-between items-start mb-8">
+                                        <div className="flex items-center gap-4 min-w-0">
+                                            <div className="size-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shrink-0 group-hover:scale-110 transition-transform duration-500 shadow-inner">
+                                                <Globe size={24} />
                                             </div>
-                                            <div className="flex flex-col gap-1 min-w-0">
-                                                <h3 className="font-bold text-text-primary text-lg group-hover:text-primary transition-colors uppercase tracking-tight truncate">{getDisplayName(profile.name)}</h3>
-                                                <span className="text-[10px] font-mono text-text-tertiary truncate" title={profile.url}>
+                                            <div className="flex flex-col gap-0.5 min-w-0">
+                                                <h3 className="font-bold text-text-primary text-base group-hover:text-primary transition-colors uppercase tracking-tight truncate">{getDisplayName(profile.name)}</h3>
+                                                <span className="text-[10px] font-medium text-text-tertiary truncate opacity-60" title={profile.url}>
                                                     {profile.url ? profile.url.replace(/^https?:\/\//, '') : t('subscriptions.local_profile')}
                                                 </span>
                                             </div>
                                         </div>
+
+                                        {/* Action Buttons - Moved to top for better space balance */}
+                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
+                                            {profile.url && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); onUpdate(profile.id); }}
+                                                    className="p-2 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-90"
+                                                    title={t('subscriptions.refresh_tooltip')}
+                                                >
+                                                    <RefreshCw size={14} />
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={(e) => handleAutoSelect(profile, e)}
+                                                className={cn(
+                                                    "p-2 rounded-xl transition-all active:scale-95",
+                                                    isProfileAutoActive(profile.id)
+                                                        ? "bg-accent-green/10 text-accent-green"
+                                                        : "hover:bg-accent-green/10 text-text-tertiary hover:text-accent-green"
+                                                )}
+                                                title={t('auto_select_tooltip')}
+                                            >
+                                                <Zap size={14} fill={isProfileAutoActive(profile.id) ? "currentColor" : "none"} />
+                                            </button>
+                                            <button
+                                                onClick={(e) => handleRenameClick(profile.id, profile.name, e)}
+                                                className="p-2 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-90"
+                                                title={t('subscriptions.rename')}
+                                            >
+                                                <Edit2 size={14} />
+                                            </button>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); onDelete(profile.id); }}
+                                                className="p-2 text-text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all active:scale-90"
+                                                title={t('subscriptions.delete_tooltip')}
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
                                     </div>
 
-                                    <div className="space-y-4">
-                                        {/* Progress Section */}
-                                        <div className="space-y-2">
-                                            <div className="flex justify-between items-end">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest mb-1">{t('subscriptions.traffic_usage')}</span>
-                                                    <span className="text-sm font-black text-text-primary">{formatBytes(used)} / {total > 0 ? formatBytes(total) : '--'}</span>
+                                    {/* Main Content */}
+                                    <div className="flex-1 space-y-6">
+                                        {/* Traffic Progress */}
+                                        <div className="space-y-3">
+                                            <div className="flex justify-between items-baseline">
+                                                <div className="flex items-baseline gap-2">
+                                                    <span className="text-xl font-black text-text-primary tracking-tight">
+                                                        {formatBytes(used)}
+                                                    </span>
+                                                    <span className="text-xs font-bold text-text-tertiary uppercase tracking-wider">
+                                                        / {total > 0 ? formatBytes(total) : '--'}
+                                                    </span>
                                                 </div>
-                                                <span className="text-sm font-black text-primary">{percent.toFixed(1)}%</span>
+                                                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-primary/5 border border-primary/10">
+                                                    <span className="text-xs font-black text-primary">{percent.toFixed(1)}%</span>
+                                                </div>
                                             </div>
-                                            <div className="h-3 w-full bg-black/10 dark:bg-black/40 rounded-full overflow-hidden p-0.5 border border-black/5 dark:border-white/5">
+                                            <div className="h-2 w-full bg-black/5 dark:bg-black/20 rounded-full overflow-hidden p-[2px] border border-black/5 dark:border-white/5">
                                                 <div
-                                                    className="h-full bg-gradient-to-r from-primary to-primary-hover rounded-full transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(var(--primary),0.5)]"
+                                                    className="h-full bg-gradient-to-r from-primary to-primary-hover rounded-full transition-all duration-1000 ease-out shadow-[0_0_8px_rgba(var(--primary),0.3)]"
                                                     style={{ width: `${total > 0 ? percent : 0}%` }}
                                                 />
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center justify-between pt-4 border-t border-border-color">
-                                            <div className="flex items-center gap-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="size-8 rounded-xl bg-black/5 dark:bg-white/5 flex items-center justify-center text-text-secondary">
-                                                        <Database size={14} />
-                                                    </div>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[9px] font-bold text-text-tertiary uppercase">{t('subscriptions.node_count')}</span>
-                                                        <span className="text-xs font-bold text-text-secondary">{t('subscriptions.nodes', { count: profile.nodes.length })}</span>
-                                                    </div>
-                                                </div>
-                                                {profile.expire && (
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="size-8 rounded-xl bg-black/5 dark:bg-white/5 flex items-center justify-center text-text-secondary">
-                                                            <Zap size={14} />
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[9px] font-bold text-text-tertiary uppercase">{t('subscriptions.expire_time')}</span>
-                                                            <span className="text-xs font-bold text-text-secondary">{new Date(profile.expire * 1000).toLocaleDateString()}</span>
-                                                        </div>
-                                                    </div>
-                                                )}
+                                        {/* Metadata Row */}
+                                        <div className="flex items-center gap-6 pt-4 border-t border-black/[0.03] dark:border-white/[0.03]">
+                                            <div className="flex items-center gap-2">
+                                                <Database size={12} className="text-text-tertiary" />
+                                                <span className="text-[11px] font-bold text-text-secondary">
+                                                    {t('subscriptions.nodes', { count: profile.nodes.length })}
+                                                </span>
                                             </div>
 
-                                            <div className="flex items-center gap-1">
-                                                {profile.url && (
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); onUpdate(profile.id); }}
-                                                        className="p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-90"
-                                                        title={t('subscriptions.refresh_tooltip')}
-                                                    >
-                                                        <RefreshCw size={16} />
-                                                    </button>
-                                                )}
-                                                <button
-                                                    onClick={(e) => handleAutoSelect(profile, e)}
-                                                    className={cn(
-                                                        "size-8 flex items-center justify-center rounded-full transition-all active:scale-95",
-                                                        isProfileAutoActive(profile.id)
-                                                            ? "bg-accent-green/10 text-accent-green"
-                                                            : "hover:bg-accent-green/10 text-text-tertiary hover:text-accent-green"
-                                                    )}
-                                                    title={t('auto_select_tooltip')}
-                                                >
-                                                    <Zap size={16} fill={isProfileAutoActive(profile.id) ? "currentColor" : "none"} />
-                                                </button>
-                                                <button
-                                                    onClick={(e) => handleRenameClick(profile.id, profile.name, e)}
-                                                    className="p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-90"
-                                                    title={t('subscriptions.rename')}
-                                                >
-                                                    <Edit2 size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); onDelete(profile.id); }}
-                                                    className="p-2 text-text-secondary hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all active:scale-90"
-                                                    title={t('subscriptions.delete_tooltip')}
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
+                                            {profile.expire && profile.expire > 0 && (
+                                                <div className="flex items-center gap-2">
+                                                    <Zap size={12} className="text-accent-orange" />
+                                                    <span className="text-[11px] font-bold text-text-secondary" title={new Date(profile.expire * 1000).toLocaleString()}>
+                                                        {getRemainingDays(profile.expire)}
+                                                    </span>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
-                                    {/* Subtle Overlay Glow */}
+                                    {/* Decoration Glow */}
                                     <div className="absolute -bottom-10 -right-10 size-40 bg-primary/5 blur-3xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                                 </div>
                             )

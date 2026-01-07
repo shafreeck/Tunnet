@@ -281,6 +281,8 @@
         "node_count": "节点数量",
         "nodes": "{{count}} 节点",
         "expire_time": "到期时间",
+        "remaining_days": "剩余 {{count}} 天",
+        "expired": "已过期",
         "refresh_tooltip": "刷新订阅",
         "delete_tooltip": "删除订阅",
         "no_subs": "暂无订阅信息，请导入配置包",

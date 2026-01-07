@@ -83,9 +83,10 @@ impl<R: Runtime> CoreManager<R> {
         let url = url.trim();
         if url.starts_with("http://") || url.starts_with("https://") {
             let client = Client::new();
+            // Use a more standard User-Agent to ensure the server returns subscription info headers
             let res = client
                 .get(url)
-                .header("User-Agent", "Tunnet/1.0")
+                .header("User-Agent", "ClashMeta/1.3.2")
                 .send()
                 .await
                 .map_err(|e| e.to_string())?;
@@ -114,6 +115,35 @@ impl<R: Runtime> CoreManager<R> {
                                     "total" => profile.total = Some(val),
                                     "expire" => profile.expire = Some(val),
                                     _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Extract name from Content-Disposition if not provided or default
+            if profile.name == "New Subscription" {
+                if let Some(cd_val) = res.headers().get("content-disposition") {
+                    if let Ok(cd_str) = cd_val.to_str() {
+                        // Look for filename*=UTF-8''... or filename="..."
+                        if let Some(idx) = cd_str.find("filename*=") {
+                            let part = &cd_str[idx + 10..];
+                            if let Some(val) = part.split(';').next() {
+                                let val = val.trim().trim_matches('"');
+                                if val.to_uppercase().starts_with("UTF-8''") {
+                                    let encoded = &val[7..];
+                                    if let Ok(decoded) = urlencoding::decode(encoded) {
+                                        profile.name = decoded.to_string();
+                                    }
+                                }
+                            }
+                        } else if let Some(idx) = cd_str.find("filename=") {
+                            let part = &cd_str[idx + 9..];
+                            if let Some(val) = part.split(';').next() {
+                                let val = val.trim().trim_matches('"');
+                                if let Ok(decoded) = urlencoding::decode(val) {
+                                    profile.name = decoded.to_string();
                                 }
                             }
                         }
