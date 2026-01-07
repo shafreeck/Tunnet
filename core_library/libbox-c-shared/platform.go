@@ -1,9 +1,7 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"sync"
 
 	"github.com/sagernet/sing-box/experimental/libbox"
 )
@@ -81,9 +79,3 @@ func (p *CommandPlatformInterface) ClearDNSCache() {
 func (p *CommandPlatformInterface) SendNotification(notification *libbox.Notification) error {
 	return nil
 }
-
-var (
-	instance *libbox.BoxService
-	mu       sync.Mutex
-	cancel   context.CancelFunc
-)
