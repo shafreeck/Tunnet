@@ -83,10 +83,10 @@ impl<R: Runtime> CoreManager<R> {
         let url = url.trim();
         if url.starts_with("http://") || url.starts_with("https://") {
             let client = Client::new();
-            // Use a more standard User-Agent to ensure the server returns subscription info headers
+            // Use sing-box User-Agent to get full node list and subscription info
             let res = client
                 .get(url)
-                .header("User-Agent", "ClashMeta/1.3.2")
+                .header("User-Agent", "sing-box")
                 .send()
                 .await
                 .map_err(|e| e.to_string())?;

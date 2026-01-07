@@ -71,6 +71,7 @@ pub struct Node {
     #[serde(default)]
     pub ping: Option<u64>,
     pub packet_encoding: Option<String>,
+    pub disable_sni: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -251,7 +252,129 @@ pub mod parser {
     }
 
     pub fn parse_subscription(content: &str) -> Vec<Node> {
-        // 0. Try Parsing as Clash YAML first
+        let content = content.trim();
+        if content.is_empty() {
+            return vec![];
+        }
+
+        // 0. Try Parsing as sing-box JSON first (modern airports)
+        if content.starts_with('{') {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(content) {
+                if let Some(outbounds) = v.get("outbounds").and_then(|o| o.as_array()) {
+                    let mut nodes = Vec::new();
+                    for o in outbounds {
+                        let tag = o.get("tag").and_then(|t| t.as_str()).unwrap_or("unnamed");
+                        let protocol = o.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                        let server = o.get("server").and_then(|s| s.as_str()).unwrap_or("");
+                        let port =
+                            o.get("server_port").and_then(|p| p.as_u64()).unwrap_or(0) as u16;
+
+                        if server.is_empty()
+                            || protocol.is_empty()
+                            || protocol == "direct"
+                            || protocol == "block"
+                            || protocol == "dns"
+                        {
+                            continue;
+                        }
+
+                        nodes.push(Node {
+                            id: Uuid::new_v4().to_string(),
+                            name: tag.to_string(),
+                            protocol: protocol.to_string(),
+                            server: server.to_string(),
+                            port,
+                            uuid: o
+                                .get("uuid")
+                                .and_then(|u| u.as_str())
+                                .map(|s| s.to_string()),
+                            cipher: o
+                                .get("method")
+                                .and_then(|m| m.as_str())
+                                .map(|s| s.to_string()),
+                            password: o
+                                .get("password")
+                                .and_then(|p| p.as_str())
+                                .map(|s| s.to_string()),
+                            tls: o.get("tls").is_some(),
+                            network: o
+                                .get("transport")
+                                .and_then(|t| t.get("type"))
+                                .and_then(|t| t.as_str())
+                                .map(|s| s.to_string()),
+                            path: o
+                                .get("transport")
+                                .and_then(|t| t.get("path"))
+                                .and_then(|p| p.as_str())
+                                .map(|s| s.to_string()),
+                            host: o
+                                .get("transport")
+                                .and_then(|t| t.get("headers"))
+                                .and_then(|h| h.get("Host"))
+                                .and_then(|h| h.as_str())
+                                .map(|s| s.to_string()),
+                            location: None,
+                            flow: o
+                                .get("flow")
+                                .and_then(|f| f.as_str())
+                                .map(|s| s.to_string()),
+                            alpn: o
+                                .get("tls")
+                                .and_then(|t| t.get("alpn"))
+                                .and_then(|a| a.as_array())
+                                .map(|arr| {
+                                    arr.iter()
+                                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                        .collect()
+                                }),
+                            insecure: o
+                                .get("tls")
+                                .and_then(|t| t.get("insecure"))
+                                .and_then(|i| i.as_bool())
+                                .unwrap_or(false),
+                            sni: o
+                                .get("tls")
+                                .and_then(|t| t.get("server_name"))
+                                .and_then(|s| s.as_str())
+                                .map(|s| s.to_string()),
+                            disable_sni: o
+                                .get("tls")
+                                .and_then(|t| t.get("disable_sni"))
+                                .and_then(|d| d.as_bool()),
+                            public_key: o
+                                .get("tls")
+                                .and_then(|t| t.get("reality"))
+                                .and_then(|r| r.get("public_key"))
+                                .and_then(|p| p.as_str())
+                                .map(|s| s.to_string()),
+                            short_id: o
+                                .get("tls")
+                                .and_then(|t| t.get("reality"))
+                                .and_then(|r| r.get("short_id"))
+                                .and_then(|s| s.as_str())
+                                .map(|s| s.to_string()),
+                            fingerprint: o
+                                .get("tls")
+                                .and_then(|t| t.get("utls"))
+                                .and_then(|u| u.get("fingerprint"))
+                                .and_then(|f| f.as_str())
+                                .map(|s| s.to_string()),
+                            up: None,
+                            down: None,
+                            obfs: None,
+                            obfs_password: None,
+                            ping: None,
+                            packet_encoding: None,
+                        });
+                    }
+                    if !nodes.is_empty() {
+                        return nodes;
+                    }
+                }
+            }
+        }
+
+        // 1. Try Parsing as Clash YAML (fallback)
         if let Ok(clash_cfg) = serde_yaml::from_str::<ClashConfig>(content) {
             if let Some(proxies) = clash_cfg.proxies {
                 let mut nodes = Vec::new();
@@ -283,6 +406,7 @@ pub mod parser {
                         obfs_password: None,
                         ping: None,
                         packet_encoding: None,
+                        disable_sni: None,
                     };
 
                     // Map specific fields
@@ -428,6 +552,7 @@ pub mod parser {
                         obfs_password: None,
                         ping: None,
                         packet_encoding: None,
+                        disable_sni: None,
                     });
                 } else {
                     // Try legacy format: security:uuid@host:port
@@ -501,6 +626,7 @@ pub mod parser {
                                     obfs_password: None,
                                     ping: None,
                                     packet_encoding: None,
+                                    disable_sni: None,
                                 });
                             }
                         }
@@ -556,6 +682,7 @@ pub mod parser {
                             obfs_password: None,
                             ping: None,
                             packet_encoding: None,
+                            disable_sni: None,
                         };
 
                         if let Some(q) = query {
@@ -645,6 +772,7 @@ pub mod parser {
                             obfs_password: None,
                             ping: None,
                             packet_encoding: None,
+                            disable_sni: None,
                         };
 
                         if let Some(q) = query {
@@ -721,6 +849,7 @@ pub mod parser {
                             obfs_password: None,
                             ping: None,
                             packet_encoding: None,
+                            disable_sni: None,
                         };
 
                         if let Some(q) = query {
@@ -791,6 +920,7 @@ pub mod parser {
                             obfs_password: None,
                             ping: None,
                             packet_encoding: None,
+                            disable_sni: None,
                         };
 
                         if let Some(q) = query {

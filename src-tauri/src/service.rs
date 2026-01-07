@@ -2335,7 +2335,16 @@ impl<R: Runtime> ProxyService<R> {
                 if !node_ids.is_empty() && !node_ids.contains(&n.id) {
                     continue;
                 }
-                target_nodes.push(n.clone());
+                
+                // Only probe supported protocols
+                match n.protocol.as_str() {
+                    "vmess" | "vless" | "shadowsocks" | "ss" | "trojan" | "hysteria2" | "hy2" | "tuic" | "anytls" => {
+                        target_nodes.push(n.clone());
+                    }
+                    _ => {
+                        debug!("Skipping latency probe for unsupported protocol: {}", n.protocol);
+                    }
+                }
             }
         }
 
@@ -2611,6 +2620,20 @@ impl<R: Runtime> ProxyService<R> {
                     None,
                     None,
                     node.fingerprint.clone(),
+                );
+            }
+            "anytls" => {
+                cfg = cfg.with_anytls_outbound(
+                    &tag,
+                    node.server.clone(),
+                    node.port,
+                    node.password.clone().unwrap_or_default(),
+                    node.tls,
+                    node.insecure,
+                    node.sni.clone(),
+                    node.alpn.clone(),
+                    node.fingerprint.clone(),
+                    node.disable_sni,
                 );
             }
             _ => {

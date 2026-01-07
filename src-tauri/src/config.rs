@@ -165,6 +165,8 @@ pub struct OutboundTls {
     pub utls: Option<UtlsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reality: Option<RealityConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disable_sni: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -627,6 +629,7 @@ impl SingBoxConfig {
                     alpn: None,
                     utls: None,
                     reality: None,
+                    disable_sni: None,
                 })
             } else {
                 None
@@ -716,6 +719,7 @@ impl SingBoxConfig {
                     } else {
                         None
                     },
+                    disable_sni: None,
                 })
             } else {
                 None
@@ -779,6 +783,7 @@ impl SingBoxConfig {
                     fingerprint: f,
                 }),
                 reality: None,
+                disable_sni: None,
             }),
             connect_timeout: None,
             up_mbps: up,
@@ -791,6 +796,64 @@ impl SingBoxConfig {
             } else {
                 None
             },
+            congestion_controller: None,
+            udp_relay_mode: None,
+            zero_rtt_handshake: None,
+            heartbeat: None,
+            outbounds: None,
+            url: None,
+            interval: None,
+            tolerance: None,
+            packet_encoding: None,
+            domain_strategy: None,
+        });
+        self
+    }
+    pub fn with_anytls_outbound(
+        mut self,
+        tag: &str,
+        server: String,
+        port: u16,
+        password: String,
+        tls: bool,
+        insecure: bool,
+        sni: Option<String>,
+        alpn: Option<Vec<String>>,
+        fingerprint: Option<String>,
+        disable_sni: Option<bool>,
+    ) -> Self {
+        self.outbounds.push(Outbound {
+            outbound_type: "anytls".to_string(),
+            tag: tag.to_string(),
+            server: Some(server.clone()),
+            server_port: Some(port),
+            method: None,
+            password: Some(password),
+            uuid: None,
+            security: None,
+            flow: None,
+            alter_id: None,
+            transport: None,
+            tls: if tls {
+                Some(OutboundTls {
+                    enabled: true,
+                    server_name: sni.or(Some(server)),
+                    insecure: Some(insecure),
+                    alpn,
+                    utls: fingerprint.map(|f| UtlsConfig {
+                        enabled: true,
+                        fingerprint: f,
+                    }),
+                    reality: None,
+                    disable_sni,
+                })
+            } else {
+                None
+            },
+            connect_timeout: None,
+            up_mbps: None,
+            down_mbps: None,
+            obfs: None,
             congestion_controller: None,
             udp_relay_mode: None,
             zero_rtt_handshake: None,
@@ -847,6 +910,7 @@ impl SingBoxConfig {
                     fingerprint: f,
                 }),
                 reality: None,
+                disable_sni: None,
             }),
             connect_timeout: None,
             up_mbps: None,
@@ -930,6 +994,7 @@ impl SingBoxConfig {
                     } else {
                         None
                     },
+                    disable_sni: None,
                 })
             } else {
                 None
