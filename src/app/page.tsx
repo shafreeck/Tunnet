@@ -212,11 +212,12 @@ export default function Home() {
 
   // Reactive Proxy Controller (The single source of truth for execution)
   useEffect(() => {
-    const pulseId = ++lastPulseIdRef.current
+
     const syncProxy = async () => {
       // 1. If we are disconnected, ensure no proxy is running (if it was)
       if (!isConnected) {
         if (lastAppliedConfigRef.current) {
+          const pulseId = ++lastPulseIdRef.current
           console.log("Disconnecting proxy...")
           setIsLoading(true)
           setConnectionState("disconnecting")
@@ -240,6 +241,7 @@ export default function Home() {
       if (!activeServerIdRef.current) return
 
       const currentConfigKey = `${activeServerIdRef.current}:${proxyMode}:${tunEnabled}`
+
       if (currentConfigKey === lastAppliedConfigRef.current) return
       if (isLoading) return
 
@@ -264,6 +266,8 @@ export default function Home() {
         console.error("Node or Group not found for ID:", activeServerIdRef.current)
         return
       }
+
+      const pulseId = ++lastPulseIdRef.current
 
       setIsLoading(true)
       setConnectionState("connecting")
