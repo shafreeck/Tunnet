@@ -73,7 +73,7 @@ pub struct Node {
     pub packet_encoding: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub enum GroupType {
     Selector,
     UrlTest {
@@ -82,6 +82,19 @@ pub enum GroupType {
         #[serde(default = "default_tolerance")]
         tolerance: u64,
     },
+}
+
+impl Serialize for GroupType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // Frontend expects simple strings "Selector" or "UrlTest"
+        match self {
+            GroupType::Selector => serializer.serialize_str("Selector"),
+            GroupType::UrlTest { .. } => serializer.serialize_str("UrlTest"),
+        }
+    }
 }
 
 fn default_interval() -> u64 {
@@ -133,6 +146,51 @@ where
                 &["Selector", "UrlTest"],
             )),
         },
+        serde_json::Value::Object(map) => {
+            // Check for Legacy External Tag {"UrlTest": {...}}
+            if let Some(inner) = map.get("UrlTest") {
+                // Manually parse legacy format
+                let interval = inner
+                    .get("interval")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or_else(default_interval);
+                let tolerance = inner
+                    .get("tolerance")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or_else(default_tolerance);
+                Ok(GroupType::UrlTest {
+                    interval,
+                    tolerance,
+                })
+            } else {
+                // Check for Internal Tag "type": "UrlTest"
+                if let Some(type_val) = map.get("type") {
+                    if type_val == "UrlTest" {
+                        let interval = map
+                            .get("interval")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or_else(default_interval);
+                        let tolerance = map
+                            .get("tolerance")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or_else(default_tolerance);
+                        return Ok(GroupType::UrlTest {
+                            interval,
+                            tolerance,
+                        });
+                    } else if type_val == "Selector" {
+                        return Ok(GroupType::Selector);
+                    }
+                }
+
+                // Fallback to default (Internal Tagged via #[serde(tag="type")] on enum)
+                // Note: since we removed #[serde(tag="type")] from enum def to support string enum,
+                // we might need manual parsing here if above fails.
+                // But let's try standard deserialize.
+                serde_json::from_value(serde_json::Value::Object(map))
+                    .map_err(serde::de::Error::custom)
+            }
+        }
         _ => serde_json::from_value(v).map_err(serde::de::Error::custom),
     }
 }

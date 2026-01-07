@@ -1952,11 +1952,17 @@ impl<R: Runtime> ProxyService<R> {
     pub fn get_groups(&self) -> Result<Vec<crate::profile::Group>, String> {
         let saved_groups = self.manager.load_groups().unwrap_or_default();
 
+        // Helper to find saved state
+        let get_saved = |id: &str| -> Option<&crate::profile::Group> {
+            saved_groups.iter().find(|g| g.id == id)
+        };
+
         // Filter out system/implicit groups from saved list to avoid duplicates/staleness.
-        // We will regenerate them fresh and re-apply the 'selected' state.
+        // We will regenerate them fresh and re-apply the 'selected' state and 'group_type'.
         let mut final_groups: Vec<crate::profile::Group> = saved_groups
-            .into_iter()
+            .iter()
             .filter(|g| !g.id.starts_with("system:"))
+            .cloned()
             .collect();
 
         // Add Implicit Groups (Freshly generated)
@@ -1973,48 +1979,46 @@ impl<R: Runtime> ProxyService<R> {
         let mut global_group = crate::profile::Group {
             id: "system:global".to_string(),
             name: "GLOBAL".to_string(),
-            group_type: crate::profile::GroupType::Selector,
+            // Default to UrlTest for GLOBAL so "Auto Select" works by default
+            group_type: crate::profile::GroupType::UrlTest {
+                interval: 600,
+                tolerance: 50,
+            },
             source: crate::profile::GroupSource::Static {
                 node_ids: all_node_ids,
             },
             icon: Some("globe".to_string()),
             selected: None,
         };
-        // Restore selection if saved
-        if let Some(saved) = self
-            .manager
-            .load_groups()
-            .unwrap_or_default()
-            .iter()
-            .find(|g| g.id == global_group.id)
-        {
+        // Restore selection only. 
+        // We FORCE UrlTest for system:global because selecting this group implies "Auto Mode".
+        // Manual selection is done by picking specific nodes, not by setting this group to Selector.
+        if let Some(saved) = get_saved(&global_group.id) {
             global_group.selected = saved.selected.clone();
+            // Do NOT restore group_type. Always use the definition above (UrlTest).
         }
-        // Insert Global at start of list (index 0 relative to user groups? or absolute?)
-        // Usually Global is first.
+        // Insert Global at start of list
         final_groups.insert(0, global_group);
 
-        // 2. Subscription Groups
+        // 2. Subscription Groups (Default to UrlTest/Automatic)
         for p in &profiles {
             let node_ids = p.nodes.iter().map(|n| n.id.clone()).collect();
             let mut sub_group = crate::profile::Group {
                 id: format!("system:sub:{}", p.id),
                 name: p.name.clone(),
-                group_type: crate::profile::GroupType::Selector,
+                group_type: crate::profile::GroupType::UrlTest {
+                    interval: 600,
+                    tolerance: 50,
+                },
                 source: crate::profile::GroupSource::Static { node_ids },
                 icon: Some("layers".to_string()),
                 selected: None,
             };
 
-            // Restore selection
-            if let Some(saved) = self
-                .manager
-                .load_groups()
-                .unwrap_or_default()
-                .iter()
-                .find(|g| g.id == sub_group.id)
-            {
+            // Restore selection only
+            if let Some(saved) = get_saved(&sub_group.id) {
                 sub_group.selected = saved.selected.clone();
+                // do not restore group_type, force Automatic
             }
             final_groups.push(sub_group);
         }
@@ -2048,15 +2052,10 @@ impl<R: Runtime> ProxyService<R> {
                 selected: None,
             };
 
-            // Restore selection
-            if let Some(saved) = self
-                .manager
-                .load_groups()
-                .unwrap_or_default()
-                .iter()
-                .find(|g| g.id == region_group.id)
-            {
+            // Restore selection and group type
+            if let Some(saved) = get_saved(&region_group.id) {
                 region_group.selected = saved.selected.clone();
+                region_group.group_type = saved.group_type.clone();
             }
             final_groups.push(region_group);
         }
@@ -2090,6 +2089,15 @@ impl<R: Runtime> ProxyService<R> {
         let mut groups = self.manager.load_groups().unwrap_or_default();
         if let Some(pos) = groups.iter().position(|g| g.id == group.id) {
             groups[pos] = group;
+            self.manager.save_groups(&groups)?;
+            if self.is_proxy_running() {
+                let tun = *self.tun_mode.lock().unwrap();
+                self.restart_proxy_by_config(tun).await
+            } else {
+                Ok(())
+            }
+        } else if group.id.starts_with("system:") {
+            groups.push(group);
             self.manager.save_groups(&groups)?;
             if self.is_proxy_running() {
                 let tun = *self.tun_mode.lock().unwrap();
