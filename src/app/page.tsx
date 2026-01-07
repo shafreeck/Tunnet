@@ -982,7 +982,7 @@ export default function Home() {
       activeServerId.includes(":")
     )
 
-    if (isConnected && isGroup) {
+    if (isConnected && connectionState === "idle" && isGroup) {
       const fetchStatus = async () => {
         try {
           const status: string = await invoke("get_group_status", { groupId: activeServerId as string })
@@ -998,7 +998,7 @@ export default function Home() {
       setActiveAutoNodeId(null)
     }
     return () => clearInterval(timer)
-  }, [isConnected, activeServerId, groups])
+  }, [isConnected, connectionState, activeServerId, groups])
 
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<string | null>(null)
 
