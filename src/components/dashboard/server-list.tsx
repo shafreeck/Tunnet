@@ -567,7 +567,25 @@ function ServerItem({ server, isSelected, isRunning, isLoading, connectionState,
 
             <div className="size-8 md:size-10 rounded-full bg-black/5 dark:bg-black/30 overflow-hidden flex-shrink-0 mr-2 md:mr-4 shadow-inner ml-1 md:ml-2 flex items-center justify-center">
                 {server.flagUrl ? (
-                    <img className="w-full h-full object-cover" src={server.flagUrl} alt={server.country} />
+                    <img
+                        className="w-full h-full object-cover"
+                        src={server.flagUrl}
+                        alt={server.country}
+                        onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            if (target.src.includes("jsdelivr")) return;
+                            try {
+                                const src = target.src;
+                                const filename = src.split('/').pop();
+                                const code = filename?.split('.')[0];
+                                if (code && code.length === 2) {
+                                    target.src = `https://cdn.jsdelivr.net/gh/HatScripts/circle-flags@latest/flags/${code}.svg`;
+                                }
+                            } catch (err) {
+                                // ignore
+                            }
+                        }}
+                    />
                 ) : (
                     <Globe className="text-gray-400 size-5 md:size-6 opacity-50" />
                 )}

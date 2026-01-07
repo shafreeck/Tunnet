@@ -1,19 +1,82 @@
-const PREMIUM_FLAGS = ["us", "hk", "jp", "tw", "sg", "de", "kr", "gb", "fr", "ca", "au", "ru", "nl", "tr", "vn", "th"]
-
-export const getFlagUrlFromCode = (code: string): string => {
-    const lower = code.toLowerCase()
-    if (lower === "un") return ""
-    if (PREMIUM_FLAGS.includes(lower)) {
-        return `/flags/${lower}.png`
-    }
-    // using jsdelivr for better CDN performance in CN
-    return `https://cdn.jsdelivr.net/gh/HatScripts/circle-flags@latest/flags/${lower}.svg`
+// Comprehensive map of country names/codes (English & Chinese)
+const COUNTRY_MAP: Record<string, string> = {
+    // Common & Major
+    "united states": "us", "usa": "us", "america": "us", "美国": "us", "美": "us",
+    "united kingdom": "gb", "uk": "gb", "britain": "gb", "great britain": "gb", "英国": "gb", "英": "gb",
+    "china": "cn", "中国": "cn", "中": "cn",
+    "hong kong": "hk", "hongkong": "hk", "香港": "hk", "港": "hk",
+    "taiwan": "tw", "台湾": "tw", "台": "tw",
+    "japan": "jp", "日本": "jp", "日": "jp",
+    "singapore": "sg", "新加坡": "sg", "新": "sg", "狮城": "sg",
+    "korea": "kr", "south korea": "kr", "republic of korea": "kr", "韩国": "kr", "韩": "kr",
+    "germany": "de", "deutschland": "de", "德国": "de", "德": "de",
+    "france": "fr", "法国": "fr", "法": "fr",
+    "canada": "ca", "加拿大": "ca", "加": "ca",
+    "australia": "au", "澳大利亚": "au", "澳洲": "au", "奥": "au",
+    "russia": "ru", "russian federation": "ru", "俄罗斯": "ru", "俄": "ru",
+    "india": "in", "印度": "in", "印": "in",
+    "netherlands": "nl", "holland": "nl", "荷兰": "nl", "荷": "nl",
+    "turkey": "tr", "turkiye": "tr", "土耳其": "tr", "土": "tr",
+    "vietnam": "vn", "viet nam": "vn", "越南": "vn", "越": "vn",
+    "thailand": "th", "泰国": "th", "泰": "th",
+    "malaysia": "my", "马来西亚": "my", "马": "my",
+    "philippines": "ph", "菲律宾": "ph", "菲": "ph",
+    "indonesia": "id", "印尼": "id",
+    "ukraine": "ua", "乌克兰": "ua",
+    "italy": "it", "意大利": "it", "意": "it",
+    "spain": "es", "西班牙": "es", "西": "es",
+    "brazil": "br", "brazil": "br", "巴西": "br",
+    "argentina": "ar", "阿根廷": "ar",
+    "switzerland": "ch", "瑞士": "ch",
+    "sweden": "se", "瑞典": "se",
+    "norway": "no", "挪威": "no",
+    "finland": "fi", "芬兰": "fi",
+    "denmark": "dk", "丹麦": "dk",
+    "poland": "pl", "波兰": "pl",
+    "austria": "at", "奥地利": "at",
+    "belgium": "be", "比利时": "be",
+    "ireland": "ie", "爱尔兰": "ie",
+    "czech republic": "cz", "czechia": "cz", "捷克": "cz",
+    "hungary": "hu", "匈牙利": "hu",
+    "romania": "ro", "罗马尼亚": "ro",
+    "bulgaria": "bg", "保加利亚": "bg",
+    "greece": "gr", "希腊": "gr",
+    "israel": "il", "以色列": "il",
+    "uae": "ae", "united arab emirates": "ae", "阿联酋": "ae",
+    "saudi arabia": "sa", "沙特": "sa", "沙特阿拉伯": "sa",
+    "south africa": "za", "南非": "za",
+    "egypt": "eg", "埃及": "eg",
+    "nigeria": "ng", "尼日利亚": "ng",
+    "mexico": "mx", "墨西哥": "mx",
+    "chile": "cl", "智利": "cl",
+    "colombia": "co", "哥伦比亚": "co",
+    "peru": "pe", "秘鲁": "pe",
+    "new zealand": "nz", "新西兰": "nz",
+    "pakistan": "pk", "巴基斯坦": "pk",
+    "bangladesh": "bd", "孟加拉": "bd",
+    "iran": "ir", "伊朗": "ir",
+    "iraq": "iq", "伊拉克": "iq",
+    "kazakhstan": "kz", "哈萨克斯坦": "kz",
+    "uzbekistan": "uz", "乌兹别克斯坦": "uz",
+    "kyrgyzstan": "kg", "吉尔吉斯斯坦": "kg",
+    "iceland": "is", "冰岛": "is",
+    "estonia": "ee", "爱沙尼亚": "ee",
+    "latvia": "lv", "拉脱维亚": "lv",
+    "lithuania": "lt", "立陶宛": "lt",
+    "moldova": "md", "摩尔多瓦": "md",
+    "serbia": "rs", "塞尔维亚": "rs",
+    "croatia": "hr", "克罗地亚": "hr",
+    "slovakia": "sk", "斯洛伐克": "sk",
+    "slovenia": "si", "斯洛文尼亚": "si",
+    "portugal": "pt", "葡萄牙": "pt",
+    "luxembourg": "lu", "卢森堡": "lu",
+    "cyprus": "cy", "塞浦路斯": "cy",
+    "malta": "mt", "马耳他": "mt",
 }
 
 // Helper for safer matching of short codes
 const matchCode = (text: string, code: string): boolean => {
     // Match only if surrounded by non-alphabetic chars or start/end of string
-    // e.g. "US" matches "Node-US", "US Node", "[US]", but NOT "Plus" or "Status"
     const regex = new RegExp(`(?:^|[^a-zA-Z])${code}(?:[^a-zA-Z]|$)`, 'i')
     return regex.test(text)
 }
@@ -21,67 +84,63 @@ const matchCode = (text: string, code: string): boolean => {
 export const getCountryCode = (nodeName: string): string => {
     const lower = nodeName.toLowerCase()
 
-    // Full names (safe to use includes usually, but strict is better if possible. 
-    // Keep includes for full names as they are specific enough)
-    if (lower.includes("hong kong")) return "hk"
-    if (lower.includes("taiwan")) return "tw"
-    if (lower.includes("japan")) return "jp"
-    if (lower.includes("korea")) return "kr"
-    if (lower.includes("singapore")) return "sg"
-    if (lower.includes("united states")) return "us"
-    if (lower.includes("united kingdom")) return "gb"
-    if (lower.includes("germany")) return "de"
-    if (lower.includes("france")) return "fr"
-    if (lower.includes("canada")) return "ca"
-    if (lower.includes("australia")) return "au"
-    if (lower.includes("india")) return "in"
-    if (lower.includes("russia")) return "ru"
-    if (lower.includes("netherlands")) return "nl"
-    if (lower.includes("turkey")) return "tr"
-    if (lower.includes("vietnam")) return "vn"
-    if (lower.includes("thailand")) return "th"
+    // 0. Optimization: If input is exactly 2 chars, assume it is a code
+    if (lower.length === 2 && /^[a-z]+$/.test(lower)) {
+        return lower
+    }
 
-    // Short codes with boundary check
-    if (matchCode(nodeName, "hk") || lower.includes("香")) return "hk"
-    if (matchCode(nodeName, "tw") || lower.includes("台") || lower.includes("tw")) return "tw" // 'tw' is rare in words, allow loose? No, 'network' ends with k, 'software' 'tw'? No. safe-ish. But let's stick to matchCode for consistency where possible.
-    // Actually, preserving original loose "tw" check might be safer for compatibility if users have weird names like "NodeTW". 
-    // "NodeTW" -> matchCode fails (W is letter).
-    // Let's stick to strict matchCode for all 2-letter codes to solve the "vultr" issue and others.
+    // 1. Check strict mapping
+    for (const [name, code] of Object.entries(COUNTRY_MAP)) {
+        // Chinese characters (any length) - handles "瑞士", "智利", "美国" etc.
+        if (/[\u4e00-\u9fa5]/.test(name)) {
+            if (lower.includes(name)) return code
+        }
+        // English names (length > 2 to avoid false positives)
+        else if (name.length > 2) {
+            if (lower.includes(name)) return code
+        }
+    }
 
-    // Re-evaluating: "NodeTW" is common. matchCode regex requires non-alpha-separator.
-    // If I enforce separator, "NodeTW" fails.
-    // Maybe just fix "tr", "in", "us", "de", "to", "at", "it", "is"?
-    // "vultr" -> "tr" fail.
-    // "plus" -> "us" fail.
-    // "code" -> "de" fail.
-    // "rain" -> "in" fail.
-
-    // For now, let's use matchCode for the ones causing issues, or all of them for correctness.
-    if (matchCode(nodeName, "jp") || lower.includes("日")) return "jp"
-    if (matchCode(nodeName, "kr") || lower.includes("韩")) return "kr"
-    if (matchCode(nodeName, "sg") || lower.includes("新")) return "sg"
-    if (matchCode(nodeName, "us") || lower.includes("usa") || lower.includes("美")) return "us"
-    if (matchCode(nodeName, "uk") || lower.includes("britain") || lower.includes("英")) return "gb"
-    if (matchCode(nodeName, "de") || lower.includes("德")) return "de"
-    if (matchCode(nodeName, "fr") || lower.includes("法")) return "fr"
-    if (matchCode(nodeName, "ca") || lower.includes("加")) return "ca"
-    if (matchCode(nodeName, "au") || lower.includes("奥")) return "au"
-    if (matchCode(nodeName, "in") || lower.includes("印")) return "in"
-    if (matchCode(nodeName, "ru") || lower.includes("俄")) return "ru"
-    if (matchCode(nodeName, "nl") || lower.includes("荷")) return "nl"
-    if (matchCode(nodeName, "tr") || lower.includes("土")) return "tr"
-    if (matchCode(nodeName, "vn") || lower.includes("越")) return "vn"
-    if (matchCode(nodeName, "th") || lower.includes("泰")) return "th"
-
-    // Legacy fallback for really common ones if matchCode is too strict?
-    // "US_Node" -> matchCode("US_Node", "us") -> OK (_)
-    // "Node-US" -> OK (-)
-    // "NodeUS" -> FAIL.
-    // "USNode" -> FAIL.
-    // Is "NodeUS" common? Maybe. 
-    // But "Plus" is more common. False positives are worse than false negatives (default icon).
+    // 2. Fallback to manual/regex checks for common short codes
+    if (matchCode(nodeName, "hk")) return "hk"
+    if (matchCode(nodeName, "tw")) return "tw"
+    if (matchCode(nodeName, "jp")) return "jp"
+    if (matchCode(nodeName, "kr")) return "kr"
+    if (matchCode(nodeName, "sg")) return "sg"
+    if (matchCode(nodeName, "us")) return "us"
+    if (matchCode(nodeName, "uk") || matchCode(nodeName, "gb")) return "gb"
+    if (matchCode(nodeName, "de")) return "de"
+    if (matchCode(nodeName, "fr")) return "fr"
+    if (matchCode(nodeName, "ca")) return "ca"
+    if (matchCode(nodeName, "au")) return "au"
+    if (matchCode(nodeName, "in")) return "in"
+    if (matchCode(nodeName, "ru")) return "ru"
+    if (matchCode(nodeName, "nl")) return "nl"
+    if (matchCode(nodeName, "tr")) return "tr"
+    if (matchCode(nodeName, "vn")) return "vn"
+    if (matchCode(nodeName, "th")) return "th"
+    if (matchCode(nodeName, "br")) return "br"
+    if (matchCode(nodeName, "ar")) return "ar"
+    if (matchCode(nodeName, "my")) return "my"
+    if (matchCode(nodeName, "id")) return "id"
+    if (matchCode(nodeName, "ph")) return "ph"
+    if (matchCode(nodeName, "it")) return "it"
+    if (matchCode(nodeName, "es")) return "es"
 
     return "un"
+}
+
+export const getFlagUrlFromCode = (code: string): string => {
+    const lower = code.toLowerCase()
+    if (lower === "un" || !lower) return ""
+    // Return local path; consumer must handle 404 fallback
+    return `/flags/${lower}.png`
+}
+
+export const getCdnFlagUrl = (code: string): string => {
+    const lower = code.toLowerCase()
+    // Using jsdelivr for better CDN performance in CN
+    return `https://cdn.jsdelivr.net/gh/HatScripts/circle-flags@latest/flags/${lower}.svg`
 }
 
 export const getFlagUrl = (nodeName: string): string => {
@@ -91,24 +150,13 @@ export const getFlagUrl = (nodeName: string): string => {
 
 export const getCountryName = (nodeName: string): string => {
     const code = getCountryCode(nodeName)
-    switch (code) {
-        case "hk": return "Hong Kong"
-        case "tw": return "Taiwan"
-        case "jp": return "Japan"
-        case "kr": return "Korea"
-        case "sg": return "Singapore"
-        case "us": return "United States"
-        case "gb": return "United Kingdom"
-        case "de": return "Germany"
-        case "fr": return "France"
-        case "ca": return "Canada"
-        case "au": return "Australia"
-        case "in": return "India"
-        case "ru": return "Russia"
-        case "nl": return "Netherlands"
-        case "tr": return "Turkey"
-        case "vn": return "Vietnam"
-        case "th": return "Thailand"
-        default: return "Unknown Location"
+    try {
+        if (code && code !== 'un') {
+            const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
+            return regionNames.of(code.toUpperCase()) || "Unknown Location"
+        }
+    } catch (e) {
+        // Fallback or old browser support
     }
+    return "Unknown Location"
 }

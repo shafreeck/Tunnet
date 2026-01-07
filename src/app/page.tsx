@@ -526,15 +526,27 @@ export default function Home() {
   // Helper to map backend nodes to UI servers
   const updateServersState = (nodes: any[]) => {
     const safeNodes = Array.isArray(nodes) ? nodes : [];
-    const mapped = safeNodes.map((node: any) => ({
-      ...node,
-      provider: node.protocol.toUpperCase(),
-      flagUrl: getFlagUrl(node.location?.country || node.name || ""),
-      countryCode: getCountryCode(node.location?.country || node.name || ""),
-      country: getCountryName(node.location?.country || node.name || ""),
-      status: "idle",
-      ping: node.ping ?? node.location?.latency ?? 0
-    }))
+    const mapped = safeNodes.map((node: any) => {
+      // Resolve location info: Try explicit location first. 
+      // If it looks invalid (returns 'un' code), fallback to parsing the name.
+      const locRaw = node.location?.country || "";
+      const nameRaw = node.name || "";
+
+      const locCode = getCountryCode(locRaw);
+      const useLoc = locCode !== "un";
+
+      const sourceString = useLoc ? locRaw : nameRaw;
+
+      return {
+        ...node,
+        provider: node.protocol.toUpperCase(),
+        flagUrl: getFlagUrl(sourceString),
+        countryCode: getCountryCode(sourceString),
+        country: getCountryName(sourceString),
+        status: "idle",
+        ping: node.ping ?? node.location?.latency ?? 0
+      }
+    })
     setServers(mapped)
   }
 
@@ -796,7 +808,7 @@ export default function Home() {
 
   const handlePingNode = async (id: string) => {
     if (id === "ALL") {
-      await checkLatency(servers)
+      await checkLatency(servers, true)
       return
     }
 

@@ -56,7 +56,25 @@ export function ServerCard({
             <div className="flex justify-between items-start mb-3">
                 <div className="relative size-10 rounded-full overflow-hidden shadow-sm border border-border-color bg-black/5 dark:bg-black/20 flex items-center justify-center">
                     {flagUrl ? (
-                        <img src={flagUrl} alt={countryName} className="w-full h-full object-cover" />
+                        <img
+                            src={flagUrl}
+                            alt={countryName}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                if (target.src.includes("jsdelivr")) return;
+                                try {
+                                    const src = target.src;
+                                    const filename = src.split('/').pop();
+                                    const code = filename?.split('.')[0];
+                                    if (code && code.length === 2) {
+                                        target.src = `https://cdn.jsdelivr.net/gh/HatScripts/circle-flags@latest/flags/${code}.svg`;
+                                    }
+                                } catch (err) {
+                                    // ignore
+                                }
+                            }}
+                        />
                     ) : (
                         <Globe className="text-text-tertiary size-5" />
                     )}
