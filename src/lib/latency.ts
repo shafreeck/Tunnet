@@ -2,8 +2,8 @@ export function getLatencyColor(latency?: number | null): string {
     if (latency === undefined || latency === null) return "text-text-tertiary"
     if (latency === 0) return "text-text-tertiary"
     if (latency < 0) return "text-red-500" // Error
-    if (latency < 100) return "text-green-500" // Excellent
-    if (latency < 300) return "text-yellow-500" // Fair
+    if (latency < 200) return "text-green-500" // Excellent
+    if (latency <= 600) return "text-yellow-500" // Fair
     return "text-red-500" // Poor
 }
 

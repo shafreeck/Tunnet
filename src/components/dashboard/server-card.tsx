@@ -30,15 +30,15 @@ export function ServerCard({
 
     const getPingColor = (p?: number) => {
         if (p === undefined || p === 0) return "text-text-tertiary"
-        if (p < 100) return "text-emerald-400"
-        if (p < 200) return "text-yellow-400"
+        if (p < 200) return "text-emerald-400"
+        if (p <= 600) return "text-yellow-400"
         return "text-red-400"
     }
 
     const getLatencyGrade = (p?: number) => {
         if (p === undefined || p === 0) return { key: 'locations.card.grade.unknown', color: 'text-text-tertiary' }
-        if (p < 100) return { key: 'locations.card.grade.excellent', color: 'text-emerald-400' }
-        if (p < 200) return { key: 'locations.card.grade.good', color: 'text-yellow-400' }
+        if (p < 200) return { key: 'locations.card.grade.excellent', color: 'text-emerald-400' }
+        if (p <= 600) return { key: 'locations.card.grade.good', color: 'text-yellow-400' }
         return { key: 'locations.card.grade.poor', color: 'text-red-400' }
     }
 
@@ -81,7 +81,7 @@ export function ServerCard({
                 </div>
                 {ping !== undefined && ping > 0 && (
                     <div className="flex items-center gap-1.5 bg-black/5 dark:bg-black/40 px-2 py-1 rounded-full border border-border-color">
-                        <div className={cn("size-1.5 rounded-full", ping < 100 ? "bg-emerald-500" : ping < 200 ? "bg-yellow-500" : "bg-red-500")} />
+                        <div className={cn("size-1.5 rounded-full", ping < 200 ? "bg-emerald-500" : ping <= 600 ? "bg-yellow-500" : "bg-red-500")} />
                         <span className={cn("text-[10px] font-bold font-mono", getPingColor(ping))}>
                             {ping}ms
                         </span>

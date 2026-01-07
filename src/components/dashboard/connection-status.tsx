@@ -62,6 +62,15 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
         return isConnected ? t('status.active') : t('status.stopped')
     }
 
+    const [imgError, setImgError] = React.useState(false)
+
+    // Reset error state when desired flag URL changes
+    React.useEffect(() => {
+        setImgError(false)
+    }, [displayFlag])
+
+    const finalFlag = imgError ? flagUrl : displayFlag
+
     return (
         <div className="flex flex-col items-center justify-center py-6 md:py-10 relative">
             <div className="relative mb-6 group cursor-pointer" onClick={isLoading ? undefined : onMainToggle}>
@@ -73,11 +82,12 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                         </div>
                     ) : (
                         <>
-                            {displayFlag ? (
+                            {finalFlag && !imgError ? (
                                 <img
                                     className={`w-full h-full object-cover transition-all duration-700 ${isConnected ? 'opacity-60 scale-110' : 'opacity-20 grayscale scale-100'}`}
                                     alt="Country Flag"
-                                    src={displayFlag}
+                                    src={finalFlag}
+                                    onError={() => setImgError(true)}
                                 />
                             ) : (
                                 <Globe className={`w-1/2 h-1/2 transition-colors duration-500 ${isConnected ? 'text-accent-green opacity-60' : 'text-gray-500 opacity-20'}`} />
@@ -165,7 +175,9 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                     className={`flex items-center gap-1.5 ${isConnected ? `cursor-pointer transition-colors active:scale-95 ${getLatencyColor(latency)}` : 'text-text-secondary'} ${isLatencyLoading ? 'opacity-70 cursor-wait' : ''}`}
                     title={isConnected ? t('dashboard.node_info') : undefined} // Or a specific ping tooltip
                 >
-                    <Bolt className={`size-3.5 ${isConnected ? 'text-text-primary' : ''} ${isLatencyLoading ? 'animate-spin' : ''}`} />
+                    <div className={isLatencyLoading ? 'animate-spin' : ''}>
+                        <Bolt className={`size-3.5 ${isConnected ? 'text-text-primary' : ''}`} />
+                    </div>
                     <span className="font-mono pt-[1.5px] leading-none">
                         {isConnected ? formatLatency(latency) : '--'}
                     </span>
