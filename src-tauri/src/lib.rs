@@ -350,7 +350,9 @@ static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = tauri::Builder::default().plugin(tauri_plugin_os::init());
+    let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_clipboard_manager::init());
 
     #[cfg(desktop)]
     {
@@ -404,11 +406,35 @@ pub fn run() {
             {
                 use tauri::menu::{Menu, MenuItem, Submenu};
                 let app_handle = app.handle();
+                // Create application menu (App Name)
                 let quit_i =
                     MenuItem::with_id(app_handle, "quit", "Quit Tunnet", true, Some("Cmd+Q"))
                         .unwrap();
-                let submenu = Submenu::with_items(app_handle, "Tunnet", true, &[&quit_i]).unwrap();
-                let menu = Menu::with_items(app_handle, &[&submenu]).unwrap();
+                let app_menu = Submenu::with_items(app_handle, "Tunnet", true, &[&quit_i]).unwrap();
+
+                // Create Edit menu (Critical for Copy/Paste shortcuts to work)
+                let undo_i =
+                    tauri::menu::PredefinedMenuItem::undo(app_handle, Some("Undo")).unwrap();
+                let redo_i =
+                    tauri::menu::PredefinedMenuItem::redo(app_handle, Some("Redo")).unwrap();
+                let cut_i = tauri::menu::PredefinedMenuItem::cut(app_handle, Some("Cut")).unwrap();
+                let copy_i =
+                    tauri::menu::PredefinedMenuItem::copy(app_handle, Some("Copy")).unwrap();
+                let paste_i =
+                    tauri::menu::PredefinedMenuItem::paste(app_handle, Some("Paste")).unwrap();
+                let select_all_i =
+                    tauri::menu::PredefinedMenuItem::select_all(app_handle, Some("Select All"))
+                        .unwrap();
+
+                let edit_menu = Submenu::with_items(
+                    app_handle,
+                    "Edit",
+                    true,
+                    &[&undo_i, &redo_i, &cut_i, &copy_i, &paste_i, &select_all_i],
+                )
+                .unwrap();
+
+                let menu = Menu::with_items(app_handle, &[&app_menu, &edit_menu]).unwrap();
                 app_handle.set_menu(menu).unwrap();
             }
 
