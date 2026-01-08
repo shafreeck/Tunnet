@@ -229,6 +229,10 @@ pub struct RuleSet {
     pub path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub download_detour: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_interval: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

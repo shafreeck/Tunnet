@@ -210,6 +210,39 @@ fn main() {
 
         println!("cargo:rustc-link-search=native={}", out_dir.display());
         println!("cargo:rustc-link-lib=dylib=box");
+    } else if target_os == "linux" {
+        let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+        let libbox_dir = Path::new(&manifest_dir).join("../core_library/libbox-c-shared");
+
+        // Only rebuild if Go files change
+        println!(
+            "cargo:rerun-if-changed={}",
+            libbox_dir.join("main.go").display()
+        );
+
+        // Build Go library as static archive
+        let status = Command::new("go")
+            .current_dir(&libbox_dir)
+            .args(&[
+                "build",
+                "-tags",
+                "with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls",
+                "-buildmode=c-archive",
+                "-o",
+                "libbox.a",
+                "main.go",
+            ])
+            .env("CGO_ENABLED", "1")
+            .status()
+            .expect("Failed to execute go build");
+
+        if !status.success() {
+            panic!("Go build failed");
+        }
+
+        // Link instructions
+        println!("cargo:rustc-link-search=native={}", libbox_dir.display());
+        println!("cargo:rustc-link-lib=static=box");
     } else if target_os == "windows" {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
         let libbox_dir = Path::new(&manifest_dir).join("../core_library/libbox-c-shared");
@@ -253,25 +286,19 @@ fn main() {
             panic!("gendef failed. Ensure 'gendef' (MinGW-w64) is in your PATH.");
         }
 
-        // Create import library (.lib) for MSVC using lib.exe with absolute path
-        // derived from previous error logs showing linker path
-        let lib_exe_path = r"C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\bin\HostX64\x64\lib.exe";
-
-        let status = Command::new(lib_exe_path)
+        // Create import library (.lib) for MSVC using lib.exe
+        // We assume lib.exe is in the PATH (e.g. running from Dev Cmd or configured in CI)
+        let status = Command::new("lib.exe")
             .current_dir(&libbox_dir)
             .args(&["/DEF:libbox.def", "/OUT:box.lib", "/MACHINE:X64", "/NOLOGO"])
             .status();
 
-        // If lib.exe is not found or fails, try dlltool as fallback (or just fail if verified lib.exe is path)
-        // For now, let's expect lib.exe to work if we are in MSVC env.
-        // If Command::new fails (not found), status is Err.
         let success = status.map(|s| s.success()).unwrap_or(false);
 
         if !success {
-            // Fallback to dlltool if lib.exe failed (maybe not in PATH)
-            // We can print a warning but we already tried dlltool and it likely failed linking.
-            // Let's force panic to see if lib.exe was found.
-            panic!("Failed to execute lib.exe. Ensure you have MSVC Build Tools installed and available.");
+            // Try to locate lib.exe via vswhere or standard locations?
+            // For now, panic with a helpful message.
+            panic!("Failed to execute lib.exe. Ensure you have MSVC Build Tools installed and available in PATH.");
         }
 
         // Link instructions

@@ -131,6 +131,12 @@
                 "desc": "Stores all runtime dynamic data."
             },
             "component": "Component Management",
+            "geodata": {
+                "title": "Routing Database (SRS)",
+                "desc": "GeoIP and GeoSite databases used for routing rules. Automatically synced from GitHub by default.",
+                "refresh": "Refresh Now",
+                "refresh_desc": "Clear cache and re-download the latest database files from GitHub."
+            },
             "core": {
                 "title": "Clash API Address",
                 "desc": "Interface address for external control.",

@@ -591,7 +591,8 @@ pub fn run() {
             get_proxy_status,
             edit_profile,
             check_node_pings,
-            get_group_status
+            get_group_status,
+            refresh_geodata
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -665,6 +666,11 @@ async fn get_group_status(
     group_id: String,
 ) -> Result<String, String> {
     service.get_group_status(&group_id).await
+}
+
+#[tauri::command]
+async fn refresh_geodata(service: State<'_, ProxyService<tauri::Wry>>) -> Result<(), String> {
+    service.refresh_geodata().await
 }
 
 pub mod parsing_test_mod;

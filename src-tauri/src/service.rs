@@ -50,7 +50,7 @@ pub struct ProxyService<R: Runtime> {
     start_lock: tokio::sync::Mutex<()>, // Ensure serialized start operations
     internal_client: reqwest::Client,
     active_network_services: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
-    local_log_writer: Mutex<Option<os_pipe::PipeWriter>>,
+    local_log_fd: Mutex<Option<i64>>,
     log_running: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -76,7 +76,7 @@ impl<R: Runtime> ProxyService<R> {
             manager,
             internal_client,
             active_network_services: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
-            local_log_writer: Mutex::new(None),
+            local_log_fd: Mutex::new(None),
             log_running: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
@@ -303,17 +303,17 @@ impl<R: Runtime> ProxyService<R> {
 
                 #[cfg(unix)]
                 let log_fd = {
-                    use std::os::unix::io::AsRawFd;
-                    writer.as_raw_fd() as i64
+                    use std::os::unix::io::IntoRawFd;
+                    writer.into_raw_fd() as i64
                 };
                 #[cfg(windows)]
                 let log_fd = {
-                    use std::os::windows::io::AsRawHandle;
-                    writer.as_raw_handle() as i64
+                    use std::os::windows::io::IntoRawHandle;
+                    writer.into_raw_handle() as i64
                 };
 
-                // Store writer to keep FD alive
-                *self.local_log_writer.lock().unwrap() = Some(writer);
+                // Store FD for reference (Go owns it now, we don't close it)
+                *self.local_log_fd.lock().unwrap() = Some(log_fd);
                 self.log_running
                     .store(true, std::sync::atomic::Ordering::SeqCst);
 
@@ -979,43 +979,68 @@ impl<R: Runtime> ProxyService<R> {
         cfg = cfg.with_direct().with_block();
 
         if let Some(route) = &mut cfg.route {
-            let geoip_cn_path = if tun_mode {
-                std::path::Path::new("/tmp")
-                    .join("geoip-cn.srs")
-                    .to_string_lossy()
-                    .to_string()
+            let app_local_data = self.app.path().app_local_data_dir().unwrap();
+            let resource_dir = self.app.path().resource_dir().unwrap().join("resources");
+
+            // Check order: 1. app_local_data (manual updates), 2. resources (bundled)
+            let geoip_path = if app_local_data.join("geoip-cn.srs").exists() {
+                Some(app_local_data.join("geoip-cn.srs"))
+            } else if resource_dir.join("geoip-cn.srs").exists() {
+                Some(resource_dir.join("geoip-cn.srs"))
             } else {
-                app_local_data
-                    .join("geoip-cn.srs")
-                    .to_string_lossy()
-                    .to_string()
+                None
             };
-            let geosite_cn_path = if tun_mode {
-                std::path::Path::new("/tmp")
-                    .join("geosite-cn.srs")
-                    .to_string_lossy()
-                    .to_string()
+
+            let geosite_path = if app_local_data.join("geosite-cn.srs").exists() {
+                Some(app_local_data.join("geosite-cn.srs"))
+            } else if resource_dir.join("geosite-cn.srs").exists() {
+                Some(resource_dir.join("geosite-cn.srs"))
             } else {
-                app_local_data
-                    .join("geosite-cn.srs")
-                    .to_string_lossy()
-                    .to_string()
+                None
             };
 
             route.rule_set = Some(vec![
-                crate::config::RuleSet {
-                    rule_set_type: "local".to_string(),
-                    tag: "geoip-cn".to_string(),
-                    format: "binary".to_string(),
-                    path: Some(geoip_cn_path),
-                    url: None,
+                if let Some(path) = geoip_path {
+                    crate::config::RuleSet {
+                        rule_set_type: "local".to_string(),
+                        tag: "geoip-cn".to_string(),
+                        format: "binary".to_string(),
+                        path: Some(path.to_string_lossy().to_string()),
+                        url: None,
+                        download_detour: None,
+                        update_interval: None,
+                    }
+                } else {
+                    crate::config::RuleSet {
+                        rule_set_type: "remote".to_string(),
+                        tag: "geoip-cn".to_string(),
+                        format: "binary".to_string(),
+                        path: None,
+                        url: Some("https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-cn.srs".to_string()),
+                        download_detour: Some("direct".to_string()),
+                        update_interval: Some("1d".to_string()),
+                    }
                 },
-                crate::config::RuleSet {
-                    rule_set_type: "local".to_string(),
-                    tag: "geosite-cn".to_string(),
-                    format: "binary".to_string(),
-                    path: Some(geosite_cn_path),
-                    url: None,
+                if let Some(path) = geosite_path {
+                    crate::config::RuleSet {
+                        rule_set_type: "local".to_string(),
+                        tag: "geosite-cn".to_string(),
+                        format: "binary".to_string(),
+                        path: Some(path.to_string_lossy().to_string()),
+                        url: None,
+                        download_detour: None,
+                        update_interval: None,
+                    }
+                } else {
+                    crate::config::RuleSet {
+                        rule_set_type: "remote".to_string(),
+                        tag: "geosite-cn".to_string(),
+                        format: "binary".to_string(),
+                        path: None,
+                        url: Some("https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs".to_string()),
+                        download_detour: Some("direct".to_string()),
+                        update_interval: Some("1d".to_string()),
+                    }
                 },
             ]);
         }
@@ -1439,14 +1464,117 @@ impl<R: Runtime> ProxyService<R> {
         Ok(())
     }
 
+    pub async fn refresh_geodata(&self) -> Result<(), String> {
+        info!("Refreshing GeoData...");
+        let app_local_data = self.app.path().app_local_data_dir().unwrap();
+
+        // Ensure directory exists
+        if !app_local_data.exists() {
+            std::fs::create_dir_all(&app_local_data).map_err(|e| e.to_string())?;
+        }
+
+        let user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+        // Strategy: 
+        // 1. Try with proxy if proxy is running
+        // 2. If it fails (or if proxy not running), try direct
+        // This handles cases where the proxy is in a zombie state or doesn't have internet access
+        
+        let mut clients = Vec::new();
+        
+        // Add proxy client if running
+        if self.is_proxy_running() {
+            let settings = self.get_app_settings().unwrap_or_default();
+            let port = settings.mixed_port;
+            if let Ok(proxy) = reqwest::Proxy::all(format!("http://127.0.0.1:{}", port)) {
+                if let Ok(client) = reqwest::Client::builder()
+                    .user_agent(user_agent)
+                    .timeout(std::time::Duration::from_secs(30))
+                    .proxy(proxy)
+                    .build() {
+                    clients.push(("Proxy", client));
+                }
+            }
+        }
+        
+        // Always include a direct client as fallback
+        if let Ok(client) = reqwest::Client::builder()
+            .user_agent(user_agent)
+            .timeout(std::time::Duration::from_secs(30))
+            .build() {
+            clients.push(("Direct", client));
+        }
+
+        let files = [
+            ("geoip-cn.srs", "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-cn.srs", "https://testingcf.jsdelivr.net/gh/SagerNet/sing-geoip@rule-set/geoip-cn.srs"),
+            ("geosite-cn.srs", "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs", "https://testingcf.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-cn.srs"),
+        ];
+
+        for (filename, url, fallback_url) in files {
+            let mut success = false;
+            let mut last_error = String::new();
+
+            // Try each available client (Proxy then Direct)
+            for (client_name, client) in &clients {
+                // Try primary URL then fallback URL with this client
+                for target_url in &[url, fallback_url] {
+                    info!("Trying to download {} via {} from {}", filename, client_name, target_url);
+                    match client.get(*target_url).send().await {
+                        Ok(res) if res.status().is_success() => {
+                            if let Ok(bytes) = res.bytes().await {
+                                let path = app_local_data.join(filename);
+                                if std::fs::write(&path, bytes).is_ok() {
+                                    info!("Successfully updated {} via {}", filename, client_name);
+                                    success = true;
+                                    break;
+                                }
+                            }
+                        }
+                        Ok(res) => {
+                            last_error = format!("HTTP {}", res.status());
+                            warn!("{} failed for {} via {}: {}", target_url, filename, client_name, last_error);
+                        }
+                        Err(e) => {
+                            last_error = e.to_string();
+                            warn!("{} failed for {} via {}: {}", target_url, filename, client_name, last_error);
+                        }
+                    }
+                }
+                if success { break; }
+            }
+
+            if !success {
+                return Err(format!("Failed to download {}: {}", filename, last_error));
+            }
+        }
+
+        // Also clear sing-box cache to ensure it reloads properly
+        for db in &["cache.db", "cache_tun.db"] {
+            let path = app_local_data.join(db);
+            if path.exists() {
+                let _ = std::fs::remove_file(&path);
+            }
+            let tmp_path = std::path::Path::new("/tmp").join(db);
+            if tmp_path.exists() {
+                let _ = std::fs::remove_file(&tmp_path);
+            }
+        }
+
+        // Restart proxy if it's running to apply changes
+        if self.is_proxy_running() {
+            let tun_mode = *self.tun_mode.lock().unwrap();
+            let node = self.latest_node.lock().unwrap().clone();
+            let routing = self.latest_routing_mode.lock().unwrap().clone();
+            self.start_proxy(node, tun_mode, routing).await?;
+        }
+
+        Ok(())
+    }
+
     fn stage_databases(&self) -> Result<(), String> {
         let app_local_data = self.app.path().app_local_data_dir().unwrap();
         // Stage databases to /tmp to ensure root/helper can read them (macOS TCC bypass)
         for db in &[
-            "geoip.db",
-            "geosite.db",
-            "geoip-cn.srs",
-            "geosite-cn.srs",
             "cache.db",
         ] {
             let src = app_local_data.join(db);
@@ -1554,7 +1682,7 @@ impl<R: Runtime> ProxyService<R> {
 
         self.log_running
             .store(false, std::sync::atomic::Ordering::SeqCst);
-        *self.local_log_writer.lock().unwrap() = None;
+        *self.local_log_fd.lock().unwrap() = None;
 
         // 2. Stop Helper managed process (if any)
         info!("Notifying helper to stop proxy...");
@@ -1616,7 +1744,7 @@ impl<R: Runtime> ProxyService<R> {
         *self.clash_api_port.lock().unwrap() = None;
         self.log_running
             .store(false, std::sync::atomic::Ordering::SeqCst);
-        *self.local_log_writer.lock().unwrap() = None;
+        *self.local_log_fd.lock().unwrap() = None;
         if broadcast {
             let _ = self.app.emit("proxy-status-change", self.get_status());
         }

@@ -493,6 +493,21 @@ interface AdvancedProps extends CommonProps {
 
 function AdvancedSettings({ settings, update, clashApiPort }: AdvancedProps) {
     const { t } = useTranslation()
+    const [refreshingGeoData, setRefreshingGeoData] = useState(false)
+
+    const handleRefreshGeoData = async () => {
+        setRefreshingGeoData(true)
+        try {
+            await invoke("refresh_geodata")
+            toast.success(t('toast.update_completed'))
+        } catch (e) {
+            console.error("Failed to refresh geodata", e)
+            toast.error(t('toast.update_failed', { error: String(e) }))
+        } finally {
+            setRefreshingGeoData(false)
+        }
+    }
+
     return (
         <div className="py-2">
             <Section title={t('settings.advanced.debug_log')} icon={<Bug size={14} />}>
@@ -514,8 +529,21 @@ function AdvancedSettings({ settings, update, clashApiPort }: AdvancedProps) {
                     </select>
                 </SettingItem>
             </Section>
-
-            <Section title={t('settings.advanced.persistence')}>
+            <Section title={t('settings.advanced.persistence')} icon={<Database size={14} />}>
+                <SettingItem
+                    title={t('settings.advanced.geodata.title')}
+                    description={t('settings.advanced.geodata.desc')}
+                    icon={<Database size={20} />}
+                >
+                    <button
+                        onClick={handleRefreshGeoData}
+                        disabled={refreshingGeoData}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-all text-xs font-bold disabled:opacity-50"
+                    >
+                        <RefreshCw size={14} className={refreshingGeoData ? "animate-spin" : ""} />
+                        {refreshingGeoData ? t('settings.advanced.core.updating') : t('settings.advanced.geodata.refresh')}
+                    </button>
+                </SettingItem>
                 <SettingItem
                     title={t('settings.advanced.cache_dir.title')}
                     description={t('settings.advanced.cache_dir.desc')}
@@ -523,7 +551,6 @@ function AdvancedSettings({ settings, update, clashApiPort }: AdvancedProps) {
                 >
                     <div className="flex items-center gap-3">
                         <code className="text-[10px] bg-black/5 dark:bg-white/5 px-3 py-1.5 rounded-lg border border-border-color text-secondary font-mono italic">~/Library/Application.../cache.db</code>
-                        {/* No functional search button yet */}
                     </div>
                 </SettingItem>
             </Section>

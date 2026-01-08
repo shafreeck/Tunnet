@@ -131,6 +131,12 @@
                 "desc": "存放所有运行时动态数据。"
             },
             "component": "组件管理",
+            "geodata": {
+                "title": "路由数据库 (SRS)",
+                "desc": "用于规则分流的 GeoIP 和 GeoSite 数据库。系统默认从 GitHub 自动同步。",
+                "refresh": "立即刷新同步",
+                "refresh_desc": "清除缓存并重新从 GitHub 下载最新的数据库文件。"
+            },
             "core": {
                 "title": "Clash API 地址",
                 "desc": "用于外部控制的接口地址。",
