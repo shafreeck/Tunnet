@@ -268,7 +268,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                                 )}
                                                 title={t('auto_select_tooltip')}
                                             >
-                                                <Target size={14} fill={isProfileAutoActive(profile.id) ? "currentColor" : "none"} />
+                                                <Target size={14} />
                                             </button>
                                             {profile.web_page_url && (
                                                 <button

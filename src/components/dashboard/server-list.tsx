@@ -375,12 +375,14 @@ export function ServerList({
                                     "p-1.5 transition-all rounded hover:bg-black/5 dark:hover:bg-white/5",
                                     (!!filterText) && "opacity-30 cursor-not-allowed",
                                     activeServerId === "system:global"
-                                        ? "bg-accent-green/10 text-accent-green hover:bg-accent-green/20"
+                                        ? (isConnected
+                                            ? "bg-accent-green/10 text-accent-green hover:bg-accent-green/20"
+                                            : "bg-primary/10 text-primary hover:bg-primary/20")
                                         : "text-text-secondary hover:text-accent-green"
                                 )}
                                 title={!!filterText ? t('auto_select_unavailable_filter') : t('auto_select_tooltip')}
                             >
-                                <Target size={16} fill={activeServerId === "system:global" ? "currentColor" : "none"} />
+                                <Target size={16} />
                             </button>
 
                             {/* Search Trigger */}

@@ -1212,6 +1212,10 @@ export default function Home() {
             onAdd={() => setShowAddSubscription(true)}
             onSelect={handleSubscriptionSelect}
             onUpdateAll={handleUpdateAll}
+            onNodeSelect={(id) => handleServerToggle(id)}
+            isConnected={isConnected}
+            activeServerId={activeServerId}
+            activeAutoNodeId={activeAutoNodeId}
           />
         )
       case "subscription_detail" as any:
@@ -1266,12 +1270,14 @@ export default function Home() {
                     className={cn(
                       "p-2 rounded-xl transition-all active:scale-95",
                       activeServerId === `system:sub:${subscription.id}`
-                        ? "bg-accent-green/10 text-accent-green"
+                        ? (isConnected
+                          ? "bg-accent-green/10 text-accent-green"
+                          : "bg-primary/10 text-primary")
                         : "hover:bg-accent-green/10 text-text-tertiary hover:text-accent-green"
                     )}
                     title={t('auto_select_tooltip')}
                   >
-                    <Target size={18} fill={activeServerId === `system:sub:${subscription.id}` ? "currentColor" : "none"} />
+                    <Target size={18} />
                   </button>
 
                   {/* Visit Website */}
