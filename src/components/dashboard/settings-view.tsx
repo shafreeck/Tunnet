@@ -198,7 +198,9 @@ function SettingItem({
 
 
 interface CommonProps {
-    save: (s: AppSettings) => void
+    settings: AppSettings
+    update: (key: keyof AppSettings, value: any) => Promise<void>
+    save: (s: AppSettings) => Promise<void> | void
 }
 
 interface ConnectionProps extends CommonProps {
@@ -369,7 +371,7 @@ function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle }:
                     description={t('settings.connection.enable_tun.desc')}
                     icon={<Zap size={20} />}
                 >
-                    <Switch checked={tunEnabled} onCheckedChange={() => onTunToggle && onTunToggle()} />
+                    <Switch checked={!!tunEnabled} onCheckedChange={() => onTunToggle && onTunToggle()} />
                 </SettingItem>
                 <SettingItem
                     title={t('settings.connection.stack.title')}

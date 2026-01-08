@@ -41,6 +41,7 @@ export function GroupCard({ group, isActive, onEdit, onDelete, onActivate, onSel
     const groupLatency = useMemo(() => {
         let candidates: any[] = []
         if (isStatic) {
+            // @ts-ignore
             const ids = new Set(group.source.node_ids || [])
             candidates = allNodes.filter(n => ids.has(n.id))
         } else {
@@ -103,7 +104,7 @@ export function GroupCard({ group, isActive, onEdit, onDelete, onActivate, onSel
     const Icon = config.icon
 
     // Data extraction
-    const nodeCountValue = group.source.node_ids?.length || 0
+    const nodeCountValue = group.source.type === "Static" ? (group.source.node_ids?.length || 0) : 0
     // Re-calculate node count for Filter groups too if possible, otherwise use keyword text
 
     // Subtitle logic

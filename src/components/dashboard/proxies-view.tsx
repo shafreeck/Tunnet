@@ -34,6 +34,7 @@ interface ProxiesViewProps {
     onSelectSubscription: (id: string) => void
     onUpdateAllSubscriptions: () => void
     testingNodeIds?: string[]
+    connectionState: "idle" | "connecting" | "disconnecting" | undefined
 }
 
 export function ProxiesView(props: ProxiesViewProps) {
@@ -90,7 +91,7 @@ export function ProxiesView(props: ProxiesViewProps) {
                     <GroupsView
                         allNodes={props.servers}
                         activeTargetId={props.activeServerId}
-                        onSelectTarget={props.onToggle}
+                        onSelectTarget={(id) => id && props.onToggle(id)}
                     />
                 )}
                 {subTab === "subscriptions" && (

@@ -1246,7 +1246,7 @@ export default function Home() {
             onUpdateAll={handleUpdateAll}
             onNodeSelect={(id) => handleServerToggle(id)}
             isConnected={isConnected}
-            activeServerId={activeServerId}
+            activeServerId={activeServerId || undefined}
             activeAutoNodeId={activeAutoNodeId}
             testingNodeIds={testingNodeIds}
           />
