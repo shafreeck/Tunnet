@@ -403,7 +403,10 @@
         "global": "全局组",
         "subscription": "订阅组",
         "region": "按地区分组",
-        "show_system": "显示系统组"
+        "show_system": "显示系统组",
+        "contains_nodes": "包含 {{count}} 个节点",
+        "filter_desc": "匹配关键词: {{keywords}}",
+        "strategy": "策略"
     },
     "auto_select_global": "全局",
     "auto_select_prefix": "自动",

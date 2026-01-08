@@ -402,7 +402,10 @@
         "global": "Global Group",
         "subscription": "Subscription Group",
         "region": "Group by Region",
-        "show_system": "Show System Groups"
+        "show_system": "Show System Groups",
+        "contains_nodes": "Contains {{count}} nodes",
+        "filter_desc": "Matches keywords: {{keywords}}",
+        "strategy": "Strategy"
     },
     "auto_select_global": "Global",
     "auto_select_prefix": "Auto",

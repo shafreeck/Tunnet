@@ -1168,7 +1168,9 @@ export default function Home() {
           <GroupsView
             allNodes={servers}
             activeTargetId={activeServerId}
-            onSelectTarget={(id) => handleServerToggle(id, true)}
+            onSelectTarget={(id) => setActiveServerId(id)}
+            isConnected={isConnected}
+            onToggle={handleServerToggle}
           />
         )
       case "proxies":
