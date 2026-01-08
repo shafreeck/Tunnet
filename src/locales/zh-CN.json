@@ -88,6 +88,10 @@
                 "desc": "HTTP/SOCKS 协议共用端口。默认推荐 2080。"
             },
             "tun_mode": "TUN 模式增强",
+            "enable_tun": {
+                "title": "启用 TUN 模式",
+                "desc": "创建虚拟网卡接管系统流量，支持非代理软件联网。"
+            },
             "stack": {
                 "title": "网络堆栈类型",
                 "desc": "gVisor 提供最佳的安全性和兼容性。"
@@ -128,8 +132,8 @@
             },
             "component": "组件管理",
             "core": {
-                "title": "Sing-box Core",
-                "desc": "管理底层代理核心组件。",
+                "title": "Clash API 地址",
+                "desc": "用于外部控制的接口地址。",
                 "check_update": "检查更新",
                 "updating": "更新中...",
                 "checking": "检查中...",
@@ -407,7 +411,6 @@
         "contains_nodes": "包含 {{count}} 个节点",
         "filter_desc": "匹配关键词: {{keywords}}",
         "strategy": "策略",
-        "system_groups": "系统自动组",
         "no_custom_groups": "暂无自定义节点组"
     },
     "auto_select_global": "全局",

@@ -1390,7 +1390,7 @@ export default function Home() {
       case "rules":
         return <RulesView />
       case "settings":
-        return <SettingsView key={currentView} />
+        return <SettingsView key={currentView} clashApiPort={clashApiPort} tunEnabled={tunEnabled} onTunToggle={handleTunToggle} />
       case "dashboard":
       default:
         // Original Dashboard Content

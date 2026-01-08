@@ -88,6 +88,10 @@
                 "desc": "HTTP/SOCKS protocol shared port. Recommended 2080 by default."
             },
             "tun_mode": "TUN Mode Enhancement",
+            "enable_tun": {
+                "title": "Enable TUN Mode",
+                "desc": "Create a virtual interface to handle system traffic."
+            },
             "stack": {
                 "title": "Network Stack",
                 "desc": "gVisor offers best security and compatibility."
@@ -128,8 +132,8 @@
             },
             "component": "Component Management",
             "core": {
-                "title": "Sing-box Core",
-                "desc": "Manage underlying proxy core component.",
+                "title": "Clash API Address",
+                "desc": "Interface address for external control.",
                 "check_update": "Check Update",
                 "updating": "Updating...",
                 "checking": "Checking...",
@@ -406,8 +410,6 @@
         "contains_nodes": "Contains {{count}} nodes",
         "filter_desc": "Matches keywords: {{keywords}}",
         "strategy": "Strategy",
-        "system_groups": "System Groups",
-        "custom_groups": "Custom Groups",
         "no_custom_groups": "No custom groups created"
     },
     "auto_select_global": "Global",

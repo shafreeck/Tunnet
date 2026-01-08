@@ -34,9 +34,12 @@ type SettingCategory = "general" | "connection" | "dns" | "advanced" | "about"
 interface SettingsViewProps {
     initialCategory?: SettingCategory
     onClose?: () => void
+    clashApiPort?: number | null
+    tunEnabled?: boolean
+    onTunToggle?: () => void
 }
 
-export function SettingsView({ initialCategory = "general" }: SettingsViewProps) {
+export function SettingsView({ initialCategory = "general", clashApiPort, tunEnabled, onTunToggle }: SettingsViewProps) {
     const { t } = useTranslation()
     const [activeCategory, setActiveCategory] = useState<SettingCategory>(initialCategory)
     const [settings, setSettings] = useState<AppSettings>(defaultSettings)
@@ -135,9 +138,9 @@ export function SettingsView({ initialCategory = "general" }: SettingsViewProps)
                         ) : (
                             <>
                                 {activeCategory === "general" && <GeneralSettings settings={settings} update={updateSetting} save={handleSave} />}
-                                {activeCategory === "connection" && <ConnectionSettings settings={settings} update={updateSetting} save={handleSave} />}
+                                {activeCategory === "connection" && <ConnectionSettings settings={settings} update={updateSetting} save={handleSave} tunEnabled={tunEnabled} onTunToggle={onTunToggle} />}
                                 {activeCategory === "dns" && <DnsSettings settings={settings} update={updateSetting} save={handleSave} />}
-                                {activeCategory === "advanced" && <AdvancedSettings settings={settings} update={updateSetting} save={handleSave} />}
+                                {activeCategory === "advanced" && <AdvancedSettings settings={settings} update={updateSetting} save={handleSave} clashApiPort={clashApiPort} />}
                                 {activeCategory === "about" && <AboutSection />}
                             </>
                         )}
@@ -195,9 +198,12 @@ function SettingItem({
 
 
 interface CommonProps {
-    settings: AppSettings
-    update: (key: keyof AppSettings, value: any) => void
     save: (s: AppSettings) => void
+}
+
+interface ConnectionProps extends CommonProps {
+    tunEnabled?: boolean
+    onTunToggle?: () => void
 }
 
 function GeneralSettings({ settings, update }: CommonProps) {
@@ -295,7 +301,7 @@ function GeneralSettings({ settings, update }: CommonProps) {
     )
 }
 
-function ConnectionSettings({ settings, update, save }: CommonProps) {
+function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle }: ConnectionProps) {
     const { t } = useTranslation()
     const [port, setPort] = useState(settings.mixed_port.toString())
     const [mtu, setMtu] = useState(settings.tun_mtu.toString())
@@ -358,6 +364,13 @@ function ConnectionSettings({ settings, update, save }: CommonProps) {
             </Section>
 
             <Section title={t('settings.connection.tun_mode')} icon={<Zap size={14} />}>
+                <SettingItem
+                    title={t('settings.connection.enable_tun.title')}
+                    description={t('settings.connection.enable_tun.desc')}
+                    icon={<Zap size={20} />}
+                >
+                    <Switch checked={tunEnabled} onCheckedChange={() => onTunToggle && onTunToggle()} />
+                </SettingItem>
                 <SettingItem
                     title={t('settings.connection.stack.title')}
                     description={t('settings.connection.stack.desc')}
@@ -472,7 +485,11 @@ function DnsSettings({ settings, update, save }: CommonProps) {
     )
 }
 
-function AdvancedSettings({ settings, update }: CommonProps) {
+interface AdvancedProps extends CommonProps {
+    clashApiPort?: number | null
+}
+
+function AdvancedSettings({ settings, update, clashApiPort }: AdvancedProps) {
     const { t } = useTranslation()
     return (
         <div className="py-2">
@@ -515,78 +532,20 @@ function AdvancedSettings({ settings, update }: CommonProps) {
                     description={t('settings.advanced.core.desc')}
                     icon={<Server size={20} />}
                 >
-                    <CoreUpdateControl />
+                    {clashApiPort ? (
+                        <code className="text-xs font-mono bg-primary/10 text-primary px-2 py-1 rounded select-all cursor-text">
+                            http://127.0.0.1:{clashApiPort}
+                        </code>
+                    ) : (
+                        <span className="text-xs text-secondary/50 italic">{t('status.stopped')}</span>
+                    )}
                 </SettingItem>
-            </Section>
-        </div>
+            </Section >
+        </div >
     )
 }
 
-function CoreUpdateControl() {
-    const { t } = useTranslation()
-    const [status, setStatus] = useState<"idle" | "checking" | "available" | "updating" | "uptodate" | "error">("idle")
-    const [newVersion, setNewVersion] = useState<string>("")
 
-    const check = async () => {
-        setStatus("checking")
-        try {
-            const v = await invoke<string | null>("check_singbox_update")
-            if (v) {
-                setNewVersion(v)
-                setStatus("available")
-            } else {
-                setStatus("uptodate")
-                setTimeout(() => setStatus("idle"), 3000)
-            }
-        } catch (e) {
-            console.error(e)
-            setStatus("error")
-            setTimeout(() => setStatus("idle"), 3000)
-        }
-    }
-
-    const update = async () => {
-        setStatus("updating")
-        try {
-            await invoke("update_singbox_core")
-            setStatus("idle")
-            // toast.success("Core updated successfully") 
-            // Commented out toast to avoid potential issues if not configured, relying on button state reset
-        } catch (e) {
-            console.error(e)
-            setStatus("error")
-            setTimeout(() => setStatus("idle"), 3000)
-        }
-    }
-
-    if (status === "available") {
-        return (
-            <div className="flex items-center gap-2">
-                <span className="text-xs text-primary font-bold">{t('settings.advanced.core.new')}: {newVersion}</span>
-                <button
-                    onClick={update}
-                    className="bg-primary text-white text-xs px-3 py-1.5 rounded-lg font-bold shadow-md shadow-primary/20 hover:bg-primary-hover transition-all"
-                >
-                    {t('settings.advanced.core.update')}
-                </button>
-            </div>
-        )
-    }
-
-    if (status === "updating") return <span className="text-xs text-secondary animate-pulse font-mono">{t('settings.advanced.core.updating')}</span>
-    if (status === "checking") return <span className="text-xs text-secondary animate-pulse font-mono">{t('settings.advanced.core.checking')}</span>
-    if (status === "uptodate") return <span className="text-xs text-green-500 font-bold">{t('settings.advanced.core.latest')}</span>
-    if (status === "error") return <span className="text-xs text-red-500 font-bold">{t('settings.advanced.core.error')}</span>
-
-    return (
-        <button
-            onClick={check}
-            className="text-xs bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors font-semibold text-secondary"
-        >
-            {t('settings.advanced.core.check_update')}
-        </button>
-    )
-}
 
 function AboutSection() {
     return (
