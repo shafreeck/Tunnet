@@ -278,6 +278,7 @@
         "subtitle": "View and synchronize your node subscriptions",
         "update_all": "Update All",
         "import": "Import Subscription",
+        "enter_url": "Enter URL",
         "local_profile": "Local Profile",
         "traffic_usage": "Traffic Usage",
         "node_count": "Node Count",

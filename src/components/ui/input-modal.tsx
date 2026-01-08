@@ -47,41 +47,41 @@ export function InputModal({
     }
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="w-full max-w-sm bg-[#1a1b26] border border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col scale-100 animate-in zoom-in-95 duration-200">
-                <div className="p-6 flex flex-col gap-4">
-                    <div className="flex items-center gap-3">
-                        <div className="p-3 rounded-full bg-primary/10 text-primary">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="w-full max-w-sm bg-surface border border-border-color rounded-3xl shadow-floating overflow-hidden flex flex-col scale-100 animate-in zoom-in-95 duration-300 ease-out">
+                <div className="p-8 flex flex-col gap-6">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3.5 rounded-2xl bg-primary/10 text-primary">
                             <Edit2 size={24} />
                         </div>
-                        <div>
-                            <h3 className="text-lg font-semibold text-white">{title}</h3>
-                            {message && <p className="text-xs text-text-secondary">{message}</p>}
+                        <div className="flex flex-col gap-0.5">
+                            <h3 className="text-xl font-bold text-text-primary tracking-tight">{title}</h3>
+                            {message && <p className="text-sm text-text-secondary font-medium leading-tight">{message}</p>}
                         </div>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                    <form onSubmit={handleSubmit} className="space-y-6">
                         <input
                             ref={inputRef}
                             type="text"
                             value={value}
                             onChange={(e) => setValue(e.target.value)}
                             placeholder={placeholder}
-                            className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-white placeholder:text-text-tertiary focus:outline-none focus:border-primary/50 transition-colors"
+                            className="w-full px-4 py-3.5 bg-black/5 dark:bg-white/5 border border-border-color rounded-2xl text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 transition-all font-medium"
                         />
 
                         <div className="flex gap-3 w-full">
                             <button
                                 type="button"
                                 onClick={onCancel}
-                                className="flex-1 px-4 py-2 text-sm font-medium text-text-secondary hover:text-white hover:bg-white/5 rounded-lg transition-colors border border-transparent"
+                                className="flex-1 px-4 py-3.5 text-sm font-bold text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5 rounded-2xl transition-all active:scale-95"
                             >
                                 {cancelText}
                             </button>
                             <button
                                 type="submit"
                                 disabled={!value.trim()}
-                                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg shadow-lg shadow-primary/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex-1 px-4 py-3.5 text-sm font-bold text-white bg-primary hover:bg-primary/90 rounded-2xl shadow-lg shadow-primary/25 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {confirmText}
                             </button>

@@ -277,6 +277,7 @@
         "subtitle": "查看并同步您的节点订阅信息",
         "update_all": "全部更新",
         "import": "导入订阅",
+        "enter_url": "输入订阅链接",
         "local_profile": "本地配置",
         "traffic_usage": "流量使用情况",
         "node_count": "节点数量",
