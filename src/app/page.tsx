@@ -450,8 +450,12 @@ export default function Home() {
     })
 
     // Listen for profile updates (latency or location probes finished)
-    const unlistenProfiles = listen("profiles-update", () => {
+    const unlistenProfiles = listen("profiles-update", (event) => {
       fetchProfiles(false)
+      const updatedIds = event.payload as string[]
+      if (updatedIds && Array.isArray(updatedIds)) {
+        setTestingNodeIds(prev => prev.filter(id => !updatedIds.includes(id)))
+      }
     })
 
     return () => {
@@ -672,8 +676,22 @@ export default function Home() {
   }, [])
 
   const handleUpdateProfile = async (id: string) => {
+    // Optimistic: Set testing state for all nodes in this profile
+    const profile = profiles.find(p => p.id === id)
+    if (profile && profile.nodes) {
+      const nodeIds = profile.nodes.map((n: any) => n.id)
+      setTestingNodeIds(prev => [...prev, ...nodeIds])
+    }
+
     const promise = async () => {
-      await invoke("update_subscription_profile", { id })
+      const updatedIds = await invoke("update_subscription_profile", { id }) as string[]
+      if (updatedIds && updatedIds.length > 0) {
+        setTestingNodeIds(prev => {
+          const s = new Set(prev)
+          updatedIds.forEach(uid => s.add(uid))
+          return Array.from(s)
+        })
+      }
       fetchProfiles()
     }
 
@@ -681,6 +699,12 @@ export default function Home() {
       loading: t('toast.updating_sub'),
       success: t('toast.sub_updated'),
       error: (e) => {
+        // Clear testing IDs on error since backend might not send update event
+        if (profile && profile.nodes) {
+          const nodeIds = profile.nodes.map((n: any) => n.id)
+          setTestingNodeIds(prev => prev.filter(pid => !nodeIds.includes(pid)))
+        }
+
         console.error("Update failed:", e)
         const errorMsg = String(e)
         if (errorMsg.includes("No valid nodes found in this subscription")) {
@@ -694,6 +718,11 @@ export default function Home() {
   const handleUpdateAll = async () => {
     if (isLoading) return
     setIsLoading(true)
+
+    // Optimistic: Set testing state for ALL nodes
+    const allIds = profiles.flatMap(p => p.nodes).map((n: any) => n.id)
+    setTestingNodeIds(prev => [...prev, ...allIds])
+
     toast.info(t('toast.updating_all'))
     try {
       // Execute all updates
@@ -1202,6 +1231,7 @@ export default function Home() {
               onSelectSubscription={handleSubscriptionSelect}
               onUpdateAllSubscriptions={handleUpdateAll}
               connectionState={connectionState}
+              testingNodeIds={testingNodeIds}
             />
           )
         }
@@ -1218,6 +1248,7 @@ export default function Home() {
             isConnected={isConnected}
             activeServerId={activeServerId}
             activeAutoNodeId={activeAutoNodeId}
+            testingNodeIds={testingNodeIds}
           />
         )
       case "subscription_detail" as any:

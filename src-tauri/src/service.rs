@@ -1841,7 +1841,10 @@ impl<R: Runtime> ProxyService<R> {
         let handle = self.app.clone();
         tokio::spawn(async move {
             if let Some(service) = handle.try_state::<ProxyService<R>>() {
+                let ids_latency = node_ids.clone();
+                // Trigger both location and latency probes
                 let _ = service.probe_nodes_location(node_ids).await;
+                let _ = service.probe_nodes_latency(ids_latency).await;
             }
         });
 
@@ -1897,7 +1900,7 @@ impl<R: Runtime> ProxyService<R> {
         }
     }
 
-    pub async fn update_subscription_profile(&self, profile_id: &str) -> Result<(), String> {
+    pub async fn update_subscription_profile(&self, profile_id: &str) -> Result<Vec<String>, String> {
         let mut profiles = self.manager.load_profiles().unwrap_or_default();
         if let Some(pos) = profiles.iter().position(|p| p.id == profile_id) {
             if let Some(url) = &profiles[pos].url {
@@ -1918,18 +1921,22 @@ impl<R: Runtime> ProxyService<R> {
                 p.update_interval = user_interval; // Restore user preference
                 // p.header_update_interval is already set by fetch_subscription
 
-                let node_ids = p.nodes.iter().map(|n| n.id.clone()).collect();
+                let node_ids: Vec<String> = p.nodes.iter().map(|n| n.id.clone()).collect();
+                let return_ids = node_ids.clone(); // Clone for return
+                
                 profiles[pos] = p;
                 self.manager.save_profiles(&profiles)?;
 
                 let handle = self.app.clone();
                 tokio::spawn(async move {
                     if let Some(service) = handle.try_state::<ProxyService<R>>() {
+                        let ids_latency = node_ids.clone();
                         let _ = service.probe_nodes_location(node_ids).await;
+                        let _ = service.probe_nodes_latency(ids_latency).await;
                     }
                 });
 
-                return Ok(());
+                return Ok(return_ids);
             }
         }
         Err("Profile not found or has no URL".to_string())
@@ -2078,13 +2085,77 @@ impl<R: Runtime> ProxyService<R> {
             std::collections::HashMap::new();
         for p in &profiles {
             for n in &p.nodes {
+                let mut country_code = String::new();
+
                 if let Some(loc) = &n.location {
                     if !loc.country.is_empty() {
-                        region_map
-                            .entry(loc.country.clone())
-                            .or_default()
-                            .push(n.id.clone());
+                        country_code = loc.country.clone();
                     }
+                }
+
+                // Fallback: Infer from name if no explicit location code
+                if country_code.is_empty() {
+                    let name_lower = n.name.to_lowercase();
+                    
+                    // Helper to check for code (e.g. " us ", "us ", " us")
+                    // Simple contains check is risky ("bonus" contains "us"), so we need boundary checks or specific keywords
+                    // For simplicity and robustness matching flags.ts:
+                    let keywords = [
+                        ("hk", "hk"), ("hong kong", "hk"), ("hongkong", "hk"), ("香港", "hk"),
+                        ("tw", "tw"), ("taiwan", "tw"), ("台湾", "tw"),
+                        ("jp", "jp"), ("japan", "jp"), ("日本", "jp"),
+                        ("sg", "sg"), ("singapore", "sg"), ("新加坡", "sg"),
+                        ("us", "us"), ("usa", "us"), ("united states", "us"), ("america", "us"), ("美国", "us"),
+                        ("kr", "kr"), ("korea", "kr"), ("韩国", "kr"),
+                        ("uk", "gb"), ("gb", "gb"), ("united kingdom", "gb"), ("britain", "gb"), ("英国", "gb"),
+                        ("de", "de"), ("germany", "de"), ("德国", "de"),
+                        ("fr", "fr"), ("france", "fr"), ("法国", "fr"),
+                        ("ca", "ca"), ("canada", "ca"), ("加拿大", "ca"),
+                        ("ru", "ru"), ("russia", "ru"), ("俄罗斯", "ru"),
+                        ("in", "in"), ("india", "in"), ("印度", "in"),
+                        ("tr", "tr"), ("turkey", "tr"), ("土耳其", "tr"),
+                        ("au", "au"), ("australia", "au"), ("澳大利亚", "au"), ("澳洲", "au"),
+                        ("br", "br"), ("brazil", "br"), ("巴西", "br"),
+                        ("cn", "cn"), ("china", "cn"), ("中国", "cn"), ("回国", "cn"),
+                    ];
+                    
+                    // 1. Check for whole word matches of short codes
+                    for (pattern, code) in keywords.iter() {
+                        // For short codes (length 2), ensure boundaries
+                        if pattern.len() == 2 {
+                             // Check if name_lower contains pattern with boundaries
+                             // Valid: "Node US 1", "HK-Server", "[JP] Node"
+                             // Invalid: "Bus", "Link"
+                             
+                             // A simple heuristic: check if the pattern exists and the char before/after is not a-z
+                             if let Some(idx) = name_lower.find(pattern) {
+                                 let before = if idx == 0 { false } else {
+                                     name_lower.chars().nth(idx - 1).map(|c| c.is_alphabetic()).unwrap_or(false)
+                                 };
+                                 let after = name_lower.chars().nth(idx + pattern.len()).map(|c| c.is_alphabetic()).unwrap_or(false);
+                                 
+                                 if !before && !after {
+                                     country_code = code.to_string();
+                                     break;
+                                 }
+                             }
+                        } else {
+                            // For longer names (names/chinese), simple filtering is usually safe
+                           if name_lower.contains(pattern) {
+                               country_code = code.to_string();
+                               break;
+                           } 
+                        }
+                    }
+                }
+
+                if !country_code.is_empty() {
+                    // Normalize to uppercase for consistency with IP-API
+                    let country_upper = country_code.to_uppercase();
+                    region_map
+                        .entry(country_upper)
+                        .or_default()
+                        .push(n.id.clone());
                 }
             }
         }
@@ -2487,7 +2558,7 @@ impl<R: Runtime> ProxyService<R> {
             }
         }
         self.manager.save_profiles(&profiles)?;
-        let _ = self.app.emit("profiles-update", None::<()>);
+        let _ = self.app.emit("profiles-update", Some(updates.keys().cloned().collect::<Vec<String>>()));
 
         Ok(())
     }
@@ -2515,6 +2586,8 @@ impl<R: Runtime> ProxyService<R> {
                     obj.insert("_log_level".to_string(), serde_json::Value::String(log_level.clone()));
                 }
                 let outbound_json = serde_json::to_string(&outbound_val).map_err(|e| e.to_string())?;
+
+                let current_latency = n.location.as_ref().map(|l| l.latency).unwrap_or(0);
 
                 futures.push(tokio::spawn(async move {
                     let outbound_c = std::ffi::CString::new(outbound_json).unwrap();
@@ -2547,7 +2620,7 @@ impl<R: Runtime> ProxyService<R> {
                                 lat: val["lat"].as_f64().unwrap_or_default(),
                                 lon: val["lon"].as_f64().unwrap_or_default(),
                                 isp: val["isp"].as_str().unwrap_or_default().to_string(),
-                                latency: 0,
+                                latency: current_latency, // Preserve existing latency
                             };
                             return Some((node_id, loc));
                         }
@@ -2588,7 +2661,7 @@ impl<R: Runtime> ProxyService<R> {
         for p in profiles {
             for n in p.nodes {
                 if n.id == node_id {
-                    let ping = n.ping.ok_or("No latency result found")?;
+                    let ping = n.ping.unwrap_or(0);
                     return Ok(ping);
                 }
             }

@@ -19,6 +19,8 @@ import (
 	"github.com/sagernet/sing-box/protocol/group"
 	sjson "github.com/sagernet/sing/common/json"
 	"github.com/sagernet/sing/common/metadata"
+
+	_ "github.com/anytls/sing-anytls"
 )
 
 var (
@@ -454,11 +456,21 @@ func LibboxTestBatch(outboundsJSON *C.char, targetURL *C.char, timeoutMS C.longl
 		"dns": map[string]interface{}{
 			"servers": []map[string]interface{}{
 				{
-					"tag":     "dns-direct",
+					"tag":     "google",
 					"address": "8.8.8.8",
 					"detour":  "direct",
 				},
 			},
+			"rules": []map[string]interface{}{
+				{
+					"outbound": "any",
+					"server":   "google",
+				},
+			},
+			"strategy": "ipv4_only",
+		},
+		"route": map[string]interface{}{
+			"auto_detect_interface": true,
 		},
 	}
 

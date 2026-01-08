@@ -647,7 +647,7 @@ async fn edit_profile(
 async fn update_subscription_profile(
     service: State<'_, ProxyService<tauri::Wry>>,
     id: String,
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
     service.update_subscription_profile(&id).await
 }
 

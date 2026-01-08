@@ -355,6 +355,7 @@ export function LocationsView({
                             isFiltered={!!searchQuery || !!selectedCountry}
                             connectionState={connectionState}
                             hideHeader={true}
+                            testingNodeIds={testingNodeIds}
                         />
                     </div>
                 </div>

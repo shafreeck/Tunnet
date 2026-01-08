@@ -36,9 +36,10 @@ interface SubscriptionsViewProps {
     isConnected?: boolean
     activeServerId?: string
     activeAutoNodeId?: string | null
+    testingNodeIds?: string[]
 }
 
-export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelect, onUpdateAll, isImporting, onNodeSelect, isConnected, activeServerId, activeAutoNodeId }: SubscriptionsViewProps) {
+export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelect, onUpdateAll, isImporting, onNodeSelect, isConnected, activeServerId, activeAutoNodeId, testingNodeIds = [] }: SubscriptionsViewProps) {
     const { t } = useTranslation()
 
     // Helper formats
@@ -249,15 +250,22 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
 
                                         {/* Action Buttons - Animated width to give space to title when hidden */}
                                         <div className="flex items-center gap-1 transition-all duration-300 max-w-0 group-hover:max-w-[160px] overflow-hidden opacity-0 group-hover:opacity-100 shrink-0">
-                                            {profile.url && (
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); onUpdate(profile.id); }}
-                                                    className="p-2 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-90"
-                                                    title={t('subscriptions.refresh_tooltip')}
-                                                >
-                                                    <RefreshCw size={14} />
-                                                </button>
-                                            )}
+                                            {profile.url && (() => {
+                                                const isTesting = profile.nodes.some(n => testingNodeIds.includes(n.id));
+                                                return (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); onUpdate(profile.id); }}
+                                                        disabled={isTesting}
+                                                        className={cn(
+                                                            "p-2 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-90",
+                                                            isTesting && "opacity-70 cursor-wait"
+                                                        )}
+                                                        title={t('subscriptions.refresh_tooltip')}
+                                                    >
+                                                        <RefreshCw size={14} className={cn(isTesting && "animate-spin")} />
+                                                    </button>
+                                                );
+                                            })()}
                                             <button
                                                 onClick={(e) => handleAutoSelect(profile, e)}
                                                 className={cn(
