@@ -1,5 +1,5 @@
 import { spawnSync } from 'child_process';
-import { existsSync, mkdirSync, copyFileSync, chmodSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, copyFileSync, chmodSync, writeFileSync, statSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -12,7 +12,6 @@ const arch = process.arch;
 
 if (platform === 'win32') {
     console.log('Skipping tunnet-helper build on Windows (not needed)');
-    const srcTauriDir = join(rootDir, 'src-tauri');
     const resourcesDir = join(srcTauriDir, 'resources');
     if (!existsSync(resourcesDir)) {
         mkdirSync(resourcesDir, { recursive: true });
@@ -36,15 +35,50 @@ if (platform === 'darwin') {
     target = arch === 'arm64' ? 'aarch64-unknown-linux-gnu' : 'x86_64-unknown-linux-gnu';
 }
 
+const resourcesDir = join(srcTauriDir, 'resources');
+const targetPath = join(resourcesDir, 'tunnet-helper');
+
+// Function to get the latest modification time of a directory recursively
+function getLatestMtime(dir) {
+    let latest = 0;
+    if (!existsSync(dir)) return 0;
+    const files = readdirSync(dir, { withFileTypes: true });
+    for (const file of files) {
+        const fullPath = join(dir, file.name);
+        if (file.isDirectory()) {
+            if (file.name === 'target' || file.name === 'node_modules' || file.name === '.git') continue;
+            latest = Math.max(latest, getLatestMtime(fullPath));
+        } else {
+            latest = Math.max(latest, statSync(fullPath).mtimeMs);
+        }
+    }
+    return latest;
+}
+
+// Check if we need to rebuild
+if (existsSync(targetPath)) {
+    const binaryMtime = statSync(targetPath).mtimeMs;
+    const srcMtime = getLatestMtime(join(srcTauriDir, 'src'));
+    const cargoTomlMtime = statSync(join(srcTauriDir, 'Cargo.toml')).mtimeMs;
+    const cargoLockPath = join(srcTauriDir, 'Cargo.lock');
+    const cargoLockMtime = existsSync(cargoLockPath) ? statSync(cargoLockPath).mtimeMs : 0;
+
+    const maxSrcMtime = Math.max(srcMtime, cargoTomlMtime, cargoLockMtime);
+
+    if (binaryMtime > maxSrcMtime) {
+        console.log('tunnet-helper is up to date, skipping build.');
+        process.exit(0);
+    }
+}
+
 console.log(`Building ${binaryName} for ${target}...`);
 
 // Ensure resources directory exists
-const resourcesDir = join(srcTauriDir, 'resources');
 if (!existsSync(resourcesDir)) {
     mkdirSync(resourcesDir, { recursive: true });
 }
 
-// Create a placeholder file to satisfy tauri_build check (chicken-and-egg problem)
+// Create a placeholder file to satisfy tauri_build check
 const placeholderPath = join(resourcesDir, 'tunnet-helper');
 if (!existsSync(placeholderPath)) {
     writeFileSync(placeholderPath, '');
@@ -64,10 +98,7 @@ if (buildResult.status !== 0) {
 }
 
 // Copy the binary to resources/tunnet-helper
-// Note: The installer expects the binary name to be 'tunnet-helper'
 const builtBinaryPath = join(srcTauriDir, 'target', target, 'release', binaryName);
-const targetPath = join(resourcesDir, 'tunnet-helper');
-
 copyFileSync(builtBinaryPath, targetPath);
 
 if (platform !== 'win32') {
