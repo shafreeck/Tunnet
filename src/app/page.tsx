@@ -12,6 +12,7 @@ import { GroupsView, Group } from "@/components/dashboard/groups-view"
 import { SubscriptionsView, EditSubscriptionModal, Subscription } from "@/components/dashboard/subscriptions-view"
 import { RulesView } from "@/components/dashboard/rules-view"
 import { open } from "@tauri-apps/plugin-shell"
+import { onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { Zap, RefreshCw, Edit2, Trash2, Target, ExternalLink } from "lucide-react"
 import { SettingsView } from "@/components/dashboard/settings-view"
 import { Header, ConnectionStatus } from "@/components/dashboard/connection-status"
@@ -616,6 +617,46 @@ export default function Home() {
       setIsImporting(false)
     }
   }
+
+  // Deep Link Listener
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    const setup = async () => {
+      try {
+        unlisten = await onOpenUrl((urls) => {
+          console.log('Deep link received:', urls)
+          urls.forEach(url => {
+            // Support formats: sing-box://import?url=... or sing-box://https://... or tunnet://...
+            const clean = url.replace(/^(sing-box|tunnet):\/\//, "")
+            let targetUrl = ""
+
+            if (clean.startsWith('import')) {
+              try {
+                const qIndex = clean.indexOf('?')
+                if (qIndex !== -1) {
+                  const params = new URLSearchParams(clean.substring(qIndex + 1))
+                  targetUrl = params.get('url') || ""
+                }
+              } catch (e) { console.error(e) }
+            }
+            // Direct URL fallback
+            else if (clean.match(/^https?:\/\//)) {
+              targetUrl = clean
+            }
+
+            if (targetUrl) {
+              // Slight delay to ensure window focus interaction handles correctly if needed
+              setTimeout(() => handleImport(targetUrl), 100)
+            }
+          })
+        })
+      } catch (e) {
+        console.error('Deep link setup failed', e)
+      }
+    }
+    setup()
+    return () => { unlisten && unlisten() }
+  }, [])
 
   const handleUpdateProfile = async (id: string) => {
     const promise = async () => {

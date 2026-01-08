@@ -25,6 +25,7 @@
           "validator": "regex"
         }
       ]
-    }
+    },
+    "deep-link:default"
   ]
 }
