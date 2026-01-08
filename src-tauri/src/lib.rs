@@ -350,7 +350,18 @@ static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            println!("a new app instance was opened with {argv:?}");
+            // Optional: focus window on new instance attempt
+            let _ = app.get_webview_window("main").map(|w| w.set_focus());
+        }));
+    }
+
+    builder = builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_os::init())

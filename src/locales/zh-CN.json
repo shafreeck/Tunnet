@@ -232,6 +232,7 @@
         "connected_to": "已连接到 {{server}}",
         "updated_to": "已更新为 {{mode}}",
         "action_failed": "失败: {{error}}",
+        "import_no_nodes": "该订阅中未找到有效节点，导入已取消。",
         "updating_tun": "正在更新 TUN 模式...",
         "system_proxy_enabled": "系统代理已启用",
         "system_proxy_disabled": "系统代理已禁用"

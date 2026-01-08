@@ -1813,6 +1813,11 @@ impl<R: Runtime> ProxyService<R> {
         name: Option<String>,
     ) -> Result<String, String> {
         let new_profile = self.manager.fetch_subscription(url, name).await?;
+
+        if new_profile.nodes.is_empty() {
+            return Err("No valid nodes found in this subscription".to_string());
+        }
+
         let mut profiles = self.manager.load_profiles()?;
         let id_clone = new_profile.id.clone();
 
@@ -1893,6 +1898,11 @@ impl<R: Runtime> ProxyService<R> {
                 let user_interval = profiles[pos].update_interval;
 
                 let updated_profile = self.manager.fetch_subscription(url, Some(name)).await?;
+
+                if updated_profile.nodes.is_empty() {
+                    return Err("No valid nodes found in this subscription".to_string());
+                }
+
                 // Preserve ID to keep selection valid if possible, but fetch generates new ID.
                 // Let's reuse the old ID.
                 let mut p = updated_profile;

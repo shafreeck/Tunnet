@@ -613,7 +613,13 @@ export default function Home() {
         }
       }
     } catch (e: any) {
-      toast.error(t('toast.action_failed', { error: e }))
+      console.error("Import failed:", e)
+      const errorMsg = String(e)
+      if (errorMsg.includes("No valid nodes found in this subscription")) {
+        toast.error(t('toast.import_no_nodes'))
+      } else {
+        toast.error(t('toast.action_failed', { error: errorMsg }))
+      }
       setIsImporting(false)
     }
   }
@@ -667,7 +673,14 @@ export default function Home() {
     toast.promise(promise(), {
       loading: t('toast.updating_sub'),
       success: t('toast.sub_updated'),
-      error: (e) => t('toast.action_failed', { error: e })
+      error: (e) => {
+        console.error("Update failed:", e)
+        const errorMsg = String(e)
+        if (errorMsg.includes("No valid nodes found in this subscription")) {
+          return t('toast.import_no_nodes')
+        }
+        return t('toast.action_failed', { error: errorMsg })
+      }
     })
   }
 

@@ -69,6 +69,9 @@
       "resources/sing-box",
       "resources/tunnet-helper"
     ],
+    "macOS": {
+      "infoPlist": "Info.plist"
+    },
     "iOS": {
       "developmentTeam": "JSG9S9M456"
     }
