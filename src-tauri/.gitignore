@@ -3,3 +3,9 @@
 /target/
 /gen/schemas
 /resources/tunnet-helper
+
+# Generated assets for mobile
+/gen/android/app/src/main/assets/resources/sing-box
+/gen/android/app/src/main/assets/resources/*.srs
+/gen/apple/assets/resources/sing-box
+/gen/apple/assets/resources/*.srs

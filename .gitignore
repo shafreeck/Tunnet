@@ -47,8 +47,12 @@ next-env.d.ts
 *.dylib
 *.lib
 *.exp
+*.exe
 
 # Specific libbox artifacts
 core_library/libbox-c-shared/libbox.h
 core_library/libbox-c-shared/libbox_ios.h
 core_library/libbox-c-shared/libbox.def
+
+# Test target
+core_library/libbox-ffi-test/target/
