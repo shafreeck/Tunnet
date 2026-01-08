@@ -25,7 +25,7 @@ const COUNTRY_MAP: Record<string, string> = {
     "ukraine": "ua", "乌克兰": "ua",
     "italy": "it", "意大利": "it", "意": "it",
     "spain": "es", "西班牙": "es", "西": "es",
-    "brazil": "br", "brazil": "br", "巴西": "br",
+    "brazil": "br", "巴西": "br",
     "argentina": "ar", "阿根廷": "ar",
     "switzerland": "ch", "瑞士": "ch",
     "sweden": "se", "瑞典": "se",
