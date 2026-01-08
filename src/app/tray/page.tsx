@@ -306,7 +306,7 @@ export default function TrayPage() {
 
     return (
         <div className="h-screen w-full flex flex-col select-none transition-colors duration-300 bg-transparent text-text-primary">
-            <div className="h-16 flex items-center justify-between px-4 border-b border-white/[0.03] dark:border-white/[0.03] bg-black/5 dark:bg-white/5">
+            <div className="h-12 shrink-0 flex items-center justify-between px-4 border-b border-white/[0.03] dark:border-white/[0.03] bg-black/5 dark:bg-white/5">
                 <div className="flex items-center gap-2">
                     <div className={cn(
                         "size-2 rounded-full transition-colors",
@@ -325,12 +325,12 @@ export default function TrayPage() {
                 </button>
             </div>
 
-            <div className="p-4 flex flex-col gap-5">
+            <div className="p-3 flex-1 min-h-0 flex flex-col gap-4">
                 <button
                     onClick={toggleConnection}
                     disabled={isTransitioning}
                     className={cn(
-                        "group relative h-20 w-full rounded-[32px] flex items-center px-6 gap-5 transition-all duration-500 border",
+                        "group relative h-18 w-full rounded-[28px] flex items-center px-5 gap-4 transition-all duration-500 border shrink-0",
                         isTransitioning ? "opacity-90 cursor-wait bg-black/5 dark:bg-white/5 border-transparent" :
                             (status.is_running
                                 ? "bg-primary/10 border-primary/30 shadow-[0_12px_32px_-12px_rgba(0,122,255,0.3)]"
@@ -338,12 +338,12 @@ export default function TrayPage() {
                     )}
                 >
                     <div className={cn(
-                        "size-14 rounded-[22px] flex items-center justify-center transition-all duration-500 shadow-lg",
+                        "size-12 rounded-[18px] flex items-center justify-center transition-all duration-500 shadow-lg",
                         status.is_running && !isTransitioning
                             ? "bg-primary text-white shadow-primary/20 scale-105"
                             : "bg-black/10 dark:bg-white/5 text-text-secondary group-hover:bg-black/20 dark:group-hover:bg-white/10"
                     )}>
-                        <Power size={24} className={cn(
+                        <Power size={20} className={cn(
                             "transition-all duration-500",
                             status.is_running && !isTransitioning ? "drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]" : "",
                             isTransitioning && "animate-spin text-primary"
@@ -394,7 +394,7 @@ export default function TrayPage() {
                                 onClick={() => setMode(mode.id as any)}
                                 disabled={isTransitioning}
                                 className={cn(
-                                    "flex-1 relative flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl transition-all border",
+                                    "flex-1 relative flex flex-col items-center justify-center gap-1.5 py-2 rounded-2xl transition-all border",
                                     status.routing_mode === mode.id
                                         ? "bg-primary/5 border-primary/20 text-text-primary shadow-sm"
                                         : "bg-black/5 dark:bg-white/5 border-transparent text-text-secondary hover:text-text-primary hover:bg-black/10 dark:hover:bg-white/10"
@@ -536,9 +536,9 @@ export default function TrayPage() {
                         </div>
                     )}
                 </div>
-            </div>
+            </div >
 
-            <div className="mt-auto px-4 py-3 border-t border-white/[0.03] flex items-center justify-between bg-black/5 dark:bg-white/5">
+            <div className="mt-auto shrink-0 px-4 py-2 border-t border-white/[0.03] flex items-center justify-between bg-black/5 dark:bg-white/5">
                 <span className="text-[10px] font-mono opacity-20 whitespace-nowrap overflow-hidden max-w-[80px]">V0.1.0</span>
                 <button
                     onClick={handleQuit}

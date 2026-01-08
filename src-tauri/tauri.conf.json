@@ -28,7 +28,7 @@
         "label": "tray",
         "url": "/tray",
         "width": 320,
-        "height": 480,
+        "height": 450,
         "resizable": false,
         "transparent": true,
         "decorations": false,
