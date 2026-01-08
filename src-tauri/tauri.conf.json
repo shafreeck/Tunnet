@@ -59,6 +59,9 @@
       "resources/sing-box",
       "resources/tunnet-helper"
     ],
+    "macOS": {
+      "entitlements": null
+    },
     "iOS": {
       "developmentTeam": "JSG9S9M456"
     }
