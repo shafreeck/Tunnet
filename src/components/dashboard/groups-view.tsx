@@ -284,6 +284,7 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
                                     onActivate={(id) => handleActivateGroup(id)}
                                     onSelectNode={() => openSelectionDialog(group)}
                                     t={t}
+                                    allNodes={allNodes || []}
                                 />
                             ))}
                         </div>
