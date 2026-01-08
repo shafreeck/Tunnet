@@ -161,11 +161,11 @@ export function LocationsMap({
                     }).map((server) => {
                         const isSelected = server.id === activeServerId
                         let coords: [number, number] | null = null
-                        let isVerified = false
+                        const isVerified = (server.location && typeof server.location.lat === 'number' && typeof server.location.lon === 'number');
+                        const hasLatency = server.ping && server.ping > 0;
 
-                        if (server.location && typeof server.location.lat === 'number' && typeof server.location.lon === 'number') {
+                        if (isVerified) {
                             coords = [server.location.lon, server.location.lat]
-                            isVerified = true
                         } else if (server.countryCode) {
                             coords = getCountryCoordinates(server.countryCode)
                         }
@@ -176,6 +176,7 @@ export function LocationsMap({
                                     key={server.id}
                                     coordinates={coords}
                                     onClick={() => onSelectServer(server.id)}
+                                    // ... handlers
                                     onMouseEnter={(e) => {
                                         const locationStr = server.location?.city || getCountryName(server.location?.country || server.country, i18n.language) || "Unknown Location"
                                         setTooltip({
@@ -205,11 +206,13 @@ export function LocationsMap({
                                         {/* Core marker */}
                                         <circle
                                             r={isSelected ? 6 : (isVerified ? 5 : 4)}
-                                            fill={isSelected ? "#22c55e" : (isVerified ? "#22c55e" : nodeDisconnected)}
+                                            fill={isSelected ? "#22c55e" : ((isVerified || hasLatency) ? "#22c55e" : nodeDisconnected)}
                                             stroke={isSelected ? "#fff" : (isVerified ? "#000" : nodeStroke)}
                                             strokeWidth={isSelected ? 2 : 1}
-                                            style={{ opacity: (isVerified || isSelected) ? 1 : 0.8 }}
+                                            style={{ opacity: (isVerified || isSelected || hasLatency) ? 1 : 0.8 }}
                                         />
+
+                                        {/* ... rest */}
 
                                         {/* Active Target Indicator */}
                                         {isSelected && (

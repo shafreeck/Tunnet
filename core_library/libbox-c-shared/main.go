@@ -456,15 +456,15 @@ func LibboxTestBatch(outboundsJSON *C.char, targetURL *C.char, timeoutMS C.longl
 		"dns": map[string]interface{}{
 			"servers": []map[string]interface{}{
 				{
-					"tag":     "google",
-					"address": "8.8.8.8",
+					"tag":     "local",
+					"address": "local",
 					"detour":  "direct",
 				},
 			},
 			"rules": []map[string]interface{}{
 				{
 					"outbound": "any",
-					"server":   "google",
+					"server":   "local",
 				},
 			},
 			"strategy": "ipv4_only",

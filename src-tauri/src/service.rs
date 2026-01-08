@@ -2550,6 +2550,8 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         // 3. Apply updates
+        // Reload profiles to minimize race condition window (overwrite risk)
+        let mut profiles = self.manager.load_profiles()?;
         for p in &mut profiles {
             for n in &mut p.nodes {
                 if let Some(ping) = updates.get(&n.id) {
@@ -2564,12 +2566,14 @@ impl<R: Runtime> ProxyService<R> {
     }
 
     pub async fn probe_nodes_location(&self, node_ids: Vec<String>) -> Result<(), String> {
-        let mut profiles = self.manager.load_profiles()?;
+        let profiles = self.manager.load_profiles()?;
         let settings = self.manager.load_settings()?;
         let log_level = settings.log_level.to_lowercase();
 
         let mut updates = std::collections::HashMap::new();
         let mut futures = Vec::new();
+        // Limit concurrency to prevent resource exhaustion (too many sing-box instances)
+        let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
 
         for p in &profiles {
             for n in &p.nodes {
@@ -2588,8 +2592,12 @@ impl<R: Runtime> ProxyService<R> {
                 let outbound_json = serde_json::to_string(&outbound_val).map_err(|e| e.to_string())?;
 
                 let current_latency = n.location.as_ref().map(|l| l.latency).unwrap_or(0);
+                let sem = semaphore.clone();
 
                 futures.push(tokio::spawn(async move {
+                    // Acquire permit to limit active sing-box instances
+                    let _permit = sem.acquire().await.unwrap();
+
                     let outbound_c = std::ffi::CString::new(outbound_json).unwrap();
                     let target_c = std::ffi::CString::new("http://ip-api.com/json").unwrap();
 
@@ -2638,6 +2646,8 @@ impl<R: Runtime> ProxyService<R> {
             }
         }
 
+        // Reload profiles to minimize race condition
+        let mut profiles = self.manager.load_profiles()?;
         for p in &mut profiles {
             for n in &mut p.nodes {
                 if let Some(loc) = updates.get(&n.id) {
@@ -2646,7 +2656,7 @@ impl<R: Runtime> ProxyService<R> {
             }
         }
         self.manager.save_profiles(&profiles)?;
-        let _ = self.app.emit("profiles-update", None::<()>);
+        let _ = self.app.emit("profiles-update", Some(updates.keys().cloned().collect::<Vec<String>>()));
 
         Ok(())
     }
