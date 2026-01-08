@@ -82,6 +82,11 @@ impl<R: Runtime> ProxyService<R> {
     }
 
     pub fn init(&self) {
+        // Synchronize initial log level
+        if let Ok(settings) = self.manager.load_settings() {
+            self.apply_log_level(&settings.log_level);
+        }
+
         // Ensure helper cleans up too (in case of previous crash/TUN mode residue)
         crate::helper_client::HelperClient::new().stop_proxy().ok();
         self.warmup_network_cache();
@@ -141,6 +146,9 @@ impl<R: Runtime> ProxyService<R> {
                 error!("Failed to persist tun_mode update: {}", e);
             }
         }
+
+        // Synchronize log level
+        self.apply_log_level(&settings.log_level);
 
         // Decision: Retain System Proxy?
         // We retain if:
@@ -2232,6 +2240,11 @@ impl<R: Runtime> ProxyService<R> {
 
         self.manager.save_settings(&settings)?;
 
+        // Apply log level immediately to Rust
+        if old_settings.log_level != settings.log_level {
+            self.apply_log_level(&settings.log_level);
+        }
+
         // Handle Launch at Login
         // Handle Launch at Login
         #[cfg(desktop)]
@@ -2397,6 +2410,9 @@ impl<R: Runtime> ProxyService<R> {
             return Ok(());
         }
 
+        let settings = self.manager.load_settings()?;
+        let log_level = settings.log_level.to_lowercase();
+
         // Unified Native URLTest Strategy (Hiddify-like)
         // Uses sing-box native `URLTest` group for max performance and consistency.
         // Works in both Running and Stopped states without "double proxy" issues in TUN mode.
@@ -2411,7 +2427,13 @@ impl<R: Runtime> ProxyService<R> {
         }
             
         if !outbounds.is_empty() {
-             let json_str = serde_json::to_string(&outbounds).unwrap_or("[]".to_string());
+             // Pass log level to Go
+             let wrapper = serde_json::json!({
+                 "outbounds": outbounds,
+                 "log_level": log_level
+             });
+             let json_str = wrapper.to_string();
+
              let outbound_c = std::ffi::CString::new(json_str).unwrap();
              // URL is configured in Go URLTest group now (but we pass it anyway for compatibility if needed)
              let target_c = std::ffi::CString::new("http://cp.cloudflare.com/generate_204").unwrap();
@@ -2467,6 +2489,9 @@ impl<R: Runtime> ProxyService<R> {
 
     pub async fn probe_nodes_location(&self, node_ids: Vec<String>) -> Result<(), String> {
         let mut profiles = self.manager.load_profiles()?;
+        let settings = self.manager.load_settings()?;
+        let log_level = settings.log_level.to_lowercase();
+
         let mut updates = std::collections::HashMap::new();
         let mut futures = Vec::new();
 
@@ -2478,7 +2503,13 @@ impl<R: Runtime> ProxyService<R> {
                 }
 
                 let outbound = self.node_to_outbound(n);
-                let outbound_json = serde_json::to_string(&outbound).map_err(|e| e.to_string())?;
+                
+                // Inject log_level into outbound json
+                let mut outbound_val = serde_json::to_value(&outbound).map_err(|e| e.to_string())?;
+                if let Some(obj) = outbound_val.as_object_mut() {
+                    obj.insert("_log_level".to_string(), serde_json::Value::String(log_level.clone()));
+                }
+                let outbound_json = serde_json::to_string(&outbound_val).map_err(|e| e.to_string())?;
 
                 futures.push(tokio::spawn(async move {
                     let outbound_c = std::ffi::CString::new(outbound_json).unwrap();
@@ -2742,6 +2773,17 @@ impl<R: Runtime> ProxyService<R> {
 
         // 4. Cleanup System Proxy
         self.disable_system_proxy();
+    }
+    fn apply_log_level(&self, level_str: &str) {
+        let level = match level_str.to_lowercase().as_str() {
+            "trace" => log::LevelFilter::Trace,
+            "debug" => log::LevelFilter::Debug,
+            "warn" => log::LevelFilter::Warn,
+            "error" => log::LevelFilter::Error,
+            _ => log::LevelFilter::Info,
+        };
+        log::set_max_level(level);
+        info!("Global log level applied: {:?}", level);
     }
 }
 

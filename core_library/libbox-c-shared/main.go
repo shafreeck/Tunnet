@@ -25,6 +25,8 @@ var (
 	instance *box.Box
 	mu       sync.Mutex
 	cancel   context.CancelFunc
+
+	currentLogLevel string = "info"
 )
 
 //export LibboxHello
@@ -58,6 +60,11 @@ func LibboxStart(configJSON *C.char, logFD C.longlong) *C.char {
 		cancel()
 		cancel = nil
 		return C.CString(fmt.Sprintf("decode config error: %s", err))
+	}
+
+	// Sync current log level
+	if options.Log != nil {
+		currentLogLevel = options.Log.Level
 	}
 
 	var err error
@@ -168,6 +175,11 @@ func LibboxStartMobile(fd C.int, configJSON *C.char, logFD C.longlong) *C.char {
 		return C.CString(fmt.Sprintf("decode config error: %s", err))
 	}
 
+	// Sync current log level
+	if options.Log != nil {
+		currentLogLevel = options.Log.Level
+	}
+
 	instance, err = box.New(box.Options{
 		Context: ctx,
 		Options: options,
@@ -215,6 +227,9 @@ func LibboxTestOutbound(outboundJSON *C.char, targetURL *C.char, timeoutMS C.lon
 	boxOptions := box.Options{
 		Context: ctx,
 		Options: option.Options{
+			Log: &option.LogOptions{
+				Level: currentLogLevel,
+			},
 			Outbounds: []option.Outbound{options},
 		},
 	}
@@ -282,6 +297,16 @@ func LibboxFetch(outboundJSON *C.char, targetURL *C.char, timeoutMS C.longlong) 
 	// Ensure registries are initialized
 	ctx = include.Context(ctx)
 
+	// Try to unmarshal as generic map to check for _log_level
+	var rawConfig map[string]interface{}
+	sjson.UnmarshalContext(ctx, []byte(configStr), &rawConfig)
+
+	// Determine Log Level
+	logLevel := currentLogLevel
+	if l, ok := rawConfig["_log_level"].(string); ok && l != "" {
+		logLevel = l
+	}
+
 	var options option.Outbound
 	if err := sjson.UnmarshalContext(ctx, []byte(configStr), &options); err != nil {
 		return C.CString(fmt.Sprintf("decode config error: %v", err))
@@ -294,6 +319,9 @@ func LibboxFetch(outboundJSON *C.char, targetURL *C.char, timeoutMS C.longlong) 
 	boxOptions := box.Options{
 		Context: ctx,
 		Options: option.Options{
+			Log: &option.LogOptions{
+				Level: logLevel,
+			},
 			Outbounds: []option.Outbound{options},
 		},
 	}
@@ -357,10 +385,26 @@ func LibboxTestBatch(outboundsJSON *C.char, targetURL *C.char, timeoutMS C.longl
 
 	ctx = include.Context(ctx)
 
-	// 1. Unmarshal outbounds
+	// 1. Unmarshal wrapper first
+	var wrapper struct {
+		Outbounds []map[string]interface{} `json:"outbounds"`
+		LogLevel  string                   `json:"log_level"`
+	}
+
 	var rawOutbounds []map[string]interface{}
-	if err := sjson.UnmarshalContext(ctx, []byte(configStr), &rawOutbounds); err != nil {
-		return C.CString(fmt.Sprintf("{\"error\": \"decode config error: %v\"}", err))
+	logLevel := currentLogLevel
+
+	// Try unmarshal as wrapper object
+	if err := sjson.UnmarshalContext(ctx, []byte(configStr), &wrapper); err == nil && len(wrapper.Outbounds) > 0 {
+		rawOutbounds = wrapper.Outbounds
+		if wrapper.LogLevel != "" {
+			logLevel = wrapper.LogLevel
+		}
+	} else {
+		// Fallback: try unmarshal as array (backward compatibility)
+		if err := sjson.UnmarshalContext(ctx, []byte(configStr), &rawOutbounds); err != nil {
+			return C.CString(fmt.Sprintf("{\"error\": \"decode config error: %v\"}", err))
+		}
 	}
 
 	// 2. Extract tags for urltest group
@@ -403,6 +447,9 @@ func LibboxTestBatch(outboundsJSON *C.char, targetURL *C.char, timeoutMS C.longl
 	}
 
 	fullConfig := map[string]interface{}{
+		"log": map[string]interface{}{
+			"level": logLevel,
+		},
 		"outbounds": rawOutbounds,
 		"dns": map[string]interface{}{
 			"servers": []map[string]interface{}{
