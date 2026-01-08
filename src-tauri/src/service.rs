@@ -2459,7 +2459,7 @@ impl<R: Runtime> ProxyService<R> {
     }
 
     pub async fn probe_nodes_latency(&self, node_ids: Vec<String>) -> Result<(), String> {
-        let mut profiles = self.manager.load_profiles()?;
+        let profiles = self.manager.load_profiles()?;
         let mut updates = std::collections::HashMap::new();
 
         // 1. Prepare target nodes
