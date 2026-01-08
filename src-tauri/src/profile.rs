@@ -32,6 +32,9 @@ pub struct Profile {
     pub download: Option<u64>,
     pub total: Option<u64>,
     pub expire: Option<u64>,
+    pub web_page_url: Option<String>,
+    pub update_interval: Option<u64>,
+    pub header_update_interval: Option<u64>,
     pub nodes: Vec<Node>,
 }
 

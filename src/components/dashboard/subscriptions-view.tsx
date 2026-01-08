@@ -1,14 +1,16 @@
 "use client"
 
 import React, { useState } from "react"
-import { RefreshCw, Trash2, Globe, Server, MoreHorizontal, Database, Zap, PlusCircle, Edit2 } from "lucide-react"
+import { RefreshCw, Trash2, Globe, Server, MoreHorizontal, Database, Zap, PlusCircle, Edit2, Target, ExternalLink } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { InputModal } from "@/components/ui/input-modal"
+import { ConfirmationModal } from "@/components/ui/confirmation-modal"
+import { open } from "@tauri-apps/plugin-shell"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
 
-interface Subscription {
+export interface Subscription {
     id: string
     name: string
     url?: string
@@ -16,6 +18,9 @@ interface Subscription {
     download?: number
     total?: number
     expire?: number
+    web_page_url?: string
+    update_interval?: number
+    header_update_interval?: number
     nodes: any[]
 }
 
@@ -52,14 +57,13 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
         const now = Math.floor(Date.now() / 1000)
         const diff = expire - now
         if (diff <= 0) return t('subscriptions.expired', { defaultValue: 'Expired' })
-        const days = Math.ceil(diff / (24 * 3600))
+        const days = Math.max(1, Math.floor(diff / (24 * 3600)))
         return t('subscriptions.remaining_days', { count: days, defaultValue: `Remaining ${days} days` })
     }
 
     const itemsValid = (n?: number) => n !== undefined && n !== null && !isNaN(n)
 
-    const [renamingId, setRenamingId] = useState<string | null>(null)
-    const [renamingName, setRenamingName] = useState("")
+    const [editingProfile, setEditingProfile] = useState<Subscription | null>(null)
     const [profileToDelete, setProfileToDelete] = useState<{ id: string, name: string } | null>(null)
 
     const handleDeleteClick = (id: string, name: string, e: React.MouseEvent) => {
@@ -81,22 +85,27 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
     const isProfileAutoActive = (profileId: string) => {
         return activeServerId === `system:sub:${profileId}`
     }
-    const handleRenameClick = (id: string, currentName: string, e: React.MouseEvent) => {
+    const handleEditClick = (profile: Subscription, e: React.MouseEvent) => {
         e.stopPropagation()
-        setRenamingId(id)
-        setRenamingName(currentName)
+        setEditingProfile(profile)
     }
 
-    const handleRenameConfirm = async (newName: string) => {
-        if (!renamingId) return
+    const handleEditConfirm = async (data: any) => {
+        if (!editingProfile) return
         try {
-            await invoke("rename_profile", { id: renamingId, newName })
-            toast.success(t('subscriptions.rename_success', { defaultValue: 'Renamed successfully' }))
+            await invoke("edit_profile", {
+                id: editingProfile.id,
+                name: data.name,
+                url: data.url,
+                updateInterval: data.update_interval,
+                clearInterval: data.clear_interval
+            })
+            toast.success(t('subscriptions.edit_success', { defaultValue: 'Updated successfully' }))
             onUpdateAll?.() // Refresh list
         } catch (error) {
             toast.error(String(error))
         } finally {
-            setRenamingId(null)
+            setEditingProfile(null)
         }
     }
 
@@ -259,17 +268,31 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                                 )}
                                                 title={t('auto_select_tooltip')}
                                             >
-                                                <Zap size={14} fill={isProfileAutoActive(profile.id) ? "currentColor" : "none"} />
+                                                <Target size={14} fill={isProfileAutoActive(profile.id) ? "currentColor" : "none"} />
                                             </button>
+                                            {profile.web_page_url && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if (profile.web_page_url) {
+                                                            open(profile.web_page_url);
+                                                        }
+                                                    }}
+                                                    className="p-2 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-90"
+                                                    title={t('subscriptions.visit_website', { defaultValue: 'Visit Website' })}
+                                                >
+                                                    <ExternalLink size={14} />
+                                                </button>
+                                            )}
                                             <button
-                                                onClick={(e) => handleRenameClick(profile.id, profile.name, e)}
+                                                onClick={(e) => handleEditClick(profile, e)}
                                                 className="p-2 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-90"
-                                                title={t('subscriptions.rename')}
+                                                title={t('subscriptions.edit_tooltip', { defaultValue: 'Edit Subscription' })}
                                             >
                                                 <Edit2 size={14} />
                                             </button>
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); onDelete(profile.id); }}
+                                                onClick={(e) => handleDeleteClick(profile.id, profile.name, e)}
                                                 className="p-2 text-text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all active:scale-90"
                                                 title={t('subscriptions.delete_tooltip')}
                                             >
@@ -329,16 +352,14 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                             )
                         })}
 
-                        <InputModal
-                            isOpen={!!renamingId}
-                            title={t('subscriptions.rename_subscription')}
-                            message={t('subscriptions.enter_new_name')}
-                            defaultValue={renamingName}
-                            confirmText={t('common.confirm', { defaultValue: 'Confirm' })}
-                            cancelText={t('common.cancel', { defaultValue: 'Cancel' })}
-                            onConfirm={handleRenameConfirm}
-                            onCancel={() => setRenamingId(null)}
-                        />
+                        {editingProfile && (
+                            <EditSubscriptionModal
+                                isOpen={!!editingProfile}
+                                onClose={() => setEditingProfile(null)}
+                                onSave={handleEditConfirm}
+                                initialData={editingProfile}
+                            />
+                        )}
 
                         {profiles.length === 0 && (
                             <div className="col-span-full py-20 flex flex-col items-center justify-center text-gray-600 gap-4">
@@ -347,6 +368,132 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                             </div>
                         )}
                     </div>
+                </div>
+            </div>
+
+
+            <ConfirmationModal
+                isOpen={!!profileToDelete}
+                title={t('subscriptions.delete_title')}
+                message={t('subscriptions.delete_message')}
+                confirmText={t('common.delete')}
+                cancelText={t('common.cancel')}
+                isDanger
+                onConfirm={() => {
+                    if (profileToDelete) {
+                        onDelete(profileToDelete.id)
+                        setProfileToDelete(null)
+                    }
+                }}
+                onCancel={() => setProfileToDelete(null)}
+            />
+        </div >
+    )
+}
+
+export function EditSubscriptionModal({ isOpen, onClose, onSave, initialData }: { isOpen: boolean, onClose: () => void, onSave: (data: any) => Promise<void>, initialData: Subscription }) {
+    const { t } = useTranslation()
+
+    const getDisplayName = (name: string) => {
+        const lower = name.toLowerCase()
+        if (lower === "new subscription" || lower === "新订阅") return t('subscriptions.new_subscription')
+        if (lower === "local import" || lower === "本地导入") return t('subscriptions.local_import')
+        return name
+    }
+
+    const [name, setName] = useState(getDisplayName(initialData.name))
+    const [url, setUrl] = useState(initialData.url || "")
+    const [interval, setInterval] = useState(initialData.update_interval ? String(initialData.update_interval / 60) : "") // Show in minutes
+
+    const handleSave = () => {
+        // Convert interval back to seconds if present
+        let intervalSec: number | undefined = undefined;
+        let clearInterval = false;
+
+        if (interval === "") {
+            clearInterval = true;
+        } else if (!isNaN(Number(interval))) {
+            const val = Number(interval);
+            if (val === 0) {
+                intervalSec = 0; // Disable
+            } else {
+                intervalSec = val * 60;
+            }
+        }
+
+        onSave({
+            id: initialData.id,
+            name,
+            url: url || undefined,
+            update_interval: intervalSec,
+            clear_interval: clearInterval
+        })
+    }
+
+    if (!isOpen) return null
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-[#1a1a1a] border border-border-color w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+                <h3 className="text-lg font-bold text-text-primary">{t('subscriptions.edit_subscription', { defaultValue: 'Edit Subscription' })}</h3>
+
+                <div className="space-y-3">
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{t('subscriptions.name', { defaultValue: "Name" })}</label>
+                        <input
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                            className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/50 rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none transition-all"
+                            placeholder={t('subscriptions.name_placeholder', { defaultValue: "My Subscription" })}
+                        />
+                    </div>
+
+                    {initialData.url && (
+                        <>
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{t('subscriptions.url', { defaultValue: "Subscription URL" })}</label>
+                                <input
+                                    value={url}
+                                    onChange={e => setUrl(e.target.value)}
+                                    className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/50 rounded-xl px-4 py-2 text-xs text-text-primary focus:outline-none transition-all font-mono"
+                                    placeholder="https://example.com/sub"
+                                />
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{t('subscriptions.auto_update', { defaultValue: "Auto Update Interval (Min)" })}</label>
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        value={interval}
+                                        onChange={e => setInterval(e.target.value)}
+                                        className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/50 rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none transition-all"
+                                        placeholder={
+                                            initialData.header_update_interval
+                                                ? t('subscriptions.default_interval', { count: Math.round(initialData.header_update_interval / 60), defaultValue: `Default: ${Math.round(initialData.header_update_interval / 60)} min` })
+                                                : t('subscriptions.interval_placeholder', { defaultValue: "e.g. 60 (Empty to disable)" })
+                                        }
+                                    />
+                                </div>
+                                <p className="text-[10px] text-text-tertiary">{t('subscriptions.interval_hint', { defaultValue: "Leave empty to use default. Set to 0 to disable." })}</p>
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 rounded-xl text-sm font-medium text-text-secondary hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                    >
+                        {t('common.cancel', { defaultValue: 'Cancel' })}
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        className="px-4 py-2 rounded-xl text-sm font-bold text-white bg-primary hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all active:scale-95"
+                    >
+                        {t('common.save', { defaultValue: 'Save' })}
+                    </button>
                 </div>
             </div>
         </div>

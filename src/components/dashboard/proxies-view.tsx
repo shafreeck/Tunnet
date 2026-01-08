@@ -21,7 +21,7 @@ interface ProxiesViewProps {
     onEdit: (node: any) => void
     onDelete: (id: string) => void
     onRefresh: () => void
-    onPing: (id: string) => Promise<void>
+    onPing: (id: string | string[]) => Promise<void>
 
     // Groups Props
     // GroupsView uses allNodes too

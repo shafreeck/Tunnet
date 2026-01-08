@@ -289,7 +289,20 @@
         "local_import": "Local Import",
         "rename": "Rename",
         "rename_subscription": "Rename Subscription",
-        "enter_new_name": "Enter new name"
+        "enter_new_name": "Enter new name",
+        "name": "Name",
+        "url": "Subscription URL",
+        "auto_update": "Auto Update Interval (Min)",
+        "interval_placeholder": "e.g. 60 (Empty to disable)",
+        "interval_hint": "Leave empty to use default. Set to 0 to disable.",
+        "edit_success": "Updated successfully",
+        "default_interval": "Default: {{count}} min",
+        "visit_website": "Visit Website",
+        "edit_tooltip": "Edit Subscription",
+        "name_placeholder": "My Subscription",
+        "edit_subscription": "Edit Subscription",
+        "delete_title": "Confirm Delete",
+        "delete_message": "Are you sure you want to delete this subscription? This action cannot be undone."
     },
     "rules": {
         "title": "Routing Rules",

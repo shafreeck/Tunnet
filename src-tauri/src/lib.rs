@@ -351,6 +351,7 @@ static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_clipboard_manager::init());
 
@@ -584,7 +585,7 @@ pub fn run() {
             hide_tray_window,
             set_routing_mode_command,
             get_proxy_status,
-            rename_profile,
+            edit_profile,
             check_node_pings,
             get_group_status
         ])
@@ -621,12 +622,21 @@ async fn delete_profile(
 }
 
 #[tauri::command]
-async fn rename_profile(
+async fn edit_profile(
     service: State<'_, ProxyService<tauri::Wry>>,
     id: String,
-    new_name: String,
+    name: String,
+    url: Option<String>,
+    update_interval: Option<u64>,
+    clear_interval: Option<bool>,
 ) -> Result<(), String> {
-    service.rename_profile(&id, &new_name)
+    service.edit_profile(
+        &id,
+        &name,
+        url,
+        update_interval,
+        clear_interval.unwrap_or(false),
+    )
 }
 
 #[tauri::command]

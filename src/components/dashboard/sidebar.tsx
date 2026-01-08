@@ -116,7 +116,10 @@ export function Sidebar({ currentView, onViewChange, subscription }: SidebarProp
                                 ) : (
                                     <span className="text-[10px] font-medium text-accent-green bg-accent-green/10 px-1.5 py-0.5 rounded">
                                         {subscription.expire
-                                            ? t('subscriptions.remaining_days', { count: Math.ceil((subscription.expire - Date.now() / 1000) / 86400), defaultValue: `Remaining ${Math.ceil((subscription.expire - Date.now() / 1000) / 86400)} days` })
+                                            ? t('subscriptions.remaining_days', {
+                                                count: Math.max(1, Math.floor((subscription.expire - Date.now() / 1000) / 86400)),
+                                                defaultValue: `Remaining ${Math.max(1, Math.floor((subscription.expire - Date.now() / 1000) / 86400))} days`
+                                            })
                                             : (total > 0 ? t('sidebar.active') : t('sidebar.unlimited'))
                                         }
                                     </span>

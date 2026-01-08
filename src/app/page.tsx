@@ -4,12 +4,15 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { listen, emit } from "@tauri-apps/api/event"
 import { useTranslation } from "react-i18next"
+import { cn } from "@/lib/utils"
 import { AppSettings, defaultSettings, getAppSettings, saveAppSettings } from "@/lib/settings"
 import { Sidebar, ViewType } from "@/components/dashboard/sidebar"
 import { LocationsView } from "@/components/dashboard/locations-view"
 import { GroupsView, Group } from "@/components/dashboard/groups-view"
-import { SubscriptionsView } from "@/components/dashboard/subscriptions-view"
+import { SubscriptionsView, EditSubscriptionModal, Subscription } from "@/components/dashboard/subscriptions-view"
 import { RulesView } from "@/components/dashboard/rules-view"
+import { open } from "@tauri-apps/plugin-shell"
+import { Zap, RefreshCw, Edit2, Trash2, Target, ExternalLink } from "lucide-react"
 import { SettingsView } from "@/components/dashboard/settings-view"
 import { Header, ConnectionStatus } from "@/components/dashboard/connection-status"
 import { ServerList } from "@/components/dashboard/server-list"
@@ -1008,6 +1011,63 @@ export default function Home() {
 
   const [selectedSubscriptionId, setSelectedSubscriptionId] = useState<string | null>(null)
 
+  const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null)
+
+  const handleEditSubscriptionSave = async (data: any) => {
+    try {
+      await invoke("edit_profile", {
+        id: data.id,
+        name: data.name,
+        url: data.url,
+        update_interval: data.update_interval,
+        clear_interval: data.clear_interval
+      })
+      toast.success(t('subscriptions.edit_success', { defaultValue: 'Updated successfully' }))
+      fetchProfiles()
+      setEditingSubscription(null)
+    } catch (e) {
+      toast.error(String(e))
+    }
+  }
+
+  const handleAutoSelectSubscription = async (profile: Subscription) => {
+    if (profile.nodes.length === 0) {
+      toast.error(t('auto_select_empty'))
+      return
+    }
+
+    const groupId = `system:sub:${profile.id}`
+
+    // Handle Toggle (Deactivate)
+    if (activeServerId === groupId) {
+      const firstManual = profile.nodes[0]
+      if (firstManual) {
+        handleServerToggle(firstManual.id)
+        toast.info(t('auto_select_cancelled', { defaultValue: 'Switched to manual selection' }))
+        return
+      }
+    }
+
+    try {
+      await handleServerToggle(groupId, isConnected)
+      toast.success(t('auto_select_group_created', { name: profile.name }))
+    } catch (err: any) {
+      toast.error(t('toast.action_failed', { error: err }))
+    }
+  }
+
+  const [deleteSubscriptionConfirm, setDeleteSubscriptionConfirm] = useState<{ id: string, name: string } | null>(null)
+
+  const handleDeleteSubscriptionClick = (id: string, name: string) => {
+    setDeleteSubscriptionConfirm({ id, name })
+  }
+
+  const handleConfirmDeleteSubscription = async () => {
+    if (!deleteSubscriptionConfirm) return
+    handleDeleteProfile(deleteSubscriptionConfirm.id)
+    setDeleteSubscriptionConfirm(null)
+  }
+
   const handleSubscriptionSelect = (id: string) => {
     setSelectedSubscriptionId(id)
     setCurrentView("subscription_detail" as any)
@@ -1104,18 +1164,83 @@ export default function Home() {
           <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in zoom-in-95 duration-300">
             <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent px-8 pt-6 pb-2 shrink-0 relative z-30">
               <div className="absolute inset-0 z-0" data-tauri-drag-region />
-              <div className="max-w-5xl mx-auto w-full flex items-center gap-4 mb-4 relative z-10 pointer-events-none">
-                <button
-                  onClick={() => setCurrentView("proxies")}
-                  className="p-2 -ml-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-text-secondary hover:text-text-primary transition-colors pointer-events-auto"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
-                </button>
-                <div>
-                  <h2 className="text-2xl font-bold text-text-primary tracking-tight">{subscription.name}</h2>
-                  <p className="text-sm text-text-secondary font-medium">
-                    {subServers.length} Nodes
-                  </p>
+              <div className="max-w-5xl mx-auto w-full flex items-center justify-between mb-4 relative z-10 pointer-events-none">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setCurrentView("proxies")}
+                    className="size-8 flex items-center justify-center -ml-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-text-secondary hover:text-text-primary transition-colors pointer-events-auto"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+                  </button>
+                  <div className="flex flex-col">
+                    <h2 className="text-2xl font-bold text-text-primary tracking-tight">{subscription.name}</h2>
+                    <p className="text-sm text-text-secondary font-medium">
+                      {subServers.length} Nodes
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pointer-events-auto">
+                  {/* Test Latency */}
+                  <button
+                    onClick={() => handlePingNode(subServers.map(s => s.id))}
+                    className="p-2 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-95"
+                    title={t('test_latency_tooltip', { defaultValue: 'Test Latency' })}
+                  >
+                    <Zap size={18} />
+                  </button>
+
+                  {/* Update (Refresh) */}
+                  <button
+                    onClick={() => handleUpdateProfile(subscription.id)}
+                    className="p-2 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-95"
+                    title={t('subscriptions.refresh_tooltip')}
+                  >
+                    <RefreshCw size={18} />
+                  </button>
+
+                  {/* Auto Select */}
+                  <button
+                    onClick={() => handleAutoSelectSubscription(subscription as Subscription)}
+                    className={cn(
+                      "p-2 rounded-xl transition-all active:scale-95",
+                      activeServerId === `system:sub:${subscription.id}`
+                        ? "bg-accent-green/10 text-accent-green"
+                        : "hover:bg-accent-green/10 text-text-tertiary hover:text-accent-green"
+                    )}
+                    title={t('auto_select_tooltip')}
+                  >
+                    <Target size={18} fill={activeServerId === `system:sub:${subscription.id}` ? "currentColor" : "none"} />
+                  </button>
+
+                  {/* Visit Website */}
+                  {subscription.web_page_url && (
+                    <button
+                      onClick={() => open(subscription.web_page_url!)}
+                      className="p-2 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-95"
+                      title={t('subscriptions.visit_website')}
+                    >
+                      <ExternalLink size={18} />
+                    </button>
+                  )}
+
+                  {/* Edit */}
+                  <button
+                    onClick={() => setEditingSubscription(subscription as Subscription)}
+                    className="p-2 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-95"
+                    title={t('subscriptions.edit_tooltip')}
+                  >
+                    <Edit2 size={18} />
+                  </button>
+
+                  {/* Delete */}
+                  <button
+                    onClick={() => handleDeleteSubscriptionClick(subscription.id, subscription.name)}
+                    className="p-2 text-text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all active:scale-95"
+                    title={t('subscriptions.delete_tooltip')}
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </div>
               </div>
             </div>
@@ -1138,19 +1263,29 @@ export default function Home() {
                     }
                   }}
                   onDelete={handleDeleteNode}
+                  onPing={handlePingNode}
+                  activeAutoNodeId={activeAutoNodeId}
+                  connectionState={connectionState}
+                  testingNodeIds={testingNodeIds}
                   showLogs={showLogs}
                   setShowLogs={setShowLogs}
                   logs={logs}
                   onClearLogs={() => setLogs({ local: [], helper: [] })}
-                  onPing={handlePingNode}
-                  activeAutoNodeId={activeAutoNodeId}
-                  connectionState={connectionState}
                   hideHeader={true}
-                  testingNodeIds={testingNodeIds}
                 />
               </div>
             </div>
+
+            {editingSubscription && (
+              <EditSubscriptionModal
+                isOpen={!!editingSubscription}
+                onClose={() => setEditingSubscription(null)}
+                onSave={handleEditSubscriptionSave}
+                initialData={editingSubscription}
+              />
+            )}
           </div>
+
         )
       case "rules":
         return <RulesView />
@@ -1306,6 +1441,16 @@ export default function Home() {
             setEditorOpen(true)
           }}
           onImport={handleImport}
+        />
+        <ConfirmationModal
+          isOpen={!!deleteSubscriptionConfirm}
+          title={t('subscriptions.delete_title', { defaultValue: 'Confirm Delete' })}
+          message={t('subscriptions.delete_message', { defaultValue: 'Are you sure you want to delete this subscription? This action cannot be undone.' })}
+          confirmText={t('common.delete')}
+          cancelText={t('common.cancel')}
+          isDanger
+          onConfirm={handleConfirmDeleteSubscription}
+          onCancel={() => setDeleteSubscriptionConfirm(null)}
         />
         <InputModal
           isOpen={showAddSubscription}

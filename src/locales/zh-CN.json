@@ -290,7 +290,20 @@
         "local_import": "本地导入",
         "rename": "重命名",
         "rename_subscription": "重命名订阅",
-        "enter_new_name": "请输入新名称"
+        "enter_new_name": "请输入新名称",
+        "name": "名称",
+        "url": "订阅链接",
+        "auto_update": "自动更新间隔 (分钟)",
+        "interval_placeholder": "例如: 60 (留空为禁用)",
+        "interval_hint": "留空使用默认值。设为 0 以禁用。",
+        "edit_success": "更新成功",
+        "default_interval": "默认: {{count}} 分钟",
+        "visit_website": "访问网站",
+        "edit_tooltip": "编辑订阅",
+        "name_placeholder": "我的订阅",
+        "edit_subscription": "编辑订阅",
+        "delete_title": "删除确认",
+        "delete_message": "您确定要删除此订阅吗？此操作无法撤销。"
     },
     "rules": {
         "title": "路由规则",

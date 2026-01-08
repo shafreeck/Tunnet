@@ -1846,10 +1846,37 @@ impl<R: Runtime> ProxyService<R> {
     }
 
     // Refetch/Update a profile
-    pub fn rename_profile(&self, id: &str, new_name: &str) -> Result<(), String> {
+    // Edit profile metadata (rename, url, interval)
+    pub fn edit_profile(
+        &self,
+        id: &str,
+        name: &str,
+        url: Option<String>,
+        update_interval: Option<u64>,
+        clear_interval: bool,
+    ) -> Result<(), String> {
         let mut profiles = self.manager.load_profiles()?;
         if let Some(profile) = profiles.iter_mut().find(|p| p.id == id) {
-            profile.name = new_name.to_string();
+            profile.name = name.to_string();
+            // Only update URL if provided (allow clearing? No, usually empty string or None)
+            // If the user wants to clear it, they pass empty string?
+            // Let's assume Option<String> means "update if Some".
+            // But how to clear? Maybe empty string.
+            if let Some(u) = url {
+                let u = u.trim();
+                if u.is_empty() {
+                    profile.url = None;
+                } else {
+                    profile.url = Some(u.to_string());
+                }
+            }
+            
+            if clear_interval {
+                profile.update_interval = None;
+            } else if update_interval.is_some() {
+                profile.update_interval = update_interval;
+            }
+
             self.manager.save_profiles(&profiles)?;
             Ok(())
         } else {
@@ -1861,13 +1888,18 @@ impl<R: Runtime> ProxyService<R> {
         let mut profiles = self.manager.load_profiles().unwrap_or_default();
         if let Some(pos) = profiles.iter().position(|p| p.id == profile_id) {
             if let Some(url) = &profiles[pos].url {
-                // Keep name, but update nodes and stats
+                // Keep name and user preference for update interval
                 let name = profiles[pos].name.clone();
+                let user_interval = profiles[pos].update_interval;
+
                 let updated_profile = self.manager.fetch_subscription(url, Some(name)).await?;
                 // Preserve ID to keep selection valid if possible, but fetch generates new ID.
                 // Let's reuse the old ID.
                 let mut p = updated_profile;
                 p.id = profiles[pos].id.clone();
+                p.update_interval = user_interval; // Restore user preference
+                // p.header_update_interval is already set by fetch_subscription
+
                 let node_ids = p.nodes.iter().map(|n| n.id.clone()).collect();
                 profiles[pos] = p;
                 self.manager.save_profiles(&profiles)?;
@@ -2266,6 +2298,9 @@ impl<R: Runtime> ProxyService<R> {
                 download: None,
                 total: None,
                 expire: None,
+                web_page_url: None,
+                update_interval: None,
+                header_update_interval: None,
             });
         }
         self.manager.save_profiles(&profiles)?;

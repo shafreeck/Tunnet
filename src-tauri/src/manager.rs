@@ -87,6 +87,8 @@ impl<R: Runtime> CoreManager<R> {
             let res = client
                 .get(url)
                 .header("User-Agent", "sing-box")
+                .header("Cache-Control", "no-cache")
+                .header("Pragma", "no-cache")
                 .send()
                 .await
                 .map_err(|e| e.to_string())?;
@@ -100,6 +102,9 @@ impl<R: Runtime> CoreManager<R> {
                 download: None,
                 total: None,
                 expire: None,
+                web_page_url: None,
+                update_interval: None,
+                header_update_interval: None,
             };
 
             // Parse Subscription-Userinfo
@@ -108,8 +113,10 @@ impl<R: Runtime> CoreManager<R> {
                     for part in user_info_str.split(';') {
                         let part = part.trim();
                         if let Some((k, v)) = part.split_once('=') {
+                            let k = k.trim().to_lowercase();
+                            let v = v.trim();
                             if let Ok(val) = v.parse::<u64>() {
-                                match k {
+                                match k.as_str() {
                                     "upload" => profile.upload = Some(val),
                                     "download" => profile.download = Some(val),
                                     "total" => profile.total = Some(val),
@@ -118,6 +125,28 @@ impl<R: Runtime> CoreManager<R> {
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            // Parse Profile Web Page URL
+            if let Some(val) = res.headers().get("profile-web-page-url") {
+                if let Ok(s) = val.to_str() {
+                    // Simple validation to ensure it's not garbage?
+                    // Usually just trust the header or perform basic trimming
+                    let s = s.trim();
+                    if !s.is_empty() {
+                        profile.web_page_url = Some(s.to_string());
+                    }
+                }
+            }
+
+            // Parse Profile Update Interval
+            if let Some(val) = res.headers().get("profile-update-interval") {
+                if let Ok(s) = val.to_str() {
+                    if let Ok(interval) = s.trim().parse::<u64>() {
+                        // Header unit is typically hours, convert to seconds
+                        profile.header_update_interval = Some(interval * 3600);
                     }
                 }
             }
@@ -166,6 +195,9 @@ impl<R: Runtime> CoreManager<R> {
                 download: None,
                 total: None,
                 expire: None,
+                web_page_url: None,
+                update_interval: None,
+                header_update_interval: None,
             })
         }
     }
