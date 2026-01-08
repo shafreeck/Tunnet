@@ -633,25 +633,32 @@ export default function Home() {
           console.log('Deep link received:', urls)
           urls.forEach(url => {
             // Support formats: sing-box://import?url=... or sing-box://https://... or tunnet://...
-            const clean = url.replace(/^(sing-box|tunnet):\/\//, "")
+            // Enhanced URL extraction
             let targetUrl = ""
-
-            if (clean.startsWith('import')) {
-              try {
-                const qIndex = clean.indexOf('?')
-                if (qIndex !== -1) {
-                  const params = new URLSearchParams(clean.substring(qIndex + 1))
-                  targetUrl = params.get('url') || ""
-                }
-              } catch (e) { console.error(e) }
-            }
-            // Direct URL fallback
-            else if (clean.match(/^https?:\/\//)) {
-              targetUrl = clean
+            try {
+              const parsed = new URL(url)
+              // Handle sing-box://import?url=... or tunnet://import?url=...
+              if (parsed.pathname === '//import' || parsed.host === 'import') {
+                targetUrl = parsed.searchParams.get('url') || parsed.searchParams.get('config') || ""
+              }
+              // Handle sing-box://https://... or tunnet://https://...
+              else if (url.includes('://http')) {
+                const match = url.match(/(https?:\/\/.*)$/)
+                if (match) targetUrl = match[1]
+              }
+              // Direct URL without scheme
+              else {
+                const clean = url.replace(/^(sing-box|tunnet):\/\//, "")
+                if (clean.startsWith('http')) targetUrl = clean
+              }
+            } catch (e) {
+              // Fallback for non-standard URL strings
+              const match = url.match(/(https?:\/\/[^\s&]+)/)
+              if (match) targetUrl = match[1]
             }
 
             if (targetUrl) {
-              // Slight delay to ensure window focus interaction handles correctly if needed
+              console.log('Importing from deep link:', targetUrl)
               setTimeout(() => handleImport(targetUrl), 100)
             }
           })
