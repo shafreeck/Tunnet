@@ -505,7 +505,7 @@ pub fn run() {
 
                                         // Vertical Adjustment (Flip if overflow workarea bottom)
                                         if y + win_h > wa_y + wa_h {
-                                            y = position.y as i32 - win_h;
+                                            y = position.y as i32 - win_h - 12;
                                         }
 
                                         // Horizontal Adjustment (Clamp to workarea edges)
