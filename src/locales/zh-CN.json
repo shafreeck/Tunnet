@@ -406,7 +406,9 @@
         "show_system": "显示系统组",
         "contains_nodes": "包含 {{count}} 个节点",
         "filter_desc": "匹配关键词: {{keywords}}",
-        "strategy": "策略"
+        "strategy": "策略",
+        "system_groups": "系统自动组",
+        "no_custom_groups": "暂无自定义节点组"
     },
     "auto_select_global": "全局",
     "auto_select_prefix": "自动",

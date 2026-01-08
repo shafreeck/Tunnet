@@ -1,6 +1,8 @@
 import React, { useMemo } from "react"
+import { useTranslation } from "react-i18next"
 import { Edit2, Trash2, Check, Zap, List, Play, MousePointerClick, Filter, Layers, MoreHorizontal, Target, Server, Activity, ArrowRightLeft, Globe } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getCountryName } from "@/lib/flags"
 
 export interface Group {
     id: string
@@ -31,6 +33,7 @@ interface GroupCardProps {
 }
 
 export function GroupCard({ group, isActive, onEdit, onDelete, onActivate, onSelectNode, t, nodeCount, allNodes }: GroupCardProps) {
+    const { i18n } = useTranslation()
     const isAuto = group.group_type === "UrlTest"
     const isStatic = group.source.type === "Static"
 
@@ -108,6 +111,23 @@ export function GroupCard({ group, isActive, onEdit, onDelete, onActivate, onSel
         ? `${nodeCountValue} ${t('groups.nodes')} • ${isAuto ? "Auto" : "Selector"}`
         : `${t('groups.filter')} • ${isAuto ? "Auto" : "Selector"}`
 
+    // Localized Name Logic
+    const groupNameDisplay = useMemo(() => {
+        // Only translate system generated groups
+        const isSystemGroup = group.id.startsWith("system:") || group.id.startsWith("auto_")
+        if (!isSystemGroup) return group.name
+
+        // Special case for AUTO
+        if (group.name === "AUTO") return t('auto_select_prefix') || "Auto"
+        if (group.name === "GLOBAL") return t('auto_select_global') || "Global"
+
+        // Check if name is a 2-letter country code (uppercase)
+        if (/^[A-Z]{2}$/.test(group.name)) {
+            return getCountryName(group.name, i18n.language)
+        }
+        return group.name
+    }, [group.name, group.id, t, i18n.language])
+
     return (
         <div
             onClick={() => onActivate(group.id)}
@@ -133,7 +153,7 @@ export function GroupCard({ group, isActive, onEdit, onDelete, onActivate, onSel
                     {/* Titles */}
                     <div className="flex flex-col gap-0.5">
                         <h3 className="text-lg font-bold text-text-primary leading-tight flex items-center gap-2">
-                            {group.name}
+                            {groupNameDisplay}
                             {isActive && (
                                 <span className={cn("size-2 rounded-full animate-pulse", config.badge)} />
                             )}

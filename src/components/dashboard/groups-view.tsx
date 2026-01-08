@@ -273,20 +273,53 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
                             <p className="text-sm font-medium">{t('groups.no_groups')}</p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {groups.filter(g => showSystemGroups || (!g.id.startsWith("system:") && !g.id.startsWith("auto_"))).map(group => (
-                                <GroupCard
-                                    key={group.id}
-                                    group={group}
-                                    isActive={activeTargetId === group.id}
-                                    onEdit={() => openDialog(group)}
-                                    onDelete={(id) => handleDeleteClick(id)}
-                                    onActivate={(id) => handleActivateGroup(id)}
-                                    onSelectNode={() => openSelectionDialog(group)}
-                                    t={t}
-                                    allNodes={allNodes || []}
-                                />
-                            ))}
+                        <div className="space-y-8">
+                            {/* Custom Groups Section */}
+                            <div className="space-y-4">
+                                <h3 className="text-sm font-bold text-text-tertiary uppercase tracking-widest pl-1">{t('groups.custom_groups', { defaultValue: 'Custom Groups' })}</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {groups.filter(g => !g.id.startsWith("system:") && !g.id.startsWith("auto_")).map(group => (
+                                        <GroupCard
+                                            key={group.id}
+                                            group={group}
+                                            isActive={activeTargetId === group.id}
+                                            onEdit={() => openDialog(group)}
+                                            onDelete={(id) => handleDeleteClick(id)}
+                                            onActivate={(id) => handleActivateGroup(id)}
+                                            onSelectNode={() => openSelectionDialog(group)}
+                                            t={t}
+                                            allNodes={allNodes || []}
+                                        />
+                                    ))}
+                                    {groups.filter(g => !g.id.startsWith("system:") && !g.id.startsWith("auto_")).length === 0 && (
+                                        <div className="col-span-full py-10 flex flex-col items-center justify-center text-text-tertiary gap-2 border border-dashed border-border-color rounded-2xl bg-black/5 dark:bg-white/5">
+                                            <p className="text-xs font-medium">{t('groups.no_custom_groups', { defaultValue: 'No custom groups created' })}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* System Groups Section */}
+                            {showSystemGroups && (
+                                <div className="space-y-4 pt-4 border-t border-dashed border-border-color">
+                                    <h3 className="text-sm font-bold text-text-tertiary uppercase tracking-widest pl-1">{t('groups.system_groups', { defaultValue: 'System Groups' })}</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {groups.filter(g => g.id.startsWith("system:") || g.id.startsWith("auto_")).map(group => (
+                                            <GroupCard
+                                                key={group.id}
+                                                group={group}
+                                                isActive={activeTargetId === group.id}
+                                                onEdit={() => openDialog(group)}
+                                                onDelete={(id) => handleDeleteClick(id)}
+                                                onActivate={(id) => handleActivateGroup(id)}
+                                                onSelectNode={() => openSelectionDialog(group)}
+                                                t={t}
+                                                allNodes={allNodes || []}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

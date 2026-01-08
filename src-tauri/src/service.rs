@@ -2265,7 +2265,12 @@ impl<R: Runtime> ProxyService<R> {
 
             // Just emit update if not running
             let _ = self.app.emit("settings-update", &settings);
-            let _ = self.app.emit("proxy-status-change", self.get_status());
+            
+            // Fix: Propagate the active target ID from settings to the status event
+            // This prevents the frontend from reverting to the old stale state held in memory
+            let mut status = self.get_status();
+            status.target_id = settings.active_target_id.clone();
+            let _ = self.app.emit("proxy-status-change", status);
             return Ok(());
         }
 
