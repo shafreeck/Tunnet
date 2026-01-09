@@ -13,7 +13,7 @@ import { SubscriptionsView, EditSubscriptionModal, Subscription } from "@/compon
 import { RulesView } from "@/components/dashboard/rules-view"
 import { open } from "@tauri-apps/plugin-shell"
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link"
-import { Zap, RefreshCw, Edit2, Trash2, Target, ExternalLink } from "lucide-react"
+import { Zap, RefreshCw, Edit2, Trash2, Target, ExternalLink, ArrowUpDown } from "lucide-react"
 import { SettingsView } from "@/components/dashboard/settings-view"
 import { Header, ConnectionStatus } from "@/components/dashboard/connection-status"
 import { ServerList } from "@/components/dashboard/server-list"
@@ -110,6 +110,8 @@ export default function Home() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings)
   const [systemProxyEnabled, setSystemProxyEnabled] = useState(false)
   const [clashApiPort, setClashApiPort] = useState<number | null>(null)
+  const [subSortBy, setSubSortBy] = useState<"name" | "ping">("ping")
+  const [showSubSortMenu, setShowSubSortMenu] = useState(false)
 
   // Sync derived state
   useEffect(() => {
@@ -1313,6 +1315,50 @@ export default function Home() {
                     <Target size={18} />
                   </button>
 
+                  {/* Sort Button & Menu */}
+                  <div className="relative pointer-events-auto">
+                    <button
+                      onClick={() => setShowSubSortMenu(!showSubSortMenu)}
+                      className={cn(
+                        "p-2 rounded-xl transition-all active:scale-95",
+                        showSubSortMenu ? "text-primary bg-primary/10" : "text-text-tertiary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5"
+                      )}
+                      title={t('sort_tooltip', { defaultValue: 'Sort' })}
+                    >
+                      <ArrowUpDown size={18} />
+                    </button>
+
+                    {showSubSortMenu && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setShowSubSortMenu(false)} />
+                        <div className="absolute right-0 top-full mt-2 w-32 bg-white dark:bg-[#1a1a1a] border border-border-color rounded-xl shadow-xl z-50 p-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                          <div className="space-y-0.5">
+                            <button
+                              onClick={() => { setSubSortBy("name"); setShowSubSortMenu(false); }}
+                              className={cn(
+                                "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[10px] font-medium transition-colors text-left",
+                                subSortBy === "name" ? "bg-primary/10 text-primary" : "text-text-secondary hover:bg-black/5 dark:hover:bg-white/5"
+                              )}
+                            >
+                              <span>{t('sort_by_name', { defaultValue: 'Name' })}</span>
+                              {subSortBy === "name" && <div className="size-1 rounded-full bg-primary" />}
+                            </button>
+                            <button
+                              onClick={() => { setSubSortBy("ping"); setShowSubSortMenu(false); }}
+                              className={cn(
+                                "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[10px] font-medium transition-colors text-left",
+                                subSortBy === "ping" ? "bg-primary/10 text-primary" : "text-text-secondary hover:bg-black/5 dark:hover:bg-white/5"
+                              )}
+                            >
+                              <span>{t('sort_by_latency', { defaultValue: 'Latency' })}</span>
+                              {subSortBy === "ping" && <div className="size-1 rounded-full bg-primary" />}
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
                   {/* Visit Website */}
                   {subscription.web_page_url && (
                     <button
@@ -1372,6 +1418,8 @@ export default function Home() {
                   logs={logs}
                   onClearLogs={() => setLogs({ local: [], helper: [] })}
                   hideHeader={true}
+                  sortBy={subSortBy}
+                  onSortByChange={setSubSortBy}
                 />
               </div>
             </div>

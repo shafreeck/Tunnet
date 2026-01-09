@@ -60,6 +60,8 @@ interface ServerListProps {
     isLoading?: boolean
     connectionState?: "idle" | "connecting" | "disconnecting"
     testingNodeIds?: string[]
+    sortBy?: "name" | "ping"
+    onSortByChange?: (sort: "name" | "ping") => void
 }
 
 export function ServerList({
@@ -84,7 +86,9 @@ export function ServerList({
     onClearFilter,
     isLoading = false,
     connectionState,
-    testingNodeIds = []
+    testingNodeIds = [],
+    sortBy: externalSortBy,
+    onSortByChange: onExternalSortByChange
 }: ServerListProps) {
     const { t } = useTranslation()
     const [loading, setLoading] = useState(false)
@@ -146,7 +150,18 @@ export function ServerList({
     }, [servers, pinnedServerId])
 
     const [filterText, setFilterText] = useState("")
-    const [sortBy, setSortBy] = useState<"name" | "ping">("name")
+    const [internalSortBy, setInternalSortBy] = useState<"name" | "ping">("ping")
+
+    // Use external sortBy if provided, otherwise use internal
+    const sortBy = externalSortBy || internalSortBy
+    const setSortBy = (val: "name" | "ping") => {
+        if (onExternalSortByChange) {
+            onExternalSortByChange(val)
+        } else {
+            setInternalSortBy(val)
+        }
+    }
+
     const [isPinging, setIsPinging] = useState(false)
 
     const handlePing = async () => {

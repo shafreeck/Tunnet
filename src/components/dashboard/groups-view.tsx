@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { Plus, Search, Trash2, Edit2, LayoutGrid, Check, X, Loader2, Play, Zap, Target } from "lucide-react"
+import { Plus, Search, Trash2, Edit2, LayoutGrid, Check, X, Loader2, Play, Zap, Target, ArrowUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
@@ -70,6 +70,21 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
     // Deletion Modal State
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
     const [groupToDelete, setGroupToDelete] = useState<string | null>(null)
+    const [sortBy, setSortBy] = useState<"name" | "type">("name")
+    const [showSortMenu, setShowSortMenu] = useState(false)
+
+    const sortedGroups = React.useMemo(() => {
+        return [...groups].sort((a, b) => {
+            switch (sortBy) {
+                case "name":
+                    return a.name.localeCompare(b.name)
+                case "type":
+                    return a.group_type.localeCompare(b.group_type)
+                default:
+                    return 0
+            }
+        })
+    }, [groups, sortBy])
 
     useEffect(() => {
         fetchGroups()
@@ -253,6 +268,48 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
                                 <span className="text-[9px] md:text-[10px] font-bold text-text-secondary uppercase">{t('groups.show_system')}</span>
                                 <Switch checked={showSystemGroups} onCheckedChange={setShowSystemGroups} className="scale-75 md:scale-90 origin-right" />
                             </div>
+
+                            <div className="relative pointer-events-auto">
+                                <button
+                                    onClick={() => setShowSortMenu(!showSortMenu)}
+                                    className={cn(
+                                        "flex items-center justify-center p-2 md:p-2.5 bg-card-bg border border-border-color text-text-secondary rounded-xl hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-all",
+                                        showSortMenu && "text-primary bg-primary/10 border-primary/20"
+                                    )}
+                                    title={t('sort_tooltip', { defaultValue: 'Sort' })}
+                                >
+                                    <ArrowUpDown size={16} className="md:size-[18px]" />
+                                </button>
+                                {showSortMenu && (
+                                    <>
+                                        <div className="fixed inset-0 z-10" onClick={() => setShowSortMenu(false)} />
+                                        <div className="absolute right-0 top-full mt-2 w-32 bg-white dark:bg-[#1a1a1a] border border-border-color rounded-xl shadow-xl z-50 p-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                                            <div className="space-y-0.5">
+                                                <button
+                                                    onClick={() => { setSortBy("name"); setShowSortMenu(false); }}
+                                                    className={cn(
+                                                        "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[10px] font-medium transition-colors text-left",
+                                                        sortBy === "name" ? "bg-primary/10 text-primary" : "text-text-secondary hover:bg-black/5 dark:hover:bg-white/5"
+                                                    )}
+                                                >
+                                                    <span>{t('sort_by_name', { defaultValue: 'Name' })}</span>
+                                                    {sortBy === "name" && <div className="size-1 rounded-full bg-primary" />}
+                                                </button>
+                                                <button
+                                                    onClick={() => { setSortBy("type"); setShowSortMenu(false); }}
+                                                    className={cn(
+                                                        "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[10px] font-medium transition-colors text-left",
+                                                        sortBy === "type" ? "bg-primary/10 text-primary" : "text-text-secondary hover:bg-black/5 dark:hover:bg-white/5"
+                                                    )}
+                                                >
+                                                    <span>{t('sort_by_type', { defaultValue: 'Type' })}</span>
+                                                    {sortBy === "type" && <div className="size-1 rounded-full bg-primary" />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                             <button
                                 onClick={() => openDialog()}
                                 className="flex items-center justify-center gap-2 px-4 md:px-6 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-primary/20 scale-100 active:scale-95 flex-none"
@@ -278,7 +335,7 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
                             <div className="space-y-4">
                                 <h3 className="text-sm font-bold text-text-tertiary uppercase tracking-widest pl-1">{t('groups.custom_groups', { defaultValue: 'Custom Groups' })}</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {groups.filter(g => !g.id.startsWith("system:") && !g.id.startsWith("auto_")).map(group => (
+                                    {sortedGroups.filter(g => !g.id.startsWith("system:") && !g.id.startsWith("auto_")).map(group => (
                                         <GroupCard
                                             key={group.id}
                                             group={group}
@@ -304,7 +361,7 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
                                 <div className="space-y-4 pt-4 border-t border-dashed border-border-color">
                                     <h3 className="text-sm font-bold text-text-tertiary uppercase tracking-widest pl-1">{t('groups.system_groups', { defaultValue: 'System Groups' })}</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {groups.filter(g => g.id.startsWith("system:") || g.id.startsWith("auto_")).map(group => (
+                                        {sortedGroups.filter(g => g.id.startsWith("system:") || g.id.startsWith("auto_")).map(group => (
                                             <GroupCard
                                                 key={group.id}
                                                 group={group}

@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
-import { RefreshCw, Trash2, Globe, Server, MoreHorizontal, Database, Zap, PlusCircle, Edit2, Target, ExternalLink } from "lucide-react"
+import { RefreshCw, Trash2, Globe, Server, MoreHorizontal, Database, Zap, PlusCircle, Edit2, Target, ExternalLink, ArrowUpDown } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { InputModal } from "@/components/ui/input-modal"
@@ -42,6 +42,13 @@ interface SubscriptionsViewProps {
 export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelect, onUpdateAll, isImporting, onNodeSelect, isConnected, activeServerId, activeAutoNodeId, testingNodeIds = [] }: SubscriptionsViewProps) {
     const { t } = useTranslation()
 
+    const getDisplayName = (name: string) => {
+        const lower = name.toLowerCase()
+        if (lower === "new subscription" || lower === "新订阅") return t('subscriptions.new_subscription')
+        if (lower === "local import" || lower === "本地导入") return t('subscriptions.local_import')
+        return name
+    }
+
     // Helper formats
     const formatBytes = (bytes: number, decimals = 1) => {
         if (bytes === 0) return '0 B'
@@ -66,6 +73,29 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
 
     const [editingProfile, setEditingProfile] = useState<Subscription | null>(null)
     const [profileToDelete, setProfileToDelete] = useState<{ id: string, name: string } | null>(null)
+    const [sortBy, setSortBy] = useState<"name" | "usage" | "nodes" | "expiry">("name")
+    const [showSortMenu, setShowSortMenu] = useState(false)
+
+    const sortedProfiles = React.useMemo(() => {
+        return [...profiles].sort((a, b) => {
+            switch (sortBy) {
+                case "name":
+                    return getDisplayName(a.name).localeCompare(getDisplayName(b.name))
+                case "usage":
+                    const usageA = (a.upload || 0) + (a.download || 0)
+                    const usageB = (b.upload || 0) + (b.download || 0)
+                    return usageB - usageA // Most used first
+                case "nodes":
+                    return b.nodes.length - a.nodes.length // Most nodes first
+                case "expiry":
+                    const expA = a.expire || 2147483647 // Far future if no expiry
+                    const expB = b.expire || 2147483647
+                    return expA - expB // Expiring soon first
+                default:
+                    return 0
+            }
+        })
+    }, [profiles, sortBy])
 
     const handleDeleteClick = (id: string, name: string, e: React.MouseEvent) => {
         e.stopPropagation()
@@ -150,12 +180,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
         }
     }
 
-    const getDisplayName = (name: string) => {
-        const lower = name.toLowerCase()
-        if (lower === "new subscription" || lower === "新订阅") return t('subscriptions.new_subscription')
-        if (lower === "local import" || lower === "本地导入") return t('subscriptions.local_import')
-        return name
-    }
+
 
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -169,6 +194,45 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                     </div>
 
                     <div className="flex items-center gap-3 pointer-events-auto">
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowSortMenu(!showSortMenu)}
+                                className={cn(
+                                    "flex items-center gap-2 px-3 py-2 bg-card-bg border border-border-color text-text-secondary rounded-xl hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-all font-medium text-sm",
+                                    showSortMenu && "text-primary bg-primary/10 border-primary/20"
+                                )}
+                            >
+                                <ArrowUpDown size={18} />
+                            </button>
+                            {showSortMenu && (
+                                <>
+                                    <div className="fixed inset-0 z-10" onClick={() => setShowSortMenu(false)} />
+                                    <div className="absolute right-0 top-full mt-2 w-40 bg-white dark:bg-[#1a1a1a] border border-border-color rounded-xl shadow-xl z-50 p-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                                        <div className="space-y-0.5">
+                                            {[
+                                                { id: "name", label: t('sort_by_name', { defaultValue: 'Name' }) },
+                                                { id: "usage", label: t('sort_by_usage', { defaultValue: 'Usage' }) },
+                                                { id: "nodes", label: t('sort_by_nodes', { defaultValue: 'Nodes' }) },
+                                                { id: "expiry", label: t('sort_by_expiry', { defaultValue: 'Expiry' }) },
+                                            ].map((option) => (
+                                                <button
+                                                    key={option.id}
+                                                    onClick={() => { setSortBy(option.id as any); setShowSortMenu(false); }}
+                                                    className={cn(
+                                                        "w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left",
+                                                        sortBy === option.id ? "bg-primary/10 text-primary" : "text-text-secondary hover:bg-black/5 dark:hover:bg-white/5"
+                                                    )}
+                                                >
+                                                    <span>{option.label}</span>
+                                                    {sortBy === option.id && <div className="size-1 rounded-full bg-primary" />}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
                         {onUpdateAll && (
                             <button
                                 onClick={onUpdateAll}
@@ -227,7 +291,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                             </div>
                         )}
 
-                        {profiles.map(profile => {
+                        {sortedProfiles.map(profile => {
                             const used = (profile.upload || 0) + (profile.download || 0)
                             const total = profile.total || 0
                             const percent = total > 0 ? Math.min(100, (used / total) * 100) : 0

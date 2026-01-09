@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react"
 // @ts-ignore
 import { invoke } from "@tauri-apps/api/core"
-import { Search, RotateCcw, Map as MapIcon, LayoutGrid, Globe as GlobeIcon, Zap, X, Target } from "lucide-react"
+import { Search, RotateCcw, Map as MapIcon, LayoutGrid, Globe as GlobeIcon, Zap, X, Target, ArrowUpDown } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -51,6 +51,8 @@ export function LocationsView({
     const [selectedCountry, setSelectedCountry] = useState<string | null>(null)
     const [showListValues, setShowListValues] = useState(false)
     const [isRefreshing, setIsRefreshing] = useState(false)
+    const [sortBy, setSortBy] = useState<"name" | "ping">("ping")
+    const [showSortMenu, setShowSortMenu] = useState(false)
 
     const handleRefreshLocations = async () => {
         setIsRefreshing(true)
@@ -312,6 +314,50 @@ export function LocationsView({
                                 >
                                     <Target size={14} fill={isAutoActive ? "currentColor" : "none"} />
                                 </button>
+
+                                {/* Sort Button & Menu */}
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setShowSortMenu(!showSortMenu)}
+                                        className={cn(
+                                            "size-7 flex items-center justify-center rounded-lg transition-all active:scale-95",
+                                            showSortMenu ? "text-primary bg-primary/10" : "text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5"
+                                        )}
+                                        title={t('sort_tooltip', { defaultValue: 'Sort' })}
+                                    >
+                                        <ArrowUpDown size={14} />
+                                    </button>
+
+                                    {showSortMenu && (
+                                        <>
+                                            <div className="fixed inset-0 z-10" onClick={() => setShowSortMenu(false)} />
+                                            <div className="absolute right-0 top-full mt-2 w-32 bg-white dark:bg-[#1a1a1a] border border-border-color rounded-xl shadow-xl z-50 p-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                <div className="space-y-0.5">
+                                                    <button
+                                                        onClick={() => { setSortBy("name"); setShowSortMenu(false); }}
+                                                        className={cn(
+                                                            "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[10px] font-medium transition-colors text-left",
+                                                            sortBy === "name" ? "bg-primary/10 text-primary" : "text-text-secondary hover:bg-black/5 dark:hover:bg-white/5"
+                                                        )}
+                                                    >
+                                                        <span>{t('sort_by_name', { defaultValue: 'Name' })}</span>
+                                                        {sortBy === "name" && <div className="size-1 rounded-full bg-primary" />}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => { setSortBy("ping"); setShowSortMenu(false); }}
+                                                        className={cn(
+                                                            "w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-[10px] font-medium transition-colors text-left",
+                                                            sortBy === "ping" ? "bg-primary/10 text-primary" : "text-text-secondary hover:bg-black/5 dark:hover:bg-white/5"
+                                                        )}
+                                                    >
+                                                        <span>{t('sort_by_latency', { defaultValue: 'Latency' })}</span>
+                                                        {sortBy === "ping" && <div className="size-1 rounded-full bg-primary" />}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Close Button - Distinct */}
@@ -356,10 +402,12 @@ export function LocationsView({
                             connectionState={connectionState}
                             hideHeader={true}
                             testingNodeIds={testingNodeIds}
+                            sortBy={sortBy}
+                            onSortByChange={setSortBy}
                         />
                     </div>
                 </div>
             </div>
-        </div>
+        </div >
     )
 }
