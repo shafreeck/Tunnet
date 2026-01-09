@@ -10,7 +10,7 @@ import { Group } from "./groups-view"
 
 interface Rule {
     id: string
-    type: "DOMAIN" | "DOMAIN_SUFFIX" | "DOMAIN_KEYWORD" | "IP_CIDR" | "GEOIP" | "FINAL"
+    type: "DOMAIN" | "DOMAIN_SUFFIX" | "DOMAIN_KEYWORD" | "IP_CIDR" | "GEOIP" | "FINAL" | "IP_IS_PRIVATE"
     value: string
     policy: string // Changed from strict literal to string to support group IDs
     enabled: boolean
@@ -30,11 +30,10 @@ const PRESETS = {
     "Smart Connect": {
         defaultPolicy: "PROXY",
         rules: [
-            { id: "1", type: "GEOIP", value: "geoip-cn", policy: "DIRECT", enabled: true, description: "rules.description.geoip_cn" },
-            { id: "2", type: "DOMAIN", value: "geosite:geosite-cn", policy: "DIRECT", enabled: true, description: "rules.description.geosite_cn" },
-            { id: "3", type: "DOMAIN_SUFFIX", value: "google.com", policy: "PROXY", enabled: true, description: "rules.description.google" },
-            { id: "4", type: "IP_CIDR", value: "192.168.0.0/16", policy: "DIRECT", enabled: true, description: "rules.description.local_network" },
-            { id: "5", type: "DOMAIN_KEYWORD", value: "ads", policy: "REJECT", enabled: true, description: "rules.description.ads" },
+            { id: "private-rule", type: "IP_IS_PRIVATE", value: "true", policy: "DIRECT", enabled: true, description: "rules.description.private_network" },
+            { id: "ads-1", type: "DOMAIN_KEYWORD", value: "ads", policy: "REJECT", enabled: true, description: "rules.description.ads_blocking" },
+            { id: "cn-1", type: "DOMAIN", value: "geosite:geosite-cn", policy: "DIRECT", enabled: true, description: "rules.description.china_all" },
+            { id: "cn-2", type: "GEOIP", value: "geoip-cn", policy: "DIRECT", enabled: true, description: "rules.description.china_all" },
         ] as Rule[]
     },
     "Global Proxy": {
@@ -48,9 +47,9 @@ const PRESETS = {
     "Bypass LAN & CN": {
         defaultPolicy: "PROXY",
         rules: [
-            { id: "1", type: "GEOIP", value: "geoip-cn", policy: "DIRECT", enabled: true, description: "rules.description.geoip_cn" },
-            { id: "2", type: "DOMAIN", value: "geosite:geosite-cn", policy: "DIRECT", enabled: true, description: "rules.description.geosite_cn" },
-            { id: "4", type: "IP_CIDR", value: "192.168.0.0/16", policy: "DIRECT", enabled: true, description: "rules.description.local_network" },
+            { id: "lan-b", type: "IP_IS_PRIVATE", value: "true", policy: "DIRECT", enabled: true, description: "rules.description.private_network" },
+            { id: "cn-b1", type: "GEOIP", value: "geoip-cn", policy: "DIRECT", enabled: true, description: "rules.description.geoip_cn" },
+            { id: "cn-b2", type: "DOMAIN", value: "geosite:geosite-cn", policy: "DIRECT", enabled: true, description: "rules.description.geosite_cn" },
         ] as Rule[]
     }
 }
@@ -437,7 +436,7 @@ export function RulesView() {
                                     <div className="w-20 md:w-32 shrink-0 hidden sm:block">
                                         <div className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-xl bg-white/5 border border-white/5 w-fit">
                                             <Shield size={10} className="md:size-3 text-primary/70" />
-                                            <span className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-widest">{rule.type.replace('_', ' ')}</span>
+                                            <span className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-widest">{rule.type === 'IP_IS_PRIVATE' ? 'PRIVATE ADDR' : rule.type.replace(/_/g, ' ')}</span>
                                         </div>
                                     </div>
                                     <div className="flex flex-col flex-1 min-w-0">
@@ -635,14 +634,21 @@ export function RulesView() {
                             <div className="space-y-3">
                                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-1">{t('rules.dialog.type')}</label>
                                 <div className="grid grid-cols-3 gap-2">
-                                    {(["DOMAIN", "DOMAIN_SUFFIX", "DOMAIN_KEYWORD", "IP_CIDR", "GEOIP"] as const).map(type => (
-                                        <button key={type} onClick={() => setDialogData({ ...dialogData, type })} className={cn("px-2 py-2.5 rounded-xl text-[10px] font-bold border transition-all truncate uppercase tracking-tighter", dialogData.type === type ? "bg-primary border-primary text-white shadow-lg shadow-primary/20" : "bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10")}>{type.replace('_', ' ')}</button>
+                                    {(["DOMAIN", "DOMAIN_SUFFIX", "DOMAIN_KEYWORD", "IP_CIDR", "GEOIP", "IP_IS_PRIVATE"] as const).map(type => (
+                                        <button key={type} onClick={() => setDialogData({ ...dialogData, type, value: type === 'IP_IS_PRIVATE' ? 'true' : dialogData.value })} className={cn("px-2 py-2.5 rounded-xl text-[10px] font-bold border transition-all truncate uppercase tracking-tighter", dialogData.type === type ? "bg-primary border-primary text-white shadow-lg shadow-primary/20" : "bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10")}>{type === 'IP_IS_PRIVATE' ? 'PRIVATE' : type.replace(/_/g, ' ')}</button>
                                     ))}
                                 </div>
                             </div>
                             <div className="space-y-3">
                                 <label className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest pl-1">{t('rules.dialog.value')}</label>
-                                <input value={dialogData.value} onChange={(e) => setDialogData({ ...dialogData, value: e.target.value })} className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/20 rounded-2xl py-3.5 px-5 text-sm text-text-primary focus:outline-none transition-all font-mono" />
+                                <input
+                                    value={dialogData.type === 'IP_IS_PRIVATE' ? 'Match all private addresses' : dialogData.value}
+                                    readOnly={dialogData.type === 'IP_IS_PRIVATE'}
+                                    autoFocus
+                                    onChange={(e) => setDialogData({ ...dialogData, value: e.target.value })}
+                                    className={cn("w-full bg-sidebar-bg/50 border border-border-color rounded-2xl px-6 py-4 text-sm text-text-primary focus:outline-none focus:border-primary/50 transition-all font-mono", dialogData.type === 'IP_IS_PRIVATE' && "opacity-50 cursor-not-allowed")}
+                                    placeholder={dialogData.type === 'DOMAIN' ? 'example.com' : '1.2.3.4/24'}
+                                />
                             </div>
                             <div className="space-y-3">
                                 <label className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest pl-1">{t('rules.dialog.policy')}</label>

@@ -362,7 +362,11 @@
             "geosite_cn": "Direct connection for Mainland China Domains",
             "google": "Force Google via Proxy",
             "local_network": "Local Network",
-            "ads": "Block Ads"
+            "ads": "Block Ads",
+            "private_network": "Private Network & LAN Direct",
+            "china_all": "Mainland China (Domain & IP) Direct",
+            "ads_blocking": "Block Ads & Trackers",
+            "final_proxy": "Proxy fallback for all other traffic"
         }
     },
     "auto_select_best": "Auto Select Best",

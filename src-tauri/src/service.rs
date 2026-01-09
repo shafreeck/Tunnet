@@ -1219,15 +1219,8 @@ impl<R: Runtime> ProxyService<R> {
                 0,
                 crate::config::RouteRule {
                     inbound: Some(vec!["tun-in".to_string()]),
-                    protocol: None,
-                    domain: None,
-                    domain_suffix: None,
-                    domain_keyword: None,
-                    ip_cidr: None,
-                    port: None,
-                    outbound: None,
-                    rule_set: None,
                     action: Some("sniff".to_string()),
+                    ..Default::default()
                 },
             );
         }
@@ -1305,51 +1298,41 @@ impl<R: Runtime> ProxyService<R> {
                             }
                         }
 
-                        let (
-                            domain,
-                            domain_suffix,
-                            domain_keyword,
-                            ip_cidr,
-                            rule_set_tags,
-                            protocol,
-                            port,
-                        ) = match rule.rule_type.as_str() {
+                        let mut route_rule = crate::config::RouteRule {
+                            outbound: outbound_tag,
+                            action,
+                            ..Default::default()
+                        };
+
+                        match rule.rule_type.as_str() {
                             "DOMAIN" => {
                                 if rule.value.starts_with("geosite:") {
                                     let val = rule.value.replace("geosite:", "");
-                                    (None, None, None, None, Some(vec![val]), None, None)
+                                    route_rule.rule_set = Some(vec![val]);
                                 } else {
-                                    (Some(vec![rule.value]), None, None, None, None, None, None)
+                                    route_rule.domain = Some(vec![rule.value.clone()]);
                                 }
                             }
                             "DOMAIN_SUFFIX" => {
-                                (None, Some(vec![rule.value]), None, None, None, None, None)
+                                route_rule.domain_suffix = Some(vec![rule.value.clone()]);
                             }
                             "DOMAIN_KEYWORD" => {
-                                (None, None, Some(vec![rule.value]), None, None, None, None)
+                                route_rule.domain_keyword = Some(vec![rule.value.clone()]);
                             }
                             "IP_CIDR" => {
-                                (None, None, None, Some(vec![rule.value]), None, None, None)
+                                route_rule.ip_cidr = Some(vec![rule.value.clone()]);
                             }
                             "GEOIP" => {
                                 let val = rule.value.replace("geoip:", "");
-                                (None, None, None, None, Some(vec![val]), None, None)
+                                route_rule.rule_set = Some(vec![val]);
                             }
-                            _ => (None, None, None, None, None, None, None),
-                        };
+                            "IP_IS_PRIVATE" => {
+                                route_rule.ip_is_private = Some(true);
+                            }
+                            _ => {}
+                        }
 
-                        final_rules.push(crate::config::RouteRule {
-                            inbound: None,
-                            protocol,
-                            domain,
-                            domain_suffix,
-                            domain_keyword,
-                            ip_cidr,
-                            port,
-                            outbound: outbound_tag,
-                            rule_set: rule_set_tags,
-                            action,
-                        });
+                        final_rules.push(route_rule);
                     }
                 }
             }
@@ -1359,16 +1342,9 @@ impl<R: Runtime> ProxyService<R> {
         // which now has 'domain_strategy: prefer_ipv4' to handle it gracefully.
         if settings.dns_strategy == "only4" {
             final_rules.push(crate::config::RouteRule {
-                inbound: None,
-                protocol: None,
-                domain: None,
-                domain_suffix: None,
-                domain_keyword: None,
                 ip_cidr: Some(vec!["::/0".to_string()]),
-                port: None,
-                outbound: None,
-                rule_set: None,
                 action: Some("reject".to_string()),
+                ..Default::default()
             });
         }
 
@@ -1385,16 +1361,9 @@ impl<R: Runtime> ProxyService<R> {
         };
 
         final_rules.push(crate::config::RouteRule {
-            inbound: None,
-            protocol: None,
-            domain: None,
-            domain_suffix: None,
-            domain_keyword: None,
-            ip_cidr: None,
-            port: None,
             outbound: fallback_outbound,
-            rule_set: None,
             action: fallback_action,
+            ..Default::default()
         });
 
         if let Some(route) = &mut cfg.route {

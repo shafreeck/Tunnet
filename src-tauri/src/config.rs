@@ -216,6 +216,8 @@ pub struct RouteRule {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rule_set: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub ip_is_private: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub action: Option<String>,
 }
 
@@ -384,39 +386,18 @@ impl SingBoxConfig {
                         RouteRule {
                             inbound: Some(vec!["tun-in".to_string()]),
                             protocol: Some(vec!["dns".to_string()]),
-                            domain: None,
-                            domain_suffix: None,
-                            domain_keyword: None,
-                            ip_cidr: None,
                             port: Some(vec![53]),
-                            outbound: None,
-                            rule_set: None,
                             action: Some("hijack-dns".to_string()),
+                            ..Default::default()
                         },
                         RouteRule {
-                            inbound: None,
-                            protocol: None,
-                            domain: None,
-                            domain_suffix: None,
-                            domain_keyword: None,
-                            ip_cidr: None,
-                            port: None,
                             outbound: Some("proxy".to_string()),
-                            rule_set: None,
-                            action: None,
+                            ..Default::default()
                         },
                     ],
                     _ => vec![RouteRule {
-                        inbound: None,
-                        protocol: None,
-                        domain: None,
-                        domain_suffix: None,
-                        domain_keyword: None,
-                        ip_cidr: None,
-                        port: None,
                         outbound: Some("proxy".to_string()),
-                        rule_set: None,
-                        action: None,
+                        ..Default::default()
                     }],
                 },
                 rule_set: None,
@@ -526,16 +507,8 @@ impl SingBoxConfig {
             route.rules.insert(
                 0,
                 RouteRule {
-                    inbound: None,
-                    protocol: None,
-                    domain: None,
-                    domain_suffix: None,
-                    domain_keyword: None,
-                    ip_cidr: None,
-                    port: None,
-                    outbound: None,
-                    rule_set: None,
                     action: Some("reject".to_string()),
+                    ..Default::default()
                 },
             );
         }

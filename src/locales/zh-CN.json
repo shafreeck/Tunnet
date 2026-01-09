@@ -363,7 +363,11 @@
             "geosite_cn": "中国大陆域名直连",
             "google": "Google 走代理",
             "local_network": "局域网直连",
-            "ads": "拦截广告"
+            "ads": "拦截广告",
+            "private_network": "私有网络及局域网直连",
+            "china_all": "中国大陆地址 (域名&IP) 直连",
+            "ads_blocking": "拦截已知广告及追踪域名",
+            "final_proxy": "所有其它匹配失败的流量走代理"
         }
     },
     "auto_select_best": "自动优选",
