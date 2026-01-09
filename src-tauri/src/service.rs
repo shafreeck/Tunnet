@@ -1775,6 +1775,14 @@ impl<R: Runtime> ProxyService<R> {
                 ])
                 .output();
         }
+
+        #[cfg(target_os = "linux")]
+        {
+            info!("Disabling system proxy on Linux (GNOME)...");
+            let _ = std::process::Command::new("gsettings")
+                .args(["set", "org.gnome.system.proxy", "mode", "none"])
+                .output();
+        }
         info!("disable_system_proxy finished");
     }
 
@@ -1878,6 +1886,26 @@ impl<R: Runtime> ProxyService<R> {
                     &proxy_server,
                     "/f",
                 ])
+                .output();
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            info!("Enabling system proxy on Linux (GNOME) port {}...", port);
+            let _ = std::process::Command::new("gsettings")
+                .args(["set", "org.gnome.system.proxy", "mode", "manual"])
+                .output();
+            let _ = std::process::Command::new("gsettings")
+                .args(["set", "org.gnome.system.proxy.http", "host", "127.0.0.1"])
+                .output();
+            let _ = std::process::Command::new("gsettings")
+                .args(["set", "org.gnome.system.proxy.http", "port", &port.to_string()])
+                .output();
+            let _ = std::process::Command::new("gsettings")
+                .args(["set", "org.gnome.system.proxy.https", "host", "127.0.0.1"])
+                .output();
+            let _ = std::process::Command::new("gsettings")
+                .args(["set", "org.gnome.system.proxy.https", "port", &port.to_string()])
                 .output();
         }
         info!("enable_system_proxy finished");
