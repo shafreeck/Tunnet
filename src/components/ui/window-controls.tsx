@@ -81,7 +81,6 @@ export function WindowControls({ className }: { className?: string }) {
                     {isMaximized ? (
                         <Copy size={6} className={cn("text-black/50 opacity-0 transition-opacity rotate-180", isHovering && "opacity-100")} strokeWidth={3} />
                     ) : (
-                        // Use a simpler maximize icon representation or just plus
                         <div className={cn("size-2 bg-black/50 opacity-0 transition-opacity", isHovering && "opacity-100")} style={{ clipPath: "polygon(0% 40%, 40% 40%, 40% 0%, 60% 0%, 60% 40%, 100% 40%, 100% 60%, 60% 60%, 60% 100%, 40% 100%, 40% 60%, 0% 60%)" }} />
                     )}
                 </button>
@@ -89,7 +88,36 @@ export function WindowControls({ className }: { className?: string }) {
         )
     }
 
-    // Windows / Linux Controls
+    if (osType === "linux") {
+        return (
+            <div className={cn("fixed top-4 right-4 z-50 flex gap-3", className)} data-tauri-drag-region>
+                <button
+                    onClick={handleMinimize}
+                    className="size-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                >
+                    <Minus size={14} className="text-white" />
+                </button>
+                <button
+                    onClick={handleMaximize}
+                    className="size-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                >
+                    {isMaximized ? (
+                        <Copy size={12} className="text-white rotate-180" />
+                    ) : (
+                        <Square size={12} className="text-white" />
+                    )}
+                </button>
+                <button
+                    onClick={handleClose}
+                    className="size-6 rounded-full bg-white/10 hover:bg-[#E95420] flex items-center justify-center transition-colors group"
+                >
+                    <X size={14} className="text-white" />
+                </button>
+            </div>
+        )
+    }
+
+    // Windows Controls
     return (
         <div className={cn("fixed top-0 right-0 z-50 flex h-8 bg-transparent", className)} data-tauri-drag-region>
             <div
