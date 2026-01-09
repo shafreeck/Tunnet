@@ -1,7 +1,7 @@
 # Tunnet
 
 <p align="center">
-  <img src="public/app-icon.png" alt="Tunnet Logo" width="128" height="128" />
+  <img src="public/logo.png" alt="Tunnet Logo" width="128" height="128" />
 </p>
 
 <p align="center">
