@@ -31,6 +31,7 @@ export default function TrayPage() {
     const [traffic, setTraffic] = useState({ up: 0, down: 0 })
     const [trafficHistory, setTrafficHistory] = useState<{ up: number, down: number }[]>(new Array(30).fill({ up: 0, down: 0 }))
     const [isQuitting, setIsQuitting] = useState(false)
+    const [activeAutoNodeId, setActiveAutoNodeId] = useState<string | null>(null)
     const manualActionRef = useRef(false)
 
     const ipInfoRef = useRef(ipInfo)
@@ -141,11 +142,49 @@ export default function TrayPage() {
         }
     }, [status.is_running, settings.active_target_id, status.tun_mode, settings.system_proxy])
 
-    const activeNode = nodes.find(n => n.id === settings.active_target_id) || status.node || nodes[0]
+    // Polling for active node in any group (consistent with Dashboard)
+    useEffect(() => {
+        let timer: NodeJS.Timeout
+        const activeId = settings.active_target_id
+        const isGroup = activeId && (
+            activeId.startsWith("auto_") ||
+            activeId.startsWith("system:") ||
+            activeId.includes(":")
+        )
+
+        // Only poll if proxy is running and it's a group
+        if (status.is_running && isGroup && status.clash_api_port) {
+            const fetchStatus = async () => {
+                try {
+                    const id: string = await invoke("get_group_status", { groupId: activeId as string })
+                    setActiveAutoNodeId(id)
+                } catch (e) {
+                    console.error("[Tray] Failed to fetch group status:", e)
+                }
+            }
+            fetchStatus()
+            timer = setInterval(fetchStatus, 3000)
+        } else {
+            setActiveAutoNodeId(null)
+        }
+        return () => clearInterval(timer)
+    }, [status.is_running, settings.active_target_id, status.clash_api_port])
+
+    const activeNode = nodes.find(n => n.id === activeAutoNodeId) ||
+        nodes.find(n => n.id === settings.active_target_id) ||
+        status.node ||
+        nodes[0]
 
     const checkLatency = useCallback(() => {
         const nodeId = activeNode?.id
         if (!nodeId) {
+            setLatency(null)
+            return
+        }
+
+        // Guard: url_test backend only supports node IDs. 
+        if (nodeId.startsWith("system:") || nodeId.startsWith("auto_") || nodeId.includes(":")) {
+            console.log("[Tray] Skipping latency test for group ID:", nodeId)
             setLatency(null)
             return
         }
