@@ -66,7 +66,7 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
         } else {
             // Reset to defaults for new node
             setNode({
-                id: "",
+                id: crypto.randomUUID(),
                 name: "New Server",
                 protocol: "vmess",
                 server: "",

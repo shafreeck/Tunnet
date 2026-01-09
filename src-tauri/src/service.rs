@@ -2532,6 +2532,11 @@ impl<R: Runtime> ProxyService<R> {
         let handle = self.app.clone();
         tokio::spawn(async move {
             if let Some(service) = handle.try_state::<ProxyService<R>>() {
+                // 1. Probe Latency first (Fast)
+                if let Err(e) = service.probe_nodes_latency(vec![node_id.clone()]).await {
+                    log::error!("Add node latency probe failed: {}", e);
+                }
+                // 2. Probe Location second (slower, but retains latency)
                 let _ = service.probe_nodes_location(vec![node_id]).await;
             }
         });
@@ -2692,8 +2697,7 @@ impl<R: Runtime> ProxyService<R> {
 
     pub async fn probe_nodes_location(&self, node_ids: Vec<String>) -> Result<(), String> {
         let profiles = self.manager.load_profiles()?;
-        let settings = self.manager.load_settings()?;
-        let log_level = settings.log_level.to_lowercase();
+        let _settings = self.manager.load_settings()?;
 
         let mut updates = std::collections::HashMap::new();
         let mut futures = Vec::new();
@@ -2709,12 +2713,7 @@ impl<R: Runtime> ProxyService<R> {
 
                 let outbound = self.node_to_outbound(n);
                 
-                // Inject log_level into outbound json
-                let mut outbound_val = serde_json::to_value(&outbound).map_err(|e| e.to_string())?;
-                if let Some(obj) = outbound_val.as_object_mut() {
-                    obj.insert("_log_level".to_string(), serde_json::Value::String(log_level.clone()));
-                }
-                let outbound_json = serde_json::to_string(&outbound_val).map_err(|e| e.to_string())?;
+                let outbound_json = serde_json::to_string(&outbound).map_err(|e| e.to_string())?;
 
                 let current_latency = n.location.as_ref().map(|l| l.latency).unwrap_or(0);
                 let sem = semaphore.clone();
@@ -2724,38 +2723,76 @@ impl<R: Runtime> ProxyService<R> {
                     let _permit = sem.acquire().await.unwrap();
 
                     let outbound_c = std::ffi::CString::new(outbound_json).unwrap();
-                    let target_c = std::ffi::CString::new("http://ip-api.com/json").unwrap();
+                    
+                    // Provider strategy: Try ip-api (HTTP), then ipwho.is (HTTPS/Fallback)
+                    let providers = vec![
+                        ("http://ip-api.com/json", "ip-api"),
+                        ("https://ipwho.is/", "ipwhois"),
+                    ];
 
-                    let res_ptr = unsafe {
-                        crate::libbox::LibboxFetch(
-                            outbound_c.as_ptr(),
-                            target_c.as_ptr(),
-                            10000, // 10s timeout
-                        )
-                    };
+                    for (url, provider) in providers {
+                        let target_c = std::ffi::CString::new(url).unwrap();
 
-                    if res_ptr.is_null() {
-                        return None;
-                    }
+                        let res_ptr = unsafe {
+                            crate::libbox::LibboxFetch(
+                                outbound_c.as_ptr(),
+                                target_c.as_ptr(),
+                                10000, 
+                            )
+                        };
 
-                    let res_str = unsafe {
-                        std::ffi::CStr::from_ptr(res_ptr)
-                            .to_string_lossy()
-                            .into_owned()
-                    };
+                        if res_ptr.is_null() {
+                            continue;
+                        }
 
-                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&res_str) {
-                        if val["status"] == "success" {
-                            let loc = crate::profile::LocationInfo {
-                                ip: val["query"].as_str().unwrap_or_default().to_string(),
-                                country: val["countryCode"].as_str().unwrap_or_default().to_string(),
-                                city: val["city"].as_str().unwrap_or_default().to_string(),
-                                lat: val["lat"].as_f64().unwrap_or_default(),
-                                lon: val["lon"].as_f64().unwrap_or_default(),
-                                isp: val["isp"].as_str().unwrap_or_default().to_string(),
-                                latency: current_latency, // Preserve existing latency
-                            };
-                            return Some((node_id, loc));
+                        let res_str = unsafe {
+                            std::ffi::CStr::from_ptr(res_ptr)
+                                .to_string_lossy()
+                                .into_owned()
+                        };
+
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&res_str) {
+                            let mut success = false;
+                            
+                            // Check success based on provider
+                            if provider == "ip-api" && val["status"] == "success" {
+                                success = true;
+                            } else if provider == "ipwhois" && val["success"] == true {
+                                success = true;
+                            }
+
+                            if success {
+                                let (ip, country, city, lat, lon, isp) = if provider == "ip-api" {
+                                    (
+                                        val["query"].as_str().unwrap_or_default(),
+                                        val["country"].as_str().unwrap_or_default(), // Use full name
+                                        val["city"].as_str().unwrap_or_default(),
+                                        val["lat"].as_f64().unwrap_or_default(),
+                                        val["lon"].as_f64().unwrap_or_default(),
+                                        val["isp"].as_str().unwrap_or_default()
+                                    )
+                                } else {
+                                    (
+                                        val["ip"].as_str().unwrap_or_default(),
+                                        val["country"].as_str().unwrap_or_default(), // Use full name
+                                        val["city"].as_str().unwrap_or_default(),
+                                        val["latitude"].as_f64().unwrap_or_default(),
+                                        val["longitude"].as_f64().unwrap_or_default(),
+                                        val["connection"]["isp"].as_str().unwrap_or_default()
+                                    )
+                                };
+
+                                let loc = crate::profile::LocationInfo {
+                                    ip: ip.to_string(),
+                                    country: country.to_string(),
+                                    city: city.to_string(),
+                                    lat,
+                                    lon,
+                                    isp: isp.to_string(),
+                                    latency: current_latency,
+                                };
+                                return Some((node_id, loc));
+                            }
                         }
                     }
                     None
@@ -2776,7 +2813,21 @@ impl<R: Runtime> ProxyService<R> {
         for p in &mut profiles {
             for n in &mut p.nodes {
                 if let Some(loc) = updates.get(&n.id) {
-                    n.location = Some(loc.clone());
+                    let mut new_loc = loc.clone();
+                    
+                    // Race Condition Fix:
+                    // Preserve the latest latency from the freshly loaded profile.
+                    // If probe_nodes_latency ran concurrently, n.ping will have the fresh value.
+                    let fresh_latency = n.ping.unwrap_or_else(|| 
+                        n.location.as_ref().map(|l| l.latency as u64).unwrap_or(0)
+                    );
+
+                    // If we have a valid latency in the profile, use it
+                    if fresh_latency > 0 {
+                        new_loc.latency = fresh_latency;
+                    }
+
+                    n.location = Some(new_loc);
                 }
             }
         }

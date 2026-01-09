@@ -15,7 +15,40 @@ import { getCountryName } from "@/lib/flags"
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"
 
 // Mapping from our display name to the map's property name
+// Mapping from ISO Code / Display Name to the map's property name
 const NAME_MAPPING: Record<string, string> = {
+    // ISO Codes
+    "US": "United States of America",
+    "GB": "United Kingdom",
+    "UK": "United Kingdom",
+    "KR": "South Korea",
+    "JP": "Japan",
+    "CN": "China",
+    "TW": "Taiwan",
+    "HK": "Hong Kong",
+    "DE": "Germany",
+    "FR": "France",
+    "SG": "Singapore",
+    "NL": "Netherlands",
+    "CA": "Canada",
+    "AU": "Australian", // Typo in some maps, check 'Australia'
+    "AU_FIX": "Australia",
+    "IN": "India",
+    "RU": "Russia",
+    "BR": "Brazil",
+    "IE": "Ireland",
+    "SE": "Sweden",
+    "NO": "Norway",
+    "FI": "Finland",
+    "CH": "Switzerland",
+    "IT": "Italy",
+    "ES": "Spain",
+    "TR": "Turkey",
+    "IL": "Israel",
+    "AE": "United Arab Emirates",
+    "ZA": "South Africa",
+
+    // Explicit Names (Legacy)
     "United States": "United States of America",
     "Korea": "South Korea",
     "United Kingdom": "United Kingdom",
@@ -25,10 +58,34 @@ const NAME_MAPPING: Record<string, string> = {
 }
 
 // Reverse mapping for click handling (Map Name -> Display Name)
-const REVERSE_NAME_MAPPING: Record<string, string> = Object.entries(NAME_MAPPING).reduce((acc, [k, v]) => {
-    acc[v] = k
-    return acc
-}, {} as Record<string, string>)
+// Reverse mapping for click handling (Map Name -> Display Name)
+// We need to be careful here because multiple keys map to the same value (e.g. US -> USA, United States -> USA)
+// We want to prefer the "Display Name" version if available, or just use the code.
+// Actually, since our backend now returns CODES (US), we might want to map BACK to Code?
+// But the UI (list view) might expect Codes now.
+// However, existing logic might rely on "United States".
+// Let's create a map that prioritizes the "Code" if it looks like a code (length 2), OR the explicit legacy name.
+// Actually, simpler: Let's trust that `servers` use ISO codes now usually.
+const REVERSE_NAME_MAPPING: Record<string, string> = {}
+Object.entries(NAME_MAPPING).forEach(([k, v]) => {
+    // If the value is already set, we only overwrite if the new key `k` is "better"
+    // For now, let's just ensure we have *some* mapping.
+    // If we have "United States" and "US", both map to "United States of America".
+    // We probably want the click to return "US" if that's what the server has.
+    // But we don't know what the server has here strictly.
+    // Strategy: Just use the Last one encountered? Or build a list?
+    // Let's just use the Key as the source.
+    if (!REVERSE_NAME_MAPPING[v]) {
+        REVERSE_NAME_MAPPING[v] = k
+    } else {
+        // If we already have a mapping, prefer the one that matches length 2 (ISO) 
+        // IF the current one is longer, OR prefer the longer one?
+        // Let's stick to the ISO code if available, as that's what we want to standardize on.
+        if (k.length === 2) {
+            REVERSE_NAME_MAPPING[v] = k
+        }
+    }
+})
 
 interface LocationsMapProps {
     servers: any[]
