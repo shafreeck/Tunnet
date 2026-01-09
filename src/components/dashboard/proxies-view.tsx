@@ -44,7 +44,7 @@ export function ProxiesView(props: ProxiesViewProps) {
     const tabs = [
         { id: "locations", label: t('sidebar.locations', { defaultValue: 'Locations' }) },
         { id: "groups", label: t('sidebar.groups', { defaultValue: 'Groups' }) },
-        { id: "subscriptions", label: t('sidebar.proxies', { defaultValue: 'Subscriptions' }) },
+        { id: "subscriptions", label: t('sidebar.subscription', { defaultValue: 'Subscriptions' }) },
     ]
 
     return (

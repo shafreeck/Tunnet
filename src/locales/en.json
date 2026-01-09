@@ -25,6 +25,7 @@
     "sidebar": {
         "network": "NETWORK",
         "dashboard": "Dashboard",
+        "proxies": "Proxies",
         "locations": "Locations",
         "rules": "Rules",
         "system": "SYSTEM",

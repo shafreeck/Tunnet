@@ -25,6 +25,7 @@
     "sidebar": {
         "network": "网络",
         "dashboard": "仪表板",
+        "proxies": "代理",
         "locations": "节点地区",
         "rules": "分流规则",
         "system": "系统",
