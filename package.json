@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 4000",
-    "build": "next build",
+    "dev": "npm run copy:logo && next dev -p 4000",
+    "build": "npm run copy:logo && next build",
+    "copy:logo": "node -e \"const fs = require('fs'); fs.copyFileSync('src-tauri/icons/icon.png', 'public/logo.png'); console.log('Logo synced to public/');\"",
     "start": "next start",
     "lint": "eslint",
     "tauri": "npm run build:helper && tauri",

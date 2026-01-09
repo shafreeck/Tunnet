@@ -105,12 +105,4 @@ if (platform !== 'win32') {
     chmodSync(targetPath, 0o755);
 }
 
-// Copy the app icon to public/logo.png for README and other uses
-const iconSrc = join(srcTauriDir, 'icons', 'icon.png');
-const iconDest = join(rootDir, 'public', 'logo.png');
-if (existsSync(iconSrc)) {
-    copyFileSync(iconSrc, iconDest);
-    console.log(`Copied icon to ${iconDest}`);
-}
-
 console.log(`Successfully built and copied ${binaryName} to ${targetPath}`);
