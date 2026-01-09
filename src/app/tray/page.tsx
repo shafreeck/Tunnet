@@ -10,6 +10,7 @@ import { useTheme } from "next-themes"
 import { useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import { getLatencyColor, formatLatency } from "@/lib/latency"
+import { getVersion } from "@tauri-apps/api/app"
 
 const formatSpeed = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B/s`
@@ -32,6 +33,7 @@ export default function TrayPage() {
     const [trafficHistory, setTrafficHistory] = useState<{ up: number, down: number }[]>(new Array(30).fill({ up: 0, down: 0 }))
     const [isQuitting, setIsQuitting] = useState(false)
     const [activeAutoNodeId, setActiveAutoNodeId] = useState<string | null>(null)
+    const [version, setVersion] = useState("")
     const manualActionRef = useRef(false)
 
     const ipInfoRef = useRef(ipInfo)
@@ -102,6 +104,10 @@ export default function TrayPage() {
             unlistenLang.then(f => f())
             unlistenTun.then(f => f())
         }
+    }, [])
+
+    useEffect(() => {
+        getVersion().then(setVersion)
     }, [])
 
     // Fetch IP Info when running or node changes
@@ -578,7 +584,7 @@ export default function TrayPage() {
             </div >
 
             <div className="mt-auto shrink-0 px-4 py-2 border-t border-white/[0.03] flex items-center justify-between bg-black/5 dark:bg-white/5">
-                <span className="text-[10px] font-mono opacity-20 whitespace-nowrap overflow-hidden max-w-[80px]">V0.1.0</span>
+                <span className="text-[10px] font-mono opacity-20 whitespace-nowrap overflow-hidden max-w-[80px]">V{version}</span>
                 <button
                     onClick={handleQuit}
                     disabled={isQuitting}

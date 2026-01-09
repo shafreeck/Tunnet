@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
 import { AppSettings, defaultSettings, getAppSettings, saveAppSettings } from "@/lib/settings"
+import { getVersion } from "@tauri-apps/api/app"
 import { invoke } from "@tauri-apps/api/core"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner" // Assuming you have sonner or some toast, if not I should remove it or check. 
@@ -622,6 +623,12 @@ function AdvancedSettings({ settings, update, clashApiPort }: AdvancedProps) {
 
 
 function AboutSection() {
+    const [version, setVersion] = useState<string>("")
+
+    useEffect(() => {
+        getVersion().then(setVersion)
+    }, [])
+
     return (
         <div className="flex flex-col items-center justify-center py-10 gap-10">
             <div className="relative">
@@ -635,7 +642,7 @@ function AboutSection() {
                 <h2 className="text-4xl font-extrabold tracking-tighter text-foreground">Tunnet</h2>
                 <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">Alpha Access</span>
-                    <span className="text-[10px] text-secondary font-mono uppercase tracking-widest">v0.1.0</span>
+                    <span className="text-[10px] text-secondary font-mono uppercase tracking-widest">v{version}</span>
                 </div>
             </div>
 

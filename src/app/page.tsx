@@ -277,7 +277,7 @@ export default function Home() {
 
       setIsLoading(true)
       setConnectionState("connecting")
-      console.log("Syncing proxy config...", { proxyMode, tunEnabled, node: node.name })
+      // console.log("Syncing proxy config...", { proxyMode, tunEnabled, node: node.name })
 
       const isOnlyTunUpdate = lastAppliedConfigRef.current &&
         currentConfigKey &&
@@ -922,7 +922,7 @@ export default function Home() {
 
     // Guard: url_test backend only supports node IDs. If we have a group ID here, we can't cold ping it.
     if (targetPingId.startsWith("system:") || targetPingId.startsWith("auto_")) {
-      console.log("Skipping cold ping for group ID:", targetPingId)
+      // console.log("Skipping cold ping for group ID:", targetPingId)
       return
     }
 
@@ -1088,7 +1088,7 @@ export default function Home() {
         try {
           const status: string = await invoke("get_group_status", { groupId: activeServerId as string })
           setActiveAutoNodeId(status)
-          console.log("[GroupSelect] Active node ID:", status)
+          // console.log("[GroupSelect] Active node ID:", status)
         } catch (e) {
           console.error("[GroupSelect] Failed to fetch group status:", e)
         }

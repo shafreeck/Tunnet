@@ -265,6 +265,7 @@
         },
         "card": {
             "location_count": "{{count}} 个节点",
+            "location_count_other": "{{count}} 个节点",
             "usage": "负载",
             "usage_low": "空闲",
             "multiple_providers": "多种协议",
