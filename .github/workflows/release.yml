@@ -55,7 +55,7 @@ jobs:
               uses: ilammy/msvc-dev-cmd@v1
 
             - name: install frontend dependencies
-              run: npm install
+              run: npm install --legacy-peer-deps
 
             - uses: tauri-apps/tauri-action@v0
               env:
