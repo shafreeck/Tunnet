@@ -19,13 +19,16 @@
     "core:window:allow-start-dragging",
     {
       "identifier": "shell:allow-open",
-      "allow": [
+      "scope": [
         {
-          "href": "^https?://",
-          "validator": "regex"
+          "schemes": [
+            "http",
+            "https"
+          ]
         }
       ]
     },
-    "deep-link:default"
+    "deep-link:default",
+    "updater:default"
   ]
 }

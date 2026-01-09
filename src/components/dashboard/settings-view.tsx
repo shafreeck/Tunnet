@@ -298,8 +298,53 @@ function GeneralSettings({ settings, update }: CommonProps) {
                 >
                     <Switch checked={settings.auto_update} onCheckedChange={(v) => update("auto_update", v)} />
                 </SettingItem>
+                <div className="flex justify-end mt-2 px-1">
+                    <CheckUpdateBtn />
+                </div>
             </Section>
         </div>
+    )
+}
+
+function CheckUpdateBtn() {
+    const { t } = useTranslation()
+    const [checking, setChecking] = useState(false)
+
+    const checkUpdate = async () => {
+        setChecking(true)
+        try {
+            const { check } = await import("@tauri-apps/plugin-updater")
+            const update = await check()
+            if (update) {
+                toast.success(t('settings.advanced.core.new'), {
+                    description: `v${update.version} ${t('settings.advanced.core.update')}`,
+                    action: {
+                        label: t('settings.advanced.core.update'),
+                        onClick: () => update.downloadAndInstall()
+                    }
+                })
+            } else {
+                toast.info(t('settings.advanced.core.latest'))
+            }
+        } catch (e) {
+            console.error(e)
+            toast.error(t('settings.advanced.core.error'), {
+                description: String(e)
+            })
+        } finally {
+            setChecking(false)
+        }
+    }
+
+    return (
+        <button
+            onClick={checkUpdate}
+            disabled={checking}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-all text-xs font-bold disabled:opacity-50"
+        >
+            <RefreshCw size={14} className={checking ? "animate-spin" : ""} />
+            {checking ? t('settings.advanced.core.checking') : t('settings.advanced.core.check_update')}
+        </button>
     )
 }
 

@@ -350,7 +350,7 @@ fn handle_request(req: Request, state: &Arc<AppState>) -> Response {
 
         "version" => Response {
             status: "success".into(),
-            message: "2.0.14".into(),
+            message: env!("CARGO_PKG_VERSION").into(),
         },
 
         "kill_port" => Response {

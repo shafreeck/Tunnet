@@ -152,7 +152,7 @@ async fn check_helper(app: tauri::AppHandle) -> Result<bool, String> {
     match client.get_version() {
         Ok(v) => {
             // Version 1.1.0+ supports reload (SIGHUP)
-            Ok(v == "2.0.14") // Bound to specific version for update
+            Ok(v == env!("CARGO_PKG_VERSION")) // Bound to specific version for update
         }
         Err(_) => {
             // Helper installed but not responsive (crashed, stopped, or stale socket)
@@ -357,7 +357,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_clipboard_manager::init());
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build());
 
     #[cfg(desktop)]
     {
@@ -543,6 +544,21 @@ pub fn run() {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.hide();
                         }
+                    }
+
+                    if settings.auto_update {
+                        let handle = app.handle().clone();
+                        tauri::async_runtime::spawn(async move {
+                            use tauri::Emitter;
+                            use tauri_plugin_updater::UpdaterExt;
+                            if let Ok(Some(update)) = handle.updater().unwrap().check().await {
+                                log::info!("New version available: {}", update.version);
+                                // For now we just log it, or we could emit an event to the frontend
+                                // to show a notification. But the user specifically asked for
+                                // auto-update functionality.
+                                let _ = handle.emit("update-available", update.version);
+                            }
+                        });
                     }
                 }
             }
