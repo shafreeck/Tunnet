@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use tauri::{AppHandle, Manager};
 
-const HELPER_LABEL: &str = "run.tunnet.app.helper";
+const HELPER_LABEL: &str = "run.tunnet.helper";
 const HELPER_BIN_NAME: &str = "tunnet-helper";
 
 pub struct HelperInstaller {

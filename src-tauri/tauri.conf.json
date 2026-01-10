@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Tunnet",
   "version": "0.1.0",
-  "identifier": "run.tunnet.app",
+  "identifier": "run.tunnet",
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://127.0.0.1:4000",
