@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils"
 import { listen } from "@tauri-apps/api/event"
 import { invoke } from "@tauri-apps/api/core"
 
+import { toast } from "sonner"
+
 export function AppShell({ children }: { children: React.ReactNode }) {
     const [isExiting, setIsExiting] = useState(false)
 
@@ -14,17 +16,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         const setupListener = async () => {
             unlisten = await listen("ui:initiate-exit", () => {
                 setIsExiting(true)
-                // Wait for animation to finish before quitting
-                setTimeout(async () => {
-                    try {
-                        await invoke("quit_app")
-                    } catch (e) {
-                        console.error("Failed to quit app", e)
-                        // If quit failed, maybe reset state? But user wanted to quit.
-                        // Force close webview window as fallback?
-                        // For now, simple error log.
-                    }
-                }, 1000) // Match duration in CSS
+                // Dismiss all toasts immediately so they don't hang during animation
+                toast.dismiss()
+
+                // Trigger backend quit immediately. 
+                // The backend will handle waiting for the animation (Option B).
+                invoke("quit_app").catch((e) => {
+                    console.error("Failed to quit app", e)
+                })
             })
         }
 

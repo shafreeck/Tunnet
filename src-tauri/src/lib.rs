@@ -314,11 +314,30 @@ async fn quit_app(
     app: tauri::AppHandle,
     service: State<'_, ProxyService<tauri::Wry>>,
 ) -> Result<(), String> {
-    log::info!("Quitting application...");
+    log::info!("Quitting application (Option B: Sync with animation)...");
+    let start_time = std::time::Instant::now();
+
+    // 1. Perform backend cleanup (Stop proxy, etc.)
     service.stop_proxy(false).await;
+
+    // 2. Ensure total elapsed time is at least 1000ms to match frontend animation
+    let elapsed = start_time.elapsed();
+    let min_duration = std::time::Duration::from_millis(1000);
+
+    if elapsed < min_duration {
+        let remaining = min_duration - elapsed;
+        log::info!(
+            "Cleanup finished in {:?}, waiting {:?} more for animation...",
+            elapsed,
+            remaining
+        );
+        tokio::time::sleep(remaining).await;
+    } else {
+        log::info!("Cleanup finished in {:?}, exiting immediately.", elapsed);
+    }
+
     app.exit(0);
-    // Since we prevent exit in the run loop, we might need to force it if app.exit(0) isn't enough
-    // But usually app.exit(0) should be handled. If not, std::process::exit(0) works.
+    // Force exit if tauri's exit is prevented
     std::process::exit(0);
 }
 

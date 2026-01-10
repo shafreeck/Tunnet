@@ -27,8 +27,8 @@ export default function RootLayout({
         >
           <AppShell>
             {children}
+            <ClientToaster />
           </AppShell>
-          <ClientToaster />
         </ThemeProvider>
       </body>
     </html>
