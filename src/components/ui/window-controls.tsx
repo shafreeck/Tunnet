@@ -5,6 +5,7 @@ import { type as getType } from "@tauri-apps/plugin-os"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { Minus, Square, X, Copy } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { emit } from "@tauri-apps/api/event"
 
 export function WindowControls({ className }: { className?: string }) {
     const [osType, setOsType] = useState<string | null>(null)
@@ -108,7 +109,7 @@ export function WindowControls({ className }: { className?: string }) {
                     )}
                 </button>
                 <button
-                    onClick={handleClose}
+                    onClick={() => emit("ui:initiate-exit")}
                     className="size-6 rounded-full bg-black/5 dark:bg-white/10 hover:bg-[#E95420] hover:text-white flex items-center justify-center transition-colors group text-foreground"
                 >
                     <X size={14} />

@@ -691,7 +691,8 @@ function QuitButton() {
         const toastId = toast.loading(t('sidebar.quitting', { defaultValue: 'Quitting...' }))
 
         try {
-            await invoke('quit_app')
+            await import("@tauri-apps/api/event").then(({ emit }) => emit("ui:initiate-exit"))
+            // await invoke('quit_app') // Moved to AppShell
         } catch (e) {
             console.error('Failed to quit app:', e)
             setIsQuitting(false)

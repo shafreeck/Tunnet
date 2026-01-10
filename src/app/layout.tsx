@@ -4,6 +4,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
 
+import { AppShell } from "@/components/layout/app-shell";
+
 export const metadata: Metadata = {
   title: "Tunnet",
   description: "Modern Proxy Tool with macOS Aesthetics",
@@ -23,9 +25,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <div className="app-window" data-tauri-drag-region>
+          <AppShell>
             {children}
-          </div>
+          </AppShell>
           <ClientToaster />
         </ThemeProvider>
       </body>
