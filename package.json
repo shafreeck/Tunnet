@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "npm run copy:logo && next dev -p 4000 -H 127.0.0.1",
+    "dev": "npm run copy:logo && next dev -p 4000",
     "build": "npm run copy:logo && next build",
     "copy:logo": "node -e \"const fs = require('fs'); const src = 'src-tauri/icons/icon_transparent_generated.png'; const dest = 'public/logo.png'; fs.copyFileSync(src, dest); fs.chmodSync(dest, 0o644); console.log('Logo synced to public/ (high-res)');\"",
     "start": "next start",
