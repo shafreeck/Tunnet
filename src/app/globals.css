@@ -142,7 +142,7 @@ body {
 
   /* App Exit Animation - CRT TV Style */
   .animate-exit-app {
-    animation: exit-app 0.5s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+    animation: exit-app 1s cubic-bezier(0.23, 1, 0.32, 1) forwards;
     pointer-events: none;
     transform-origin: center;
   }
