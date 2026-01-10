@@ -38,7 +38,12 @@
         "groups": "节点组",
         "quit": "退出程序",
         "quitting": "正在退出...",
-        "quit_failed": "退出失败"
+        "quit_failed": "退出失败",
+        "search_placeholder": "搜索节点、分组或命令...",
+        "search_no_results": "未找到结果。",
+        "navigation": "导航",
+        "server_groups": "节点组",
+        "servers": "服务器"
     },
     "dashboard": {
         "node_info": "节点信息",

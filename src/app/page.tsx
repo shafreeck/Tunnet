@@ -28,6 +28,7 @@ import { ConfirmationModal } from "@/components/ui/confirmation-modal"
 import { AddNodeModal } from "@/components/dashboard/add-node-modal"
 import { InputModal } from "@/components/ui/input-modal"
 import { TrafficMonitor } from "@/components/dashboard/traffic-monitor"
+import { SearchDialog } from "@/components/dashboard/search-dialog"
 
 export default function Home() {
   const { t } = useTranslation()
@@ -112,6 +113,7 @@ export default function Home() {
   const [clashApiPort, setClashApiPort] = useState<number | null>(null)
   const [subSortBy, setSubSortBy] = useState<"name" | "ping">("ping")
   const [showSubSortMenu, setShowSubSortMenu] = useState(false)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
 
   // Sync derived state
   useEffect(() => {
@@ -1558,15 +1560,41 @@ export default function Home() {
     }
   }
 
+
   if (!mounted) return null
 
   return (
     <div className="h-[100dvh] flex md:gap-2 md:p-2 overflow-hidden bg-background text-foreground" data-tauri-drag-region>
       <WindowControls className="hidden md:flex" />
       <Sidebar
-        currentView={currentView as any}
-        onViewChange={setCurrentView as any}
-        subscription={activeSubscription}
+        currentView={currentView}
+        onViewChange={setCurrentView}
+        subscription={
+          profiles.length > 0 && profiles[0].subscription
+            ? profiles[0].subscription
+            : null
+        }
+        onSearchClick={() => setIsSearchOpen(true)}
+      />
+
+      {/* Search Dialog */}
+      <SearchDialog
+        open={isSearchOpen}
+        onOpenChange={setIsSearchOpen}
+        servers={servers}
+        groups={groups}
+        onSelectNode={(id) => {
+          // If connected, toggle off first? No, server-list handles toggle logic nicely.
+          // But here we probably just want to SWITCH active server.
+          // If connected, this auto-reconnects to new server via syncProxy effect.
+          if (isConnected && id === activeServerId) {
+            // Already active, do nothing or show toast
+            return
+          }
+          setActiveServerId(id)
+          toast.success(t('toast.server_selected', { name: "Selected" }))
+        }}
+        onNavigate={(view) => setCurrentView(view)}
       />
       <main className="flex-1 flex flex-col h-full relative overflow-hidden md:rounded-xl bg-black/10 backdrop-blur-sm md:border border-white/5 pb-16 md:pb-0">
         {currentView !== "proxies" && currentView !== "rules" && currentView !== "settings" && currentView !== "locations" && currentView !== "groups" && (currentView as any) !== "subscription_detail" && (

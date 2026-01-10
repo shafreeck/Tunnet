@@ -38,7 +38,12 @@
         "groups": "Groups",
         "quit": "Quit App",
         "quitting": "Quitting...",
-        "quit_failed": "Failed to quit"
+        "quit_failed": "Failed to quit",
+        "search_placeholder": "Search nodes, groups, or commands...",
+        "search_no_results": "No results found.",
+        "navigation": "Navigation",
+        "server_groups": "Groups",
+        "servers": "Servers"
     },
     "dashboard": {
         "node_info": "Node Info",

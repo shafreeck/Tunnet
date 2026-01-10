@@ -17,9 +17,10 @@ interface SidebarProps {
         total: number
         expire: number
     } | null
+    onSearchClick: () => void
 }
 
-export function Sidebar({ currentView, onViewChange, subscription }: SidebarProps) {
+export function Sidebar({ currentView, onViewChange, subscription, onSearchClick }: SidebarProps) {
     const { t } = useTranslation()
 
     const getDisplayName = (name: string) => {
@@ -51,13 +52,22 @@ export function Sidebar({ currentView, onViewChange, subscription }: SidebarProp
             <div data-tauri-drag-region className="h-12 w-full cursor-default shrink-0" />
 
             <div className="px-4 mb-6">
-                <div className="relative group">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-secondary size-[18px] group-focus-within:text-primary transition-colors" />
+                <div
+                    className="relative group cursor-pointer"
+                    onClick={onSearchClick}
+                >
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-secondary size-[18px] group-hover:text-primary transition-colors" />
                     <input
-                        className="w-full bg-black/5 dark:bg-white/10 border border-transparent focus:border-primary/20 rounded-lg pl-9 pr-3 py-1.5 text-sm text-primary placeholder-gray-500 focus:ring-0 focus:bg-white/50 dark:focus:bg-white/15 transition-all shadow-inner"
-                        placeholder="Search"
+                        className="w-full bg-black/5 dark:bg-white/10 border border-transparent group-hover:border-primary/20 rounded-lg pl-9 pr-12 py-1.5 text-sm text-primary placeholder-gray-500 cursor-pointer pointer-events-none transition-all shadow-inner"
+                        placeholder={t('sidebar.search_placeholder', { defaultValue: "Search..." })}
                         type="text"
+                        readOnly
                     />
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
+                        <kbd className="hidden sm:flex h-5 select-none items-center gap-1 rounded border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-1.5 font-mono text-[10px] font-medium text-tertiary">
+                            <span className="text-sm">⌘</span>K
+                        </kbd>
+                    </div>
                 </div>
             </div>
 
