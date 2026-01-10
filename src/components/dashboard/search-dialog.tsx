@@ -39,13 +39,16 @@ export function SearchDialog({
     const { t, i18n } = useTranslation()
 
     const getGroupName = (group: Group) => {
-        // Only translate system generated groups
-        const isSystemGroup = group.id.startsWith("system:") || group.id.startsWith("auto_")
-        if (!isSystemGroup) return group.name
-
-        // Special case for AUTO
+        // Reserved system names / Subscriptions
+        const lowerName = group.name.toLowerCase()
         if (group.name === "AUTO") return t('auto_select_prefix') || "Auto"
         if (group.name === "GLOBAL") return t('auto_select_global') || "Global"
+        if (lowerName === "local import" || lowerName === "本地导入") return t('subscriptions.local_import')
+        if (lowerName === "new subscription" || lowerName === "新订阅") return t('subscriptions.new_subscription')
+
+        // Only translate system generated groups (Country groups, etc.)
+        const isSystemGroup = group.id.startsWith("system:") || group.id.startsWith("auto_")
+        if (!isSystemGroup) return group.name
 
         // Try to look up country code
         const code = getCountryCode(group.name)
