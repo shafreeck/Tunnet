@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { RefreshCw, Trash2, Globe, Server, MoreHorizontal, Database, Zap, PlusCircle, Edit2, Target, ExternalLink, ArrowUpDown } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
@@ -75,6 +75,13 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
     const [profileToDelete, setProfileToDelete] = useState<{ id: string, name: string } | null>(null)
     const [sortBy, setSortBy] = useState<"name" | "usage" | "nodes" | "expiry">("name")
     const [showSortMenu, setShowSortMenu] = useState(false)
+    const [isMac, setIsMac] = useState(false)
+
+    useEffect(() => {
+        if (typeof navigator !== 'undefined') {
+            setIsMac(navigator.userAgent.toLowerCase().includes('mac'))
+        }
+    }, [])
 
     const sortedProfiles = React.useMemo(() => {
         return [...profiles].sort((a, b) => {
@@ -185,7 +192,10 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* Unified Header */}
-            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent pl-8 pr-32 pt-6 pb-2 shrink-0 relative z-30">
+            <div className={cn(
+                "border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent pl-8 pt-6 pb-2 shrink-0 relative z-30",
+                !isMac ? "pr-32" : "pr-8"
+            )}>
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
                 <div className="max-w-5xl mx-auto w-full flex items-center justify-between relative z-10 pointer-events-none">
                     <div>
