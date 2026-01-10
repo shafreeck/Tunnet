@@ -1030,18 +1030,21 @@ export default function Home() {
       if (node) {
         // Handle TUN Mode check here too
         if (tunEnabled) {
-          try {
-            const installed = await invoke("check_helper")
-            if (!installed) {
-              toast.info(t('toast.helper_installing'))
-              await invoke("install_helper")
-              toast.success(t('toast.helper_installed'))
+          const isWindows = typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows');
+          if (!isWindows) {
+            try {
+              const installed = await invoke("check_helper")
+              if (!installed) {
+                toast.info(t('toast.helper_installing'))
+                await invoke("install_helper")
+                toast.success(t('toast.helper_installed'))
+              }
+            } catch (e: any) {
+              console.error("Helper check/install failed:", e)
+              toast.error(t('toast.helper_failed', { error: e }))
+              setIsLoading(false)
+              return
             }
-          } catch (e: any) {
-            console.error("Helper check/install failed:", e)
-            toast.error(t('toast.helper_failed', { error: e }))
-            setIsLoading(false)
-            return
           }
         }
 

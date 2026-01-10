@@ -16,6 +16,7 @@ impl HelperInstaller {
         Self { app_handle }
     }
 
+    #[cfg(target_os = "macos")]
     pub fn is_installed(&self) -> bool {
         // Simple check: does the binary exist?
         // Better check: try to connect to socket or check launchctl
@@ -24,6 +25,14 @@ impl HelperInstaller {
             .exists()
     }
 
+    #[cfg(target_os = "linux")]
+    pub fn is_installed(&self) -> bool {
+        PathBuf::from("/usr/local/bin")
+            .join(HELPER_BIN_NAME)
+            .exists()
+    }
+
+    #[cfg(target_os = "macos")]
     pub fn install(&self) -> Result<(), Box<dyn Error>> {
         // 1. Find binary path (handle dev vs production)
         // Note: resources are bundled into a 'resources' subdirectory due to tauri.conf.json structure
@@ -156,6 +165,116 @@ impl HelperInstaller {
             .into());
         }
 
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn install(&self) -> Result<(), Box<dyn Error>> {
+        // 1. Find binary path (handle dev vs production)
+        let mut resource_path = self
+            .app_handle
+            .path()
+            .resource_dir()?
+            .join("resources")
+            .join(HELPER_BIN_NAME);
+
+        if cfg!(debug_assertions) {
+            if let Ok(exe_path) = std::env::current_exe() {
+                let project_resource_path = exe_path
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .and_then(|p| p.parent())
+                    .map(|p| p.join("resources").join(HELPER_BIN_NAME));
+
+                if let Some(res_path) = project_resource_path {
+                    if res_path.exists() {
+                        println!("Using helper from resources (dev): {:?}", res_path);
+                        resource_path = res_path;
+                    }
+                }
+            }
+        }
+
+        if !resource_path.exists() {
+            return Err(format!("Helper binary not found at {:?}", resource_path).into());
+        }
+
+        // 2. Prepare Systemd Service Content
+        let service_content = format!(
+            r#"[Unit]
+Description=Tunnet Helper Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/{}
+Restart=always
+RestartSec=5
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
+"#,
+            HELPER_BIN_NAME
+        );
+
+        let temp_service_path = std::env::temp_dir().join(format!("{}.service", HELPER_BIN_NAME));
+        fs::write(&temp_service_path, service_content)?;
+
+        // 3. Construct install script
+        let install_script = format!(
+            r#"#!/bin/sh
+set -e
+cp "{}" "/usr/local/bin/{}"
+chmod 755 "/usr/local/bin/{}"
+cp "{}" "/etc/systemd/system/{}.service"
+systemctl daemon-reload
+systemctl enable {}.service
+systemctl restart {}.service
+"#,
+            resource_path.to_string_lossy(),
+            HELPER_BIN_NAME,
+            HELPER_BIN_NAME,
+            temp_service_path.to_string_lossy(),
+            HELPER_BIN_NAME,
+            HELPER_BIN_NAME,
+            HELPER_BIN_NAME
+        );
+
+        let temp_script_path = std::env::temp_dir().join("tunnet_install.sh");
+        fs::write(&temp_script_path, install_script)?;
+
+        // Make the script executable
+        Command::new("chmod")
+            .arg("+x")
+            .arg(&temp_script_path)
+            .output()?;
+
+        // 4. Run with pkexec
+        println!("Requesting elevation for installation...");
+        let output = Command::new("pkexec").arg(temp_script_path).output()?;
+
+        if !output.status.success() {
+            return Err(format!(
+                "Installation failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )
+            .into());
+        }
+
+        Ok(())
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn is_installed(&self) -> bool {
+        // Windows uses a different approach (bundled in main process or service)
+        // For now returning true to skip install check
+        true
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn install(&self) -> Result<(), Box<dyn Error>> {
         Ok(())
     }
 }
