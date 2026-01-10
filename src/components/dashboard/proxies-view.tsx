@@ -59,7 +59,7 @@ export function ProxiesView(props: ProxiesViewProps) {
             {/* Sub-navigation Tabs */}
             <div className={cn(
                 "px-4 md:px-8 pb-2 shrink-0 border-b border-black/5 dark:border-white/5 bg-transparent/50 backdrop-blur-md sticky top-0 z-40",
-                isMac ? "pt-4" : "pt-10"
+                isMac ? "pt-4" : "pt-8"
             )}>
                 <div className="flex gap-1 p-1 bg-black/5 dark:bg-white/5 rounded-xl w-fit">
                     {tabs.map((tab) => (

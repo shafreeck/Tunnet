@@ -194,7 +194,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
             {/* Unified Header */}
             <div className={cn(
                 "border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent pl-8 shrink-0 relative z-30 pr-8",
-                !isMac ? "pt-11 pb-2" : "pt-6 pb-2"
+                !isMac ? "pt-8 pb-2" : "pt-6 pb-2"
             )}>
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
                 <div className="max-w-5xl mx-auto w-full flex items-center justify-between relative z-10 pointer-events-none">
