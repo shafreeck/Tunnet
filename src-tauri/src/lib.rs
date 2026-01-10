@@ -348,6 +348,7 @@ async fn get_proxy_status(
 
 use std::sync::atomic::{AtomicI64, Ordering};
 static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
+static LAST_HIDE_TIME: AtomicI64 = AtomicI64::new(0);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -387,6 +388,7 @@ pub fn run() {
                             let last_click = LAST_CLICK_TIME.load(Ordering::Relaxed);
                             if (now - last_click) > 500 {
                                 let _ = window.hide();
+                                LAST_HIDE_TIME.store(now, Ordering::Relaxed);
                             }
                         }
                     }
@@ -479,6 +481,11 @@ pub fn run() {
                             }
                             LAST_CLICK_TIME.store(now, Ordering::Relaxed);
 
+                            let last_hide = LAST_HIDE_TIME.load(Ordering::Relaxed);
+                            if (now - last_hide) < 400 {
+                                return;
+                            }
+
                             let app = tray.app_handle();
                             if let Some(window) = app.get_webview_window("tray") {
                                 if window.is_visible().unwrap_or(false) {
@@ -506,7 +513,7 @@ pub fn run() {
 
                                         // Vertical Adjustment (Flip if overflow workarea bottom)
                                         if y + win_h > wa_y + wa_h {
-                                            y = position.y as i32 - win_h - 12;
+                                            y = position.y as i32 - win_h - 36;
                                         }
 
                                         // Horizontal Adjustment (Clamp to workarea edges)
