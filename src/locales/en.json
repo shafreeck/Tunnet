@@ -251,6 +251,7 @@
         "connected_to": "Connected to {{server}}",
         "updated_to": "Updated to {{mode}}",
         "action_failed": "Failed: {{error}}",
+        "server_selected": "Switched to {{name}}",
         "import_no_nodes": "No valid nodes found in this subscription, import cancelled.",
         "updating_tun": "Updating TUN Mode...",
         "system_proxy_enabled": "System Proxy Enabled",

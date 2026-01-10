@@ -1592,7 +1592,9 @@ export default function Home() {
             return
           }
           setActiveServerId(id)
-          toast.success(t('toast.server_selected', { name: "Selected" }))
+          const target = servers.find((s: any) => s.id === id) || groups.find(g => g.id === id)
+          const name = target ? target.name : id
+          toast.success(t('toast.server_selected', { name }))
         }}
         onNavigate={(view) => setCurrentView(view)}
       />
