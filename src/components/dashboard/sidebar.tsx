@@ -4,6 +4,7 @@ import React from "react"
 import { Search, Rocket, Globe, Settings, Sliders, Info, Server, Zap, LayoutGrid } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
+import { type } from '@tauri-apps/plugin-os'
 
 export type ViewType = "dashboard" | "locations" | "rules" | "settings" | "proxies" | "groups"
 
@@ -22,6 +23,18 @@ interface SidebarProps {
 
 export function Sidebar({ currentView, onViewChange, subscription, onSearchClick }: SidebarProps) {
     const { t } = useTranslation()
+    const [modifier, setModifier] = React.useState("⌘")
+
+    React.useEffect(() => {
+        try {
+            const osType = type()
+            if (osType === 'windows' || osType === 'linux') {
+                setModifier("Ctrl")
+            }
+        } catch (e) {
+            console.error("Failed to detect OS", e)
+        }
+    }, [])
 
     const getDisplayName = (name: string) => {
         const lower = name.toLowerCase()
@@ -65,7 +78,7 @@ export function Sidebar({ currentView, onViewChange, subscription, onSearchClick
                     />
                     <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
                         <kbd className="hidden sm:flex h-5 select-none items-center gap-1 rounded border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-1.5 font-mono text-[10px] font-medium text-tertiary">
-                            <span className="text-sm">⌘</span>K
+                            <span className={cn(modifier === "Ctrl" ? "text-[10px] font-bold" : "text-sm top-[0.5px] relative")}>{modifier}</span>K
                         </kbd>
                     </div>
                 </div>
