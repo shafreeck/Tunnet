@@ -391,8 +391,15 @@ pub fn run() {
                         }
                     }
                     tauri::WindowEvent::CloseRequested { api, .. } if label == "main" => {
-                        let _ = window.hide();
-                        api.prevent_close();
+                        #[cfg(not(target_os = "linux"))]
+                        {
+                            let _ = window.hide();
+                            api.prevent_close();
+                        }
+                        #[cfg(target_os = "linux")]
+                        {
+                            let _ = window.app_handle().exit(0);
+                        }
                     }
                     _ => {}
                 }
@@ -556,6 +563,9 @@ pub fn run() {
                 if let Ok(settings) = service.get_app_settings() {
                     if settings.start_minimized {
                         if let Some(window) = app.get_webview_window("main") {
+                            #[cfg(target_os = "linux")]
+                            let _ = window.minimize();
+                            #[cfg(not(target_os = "linux"))]
                             let _ = window.hide();
                         }
                     }
