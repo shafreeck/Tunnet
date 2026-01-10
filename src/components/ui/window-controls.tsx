@@ -119,28 +119,31 @@ export function WindowControls({ className }: { className?: string }) {
 
     // Windows Controls
     return (
-        <div className={cn("fixed top-0 right-0 z-50 flex h-8 bg-transparent", className)} data-tauri-drag-region>
+        <div className={cn("fixed top-0 right-0 z-50 flex h-8 bg-transparent transition-colors", className)} data-tauri-drag-region>
             <div
-                className="flex items-center justify-center w-10 h-8 hover:bg-white/10 active:bg-white/20 transition-colors cursor-default"
+                className="flex items-center justify-center w-10 h-8 hover:bg-black/5 dark:hover:bg-white/10 active:bg-black/10 dark:active:bg-white/20 transition-colors cursor-default"
                 onClick={handleMinimize}
             >
-                <Minus size={14} className="text-white" />
+                <Minus size={14} className="opacity-50 hover:opacity-100" />
             </div>
             <div
-                className="flex items-center justify-center w-10 h-8 hover:bg-white/10 active:bg-white/20 transition-colors cursor-default"
+                className="flex items-center justify-center w-10 h-8 hover:bg-black/5 dark:hover:bg-white/10 active:bg-black/10 dark:active:bg-white/20 transition-colors cursor-default"
                 onClick={handleMaximize}
             >
                 {isMaximized ? (
-                    <Copy size={12} className="text-white rotate-180" />
+                    <Copy size={12} className="rotate-180 opacity-50 hover:opacity-100" />
                 ) : (
-                    <Square size={12} className="text-white" />
+                    <Square size={12} className="opacity-50 hover:opacity-100" />
                 )}
             </div>
             <div
-                className="flex items-center justify-center w-10 h-8 hover:bg-red-500 active:bg-red-600 group transition-colors cursor-default"
+                className={cn(
+                    "flex items-center justify-center w-10 h-8 hover:bg-[#E81123] active:bg-[#B30D1B] group transition-all cursor-default",
+                    !isMaximized && "rounded-tr-[24px]"
+                )}
                 onClick={handleClose}
             >
-                <X size={14} className="text-white group-hover:text-white" />
+                <X size={14} className="opacity-50 group-hover:opacity-100 group-hover:text-white" />
             </div>
         </div>
     )

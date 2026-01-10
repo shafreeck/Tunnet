@@ -287,8 +287,38 @@ fn main() {
         }
 
         // Create import library (.lib) for MSVC using lib.exe
-        // We assume lib.exe is in the PATH (e.g. running from Dev Cmd or configured in CI)
-        let status = Command::new("lib.exe")
+        let mut lib_exe = std::path::PathBuf::from("lib.exe");
+
+        // Check if lib.exe is available in PATH
+        if Command::new(&lib_exe).arg("/?").output().is_err() {
+            // Try to find via vswhere
+            if let Ok(program_files) = env::var("ProgramFiles(x86)") {
+                let vswhere = Path::new(&program_files).join("Microsoft Visual Studio\\Installer\\vswhere.exe");
+                if vswhere.exists() {
+                     if let Ok(output) = Command::new(vswhere)
+                        .args(&["-latest", "-products", "*", "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationPath"])
+                        .output()
+                    {
+                        let install_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                        if !install_path.is_empty() {
+                            let msvc_dir = Path::new(&install_path).join("VC\\Tools\\MSVC");
+                            if let Ok(entries) = std::fs::read_dir(msvc_dir) {
+                                let mut versions: Vec<_> = entries.filter_map(Result::ok).map(|e| e.path()).collect();
+                                versions.sort();
+                                if let Some(latest) = versions.last() {
+                                    let candidate = latest.join("bin\\Hostx64\\x64\\lib.exe");
+                                    if candidate.exists() {
+                                        lib_exe = candidate;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let status = Command::new(&lib_exe)
             .current_dir(&libbox_dir)
             .args(&["/DEF:libbox.def", "/OUT:box.lib", "/MACHINE:X64", "/NOLOGO"])
             .status();
@@ -296,9 +326,7 @@ fn main() {
         let success = status.map(|s| s.success()).unwrap_or(false);
 
         if !success {
-            // Try to locate lib.exe via vswhere or standard locations?
-            // For now, panic with a helpful message.
-            panic!("Failed to execute lib.exe. Ensure you have MSVC Build Tools installed and available in PATH.");
+            panic!("Failed to execute lib.exe. Ensure you have MSVC Build Tools installed and available in PATH. Tried: {:?}", lib_exe);
         }
 
         // Link instructions
