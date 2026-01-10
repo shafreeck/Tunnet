@@ -1178,6 +1178,10 @@ export default function Home() {
     setCurrentView("subscription_detail" as any)
   }
 
+  // Platform detection for window controls layout
+  // const [isMac, setIsMac] = useState(false)
+  // ... removed
+
   // Sub-components for views to keep return clean
   const renderView = () => {
     switch (currentView) {

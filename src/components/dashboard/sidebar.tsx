@@ -29,6 +29,8 @@ export function Sidebar({ currentView, onViewChange, subscription }: SidebarProp
         return name
     }
 
+
+
     // Formatting helper
     const formatBytes = (bytes: number, decimals = 1) => {
         if (!+bytes) return '0 B'
@@ -163,8 +165,10 @@ export function Sidebar({ currentView, onViewChange, subscription }: SidebarProp
                         </div>
                     )}
                 </div>
+
+
             </div>
-        </aside>
+        </aside >
     )
 }
 

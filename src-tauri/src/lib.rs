@@ -393,8 +393,15 @@ pub fn run() {
                         }
                     }
                     tauri::WindowEvent::CloseRequested { api, .. } if label == "main" => {
-                        let _ = window.hide();
-                        api.prevent_close();
+                        #[cfg(not(target_os = "linux"))]
+                        {
+                            let _ = window.hide();
+                            api.prevent_close();
+                        }
+                        #[cfg(target_os = "linux")]
+                        {
+                            let _ = window.app_handle().exit(0);
+                        }
                     }
                     _ => {}
                 }
@@ -444,6 +451,20 @@ pub fn run() {
 
                 let menu = Menu::with_items(app_handle, &[&app_menu, &edit_menu]).unwrap();
                 app_handle.set_menu(menu).unwrap();
+            }
+
+            // Explicitly set window icon for Linux to ensure it shows in the Dock/Launcher
+            #[cfg(target_os = "linux")]
+            {
+                let icon_bytes = include_bytes!("../icons/128x128@2x.png");
+                if let Ok(icon) = tauri::image::Image::from_bytes(icon_bytes) {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.set_icon(icon.clone());
+                    }
+                    if let Some(window) = app.get_webview_window("tray") {
+                        let _ = window.set_icon(icon);
+                    }
+                }
             }
 
             let proxy_service = ProxyService::new(app.handle().clone());
@@ -549,6 +570,9 @@ pub fn run() {
                 if let Ok(settings) = service.get_app_settings() {
                     if settings.start_minimized {
                         if let Some(window) = app.get_webview_window("main") {
+                            #[cfg(target_os = "linux")]
+                            let _ = window.minimize();
+                            #[cfg(not(target_os = "linux"))]
                             let _ = window.hide();
                         }
                     }
@@ -620,16 +644,28 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app_handle, event| {
-            if let tauri::RunEvent::ExitRequested { api, .. } = event {
-                api.prevent_exit();
-                log::info!("Exit requested (System signal), performing emergency cleanup...");
+            match event {
+                tauri::RunEvent::ExitRequested { api, .. } => {
+                    api.prevent_exit();
+                    log::info!("Exit requested (System signal), performing emergency cleanup...");
 
-                let app = _app_handle.clone();
-                let service = app.state::<ProxyService<tauri::Wry>>();
-                service.emergency_cleanup();
+                    let app = _app_handle.clone();
+                    let service = app.state::<ProxyService<tauri::Wry>>();
+                    service.emergency_cleanup();
 
-                log::info!("Exiting process now.");
-                std::process::exit(0);
+                    log::info!("Exiting process now.");
+                    std::process::exit(0);
+                }
+                #[cfg(target_os = "macos")]
+                tauri::RunEvent::Reopen { .. } => {
+                    // Click on Dock icon triggers this when app is running but no windows are focused/visible
+                    if let Some(window) = _app_handle.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.unminimize();
+                        let _ = window.set_focus();
+                    }
+                }
+                _ => {}
             }
         });
 }

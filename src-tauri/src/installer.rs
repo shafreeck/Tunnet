@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use tauri::{AppHandle, Manager};
 
-const HELPER_LABEL: &str = "run.tunnet.app.helper";
+const HELPER_LABEL: &str = "run.tunnet.helper";
 const HELPER_BIN_NAME: &str = "tunnet-helper";
 
 pub struct HelperInstaller {
@@ -35,12 +35,23 @@ impl HelperInstaller {
             .join(HELPER_BIN_NAME);
 
         if cfg!(debug_assertions) {
-            // In dev mode, the binary might be in target/debug
+            // In dev mode, we force using the binary in src-tauri/resources/
+            // This matches the user's request to ensure consistency between dev and build,
+            // as this file is the one generated/updated by the build-helper.mjs script.
             if let Ok(exe_path) = std::env::current_exe() {
-                let debug_path = exe_path.parent().unwrap().join(HELPER_BIN_NAME);
-                if debug_path.exists() {
-                    println!("Found helper in debug path: {:?}", debug_path);
-                    resource_path = debug_path;
+                // Determine src-tauri root from target/debug/Tunnet
+                // path: target/debug/ -> target/ -> src-tauri/
+                let project_resource_path = exe_path
+                    .parent() // debug
+                    .and_then(|p| p.parent()) // target
+                    .and_then(|p| p.parent()) // src-tauri
+                    .map(|p| p.join("resources").join(HELPER_BIN_NAME));
+
+                if let Some(res_path) = project_resource_path {
+                    if res_path.exists() {
+                        println!("Using helper from resources (dev): {:?}", res_path);
+                        resource_path = res_path;
+                    }
                 }
             }
         }

@@ -185,7 +185,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* Unified Header */}
-            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent px-8 pt-6 pb-2 shrink-0 relative z-30">
+            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent pl-8 pr-32 pt-6 pb-2 shrink-0 relative z-30">
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
                 <div className="max-w-5xl mx-auto w-full flex items-center justify-between relative z-10 pointer-events-none">
                     <div>
