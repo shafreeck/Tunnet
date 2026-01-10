@@ -707,7 +707,7 @@ function QuitButton() {
             disabled={isQuitting}
             className={cn(
                 "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ring-1 ring-inset whitespace-nowrap",
-                "bg-red-500/10 text-red-500 ring-red-500/20 hover:bg-red-500/20",
+                "bg-red-500/10 text-red-500 ring-red-500/20 hover:bg-red-500 hover:text-white hover:ring-red-500",
                 isQuitting && "opacity-50 cursor-not-allowed"
             )}
             title={t('sidebar.quit')}
