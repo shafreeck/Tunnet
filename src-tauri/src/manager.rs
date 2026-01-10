@@ -256,7 +256,49 @@ impl<R: Runtime> CoreManager<R> {
     pub fn load_rules(&self) -> Result<Vec<crate::profile::Rule>, String> {
         let path = self.get_rules_path();
         if !path.exists() {
-            return Ok(vec![]);
+            // Provide "Smart Connect" as default if no rules file exists
+            return Ok(vec![
+                crate::profile::Rule {
+                    id: "private-rule".to_string(),
+                    description: Some("rules.description.private_network".to_string()),
+                    rule_type: "IP_IS_PRIVATE".to_string(),
+                    value: "true".to_string(),
+                    policy: "DIRECT".to_string(),
+                    enabled: true,
+                },
+                crate::profile::Rule {
+                    id: "ads-1".to_string(),
+                    description: Some("rules.description.ads_blocking".to_string()),
+                    rule_type: "DOMAIN_KEYWORD".to_string(),
+                    value: "ads".to_string(),
+                    policy: "REJECT".to_string(),
+                    enabled: true,
+                },
+                crate::profile::Rule {
+                    id: "cn-1".to_string(),
+                    description: Some("rules.description.china_all".to_string()),
+                    rule_type: "DOMAIN".to_string(),
+                    value: "geosite:geosite-cn".to_string(),
+                    policy: "DIRECT".to_string(),
+                    enabled: true,
+                },
+                crate::profile::Rule {
+                    id: "cn-2".to_string(),
+                    description: Some("rules.description.china_all".to_string()),
+                    rule_type: "GEOIP".to_string(),
+                    value: "geoip-cn".to_string(),
+                    policy: "DIRECT".to_string(),
+                    enabled: true,
+                },
+                crate::profile::Rule {
+                    id: "final-policy".to_string(),
+                    description: Some("Default Fallback Policy".to_string()),
+                    rule_type: "FINAL".to_string(),
+                    value: "default".to_string(),
+                    policy: "PROXY".to_string(),
+                    enabled: true,
+                },
+            ]);
         }
         let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
         let rules: Vec<crate::profile::Rule> =

@@ -74,7 +74,7 @@ export function RulesView() {
     const [defaultPolicy, setDefaultPolicy] = useState<"PROXY" | "DIRECT" | "REJECT">("PROXY")
     const [isFallbackOpen, setIsFallbackOpen] = useState(false)
     const [isPresetOpen, setIsPresetOpen] = useState(false)
-    const [currentPreset, setCurrentPreset] = useState("Custom")
+    const [currentPreset, setCurrentPreset] = useState("Smart Connect")
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingRule, setEditingRule] = useState<Rule | null>(null)
     const [currentlyApplying, setCurrentlyApplying] = useState(false)
@@ -101,10 +101,13 @@ export function RulesView() {
 
     useEffect(() => {
         const savedPreset = localStorage.getItem("tunnet_rules_preset")
-        if (savedPreset) setCurrentPreset(savedPreset)
-        fetchRules()
-        if (savedPreset) setCurrentPreset(savedPreset)
-        fetchRules()
+        if (savedPreset) {
+            setCurrentPreset(savedPreset)
+            fetchRules()
+        } else {
+            // First run: apply Smart Connect preset
+            handleApplyPreset("Smart Connect")
+        }
         fetchGroups()
     }, [])
 
