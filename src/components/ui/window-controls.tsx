@@ -90,7 +90,7 @@ export function WindowControls({ className }: { className?: string }) {
 
     if (osType === "linux") {
         return (
-            <div className={cn("fixed top-0 right-0 z-50 flex gap-3 p-2", className)} data-tauri-drag-region>
+            <div className={cn("fixed top-0 right-0 z-50 flex gap-2 p-1", className)} data-tauri-drag-region>
                 <button
                     onClick={handleMinimize}
                     className="size-6 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 flex items-center justify-center transition-colors text-foreground"
