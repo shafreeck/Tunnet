@@ -46,6 +46,7 @@ os_pipe = "1.2.1"
 tauri-plugin-shell = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-updater = "2.0.0-rc"
+sys-locale = "0.3.2"
 
 [[bin]]
 name = "tunnet-helper"

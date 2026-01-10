@@ -485,9 +485,30 @@ pub fn run() {
                 let tray_icon = tauri::image::Image::from_bytes(tray_icon_bytes)
                     .expect("Failed to load tray icon");
 
+                use tauri::menu::{Menu, MenuItem};
+                let locale = sys_locale::get_locale().unwrap_or_else(|| "en-US".to_string());
+                let quit_text = if locale.starts_with("zh") {
+                    "退出"
+                } else {
+                    "Quit"
+                };
+                let quit_i = MenuItem::with_id(app.handle(), "quit", quit_text, true, None::<&str>)
+                    .expect("Failed to create quit menu item");
+                let menu =
+                    Menu::with_items(app.handle(), &[&quit_i]).expect("Failed to create tray menu");
+
                 let tray = TrayIconBuilder::new()
                     .icon(tray_icon)
+                    .menu(&menu)
                     .show_menu_on_left_click(false)
+                    .on_menu_event(|app, event| {
+                        if event.id() == "quit" {
+                            log::info!("Tray Menu Item 'Quit' clicked. Cleanup and exit...");
+                            let service = app.state::<ProxyService<tauri::Wry>>();
+                            service.emergency_cleanup();
+                            std::process::exit(0);
+                        }
+                    })
                     .on_tray_icon_event(|tray, event| {
                         if let TrayIconEvent::Click {
                             button: MouseButton::Left,

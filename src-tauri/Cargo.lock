@@ -5210,6 +5210,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "sys-locale",
  "sysinfo",
  "tar",
  "tauri",
