@@ -119,7 +119,7 @@ export function SettingsView({ initialCategory = "general", clashApiPort, tunEna
             {/* Top Navigation Tabs */}
             <div className={cn(
                 "border-b border-black/[0.02] dark:border-white/[0.02] flex items-center px-4 md:pl-8 bg-transparent shrink-0 relative z-30",
-                isMac ? "h-14" : "h-[5rem] pt-8"
+                isMac ? "h-14" : "h-16 pt-8"
             )}>
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
                 <div className="flex bg-card-bg p-1 rounded-xl border border-border-color relative z-10 w-full md:w-auto overflow-x-auto no-scrollbar">

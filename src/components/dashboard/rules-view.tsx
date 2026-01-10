@@ -340,7 +340,7 @@ export function RulesView() {
             {/* Unified Header Style */}
             <div className={cn(
                 "border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-5 md:px-8 md:pb-6 shrink-0 relative z-20",
-                isMac ? "md:pt-8" : "md:pt-16"
+                isMac ? "md:pt-8" : "md:pt-12"
             )}>
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
                 <div className="max-w-5xl mx-auto w-full relative z-10 pointer-events-none">
