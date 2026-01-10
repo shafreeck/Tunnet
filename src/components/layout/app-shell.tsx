@@ -24,7 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         // Force close webview window as fallback?
                         // For now, simple error log.
                     }
-                }, 400) // Match duration in CSS
+                }, 500) // Match duration in CSS
             })
         }
 

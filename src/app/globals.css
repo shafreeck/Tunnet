@@ -140,24 +140,35 @@ body {
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
   }
 
-  /* App Exit Animation */
+  /* App Exit Animation - CRT TV Style */
   .animate-exit-app {
-    animation: exit-app 0.4s cubic-bezier(0.32, 0, 0.67, 0) forwards;
+    animation: exit-app 0.5s cubic-bezier(0.23, 1, 0.32, 1) forwards;
     pointer-events: none;
-    /* Prevent clicks during exit */
+    transform-origin: center;
   }
 
   @keyframes exit-app {
     0% {
+      transform: scale(1, 1);
       opacity: 1;
-      transform: scale(1);
-      filter: blur(0);
+      filter: brightness(1);
+    }
+
+    40% {
+      transform: scale(1, 0.002);
+      opacity: 1;
+      filter: brightness(3);
+      /* Bright flash when compressed */
+    }
+
+    60% {
+      transform: scale(1, 0.002);
+      opacity: 1;
     }
 
     100% {
+      transform: scale(0, 0);
       opacity: 0;
-      transform: scale(0.95);
-      filter: blur(10px);
     }
   }
 
