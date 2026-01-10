@@ -444,6 +444,20 @@ pub fn run() {
                 app_handle.set_menu(menu).unwrap();
             }
 
+            // Explicitly set window icon for Linux to ensure it shows in the Dock/Launcher
+            #[cfg(target_os = "linux")]
+            {
+                let icon_bytes = include_bytes!("../icons/128x128@2x.png");
+                if let Ok(icon) = tauri::image::Image::from_bytes(icon_bytes) {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.set_icon(icon.clone());
+                    }
+                    if let Some(window) = app.get_webview_window("tray") {
+                        let _ = window.set_icon(icon);
+                    }
+                }
+            }
+
             let proxy_service = ProxyService::new(app.handle().clone());
             proxy_service.init(); // Clean up orphans and warmup cache
             app.manage(proxy_service);
