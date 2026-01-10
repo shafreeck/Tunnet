@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useEffect } from "react"
 // @ts-ignore
 import { invoke } from "@tauri-apps/api/core"
 import { Search, RotateCcw, Map as MapIcon, LayoutGrid, Globe as GlobeIcon, Zap, X, Target, ArrowUpDown } from "lucide-react"
@@ -53,6 +53,13 @@ export function LocationsView({
     const [isRefreshing, setIsRefreshing] = useState(false)
     const [sortBy, setSortBy] = useState<"name" | "ping">("ping")
     const [showSortMenu, setShowSortMenu] = useState(false)
+    const [isMac, setIsMac] = useState(false)
+
+    useEffect(() => {
+        if (typeof navigator !== 'undefined') {
+            setIsMac(navigator.userAgent.toLowerCase().includes('mac'))
+        }
+    }, [])
 
     const handleRefreshLocations = async () => {
         setIsRefreshing(true)
@@ -137,7 +144,10 @@ export function LocationsView({
             viewMode === "map" && "bg-transparent"
         )}>
             {/* Unified Header Style */}
-            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-5 md:pl-8 md:pt-6 md:pb-2 shrink-0 relative z-30">
+            <div className={cn(
+                "border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-5 md:pl-8 md:pb-2 shrink-0 relative z-30",
+                isMac ? "md:pt-6" : "md:pt-14"
+            )}>
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
                 <div className="max-w-5xl mx-auto w-full relative z-10 pointer-events-none">
                     <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 gap-4">

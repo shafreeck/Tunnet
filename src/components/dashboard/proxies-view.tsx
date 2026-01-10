@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { LocationsView } from "./locations-view"
 import { GroupsView } from "./groups-view"
@@ -40,6 +40,13 @@ interface ProxiesViewProps {
 export function ProxiesView(props: ProxiesViewProps) {
     const { t } = useTranslation()
     const [subTab, setSubTab] = useState<"locations" | "groups" | "subscriptions">("locations")
+    const [isMac, setIsMac] = useState(false)
+
+    useEffect(() => {
+        if (typeof navigator !== 'undefined') {
+            setIsMac(navigator.userAgent.toLowerCase().includes('mac'))
+        }
+    }, [])
 
     const tabs = [
         { id: "locations", label: t('sidebar.locations', { defaultValue: 'Locations' }) },
@@ -50,7 +57,10 @@ export function ProxiesView(props: ProxiesViewProps) {
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden">
             {/* Sub-navigation Tabs */}
-            <div className="px-4 md:px-8 pt-4 pb-2 shrink-0 border-b border-black/5 dark:border-white/5 bg-transparent/50 backdrop-blur-md sticky top-0 z-40">
+            <div className={cn(
+                "px-4 md:px-8 pb-2 shrink-0 border-b border-black/5 dark:border-white/5 bg-transparent/50 backdrop-blur-md sticky top-0 z-40",
+                isMac ? "pt-4" : "pt-[3rem]"
+            )}>
                 <div className="flex gap-1 p-1 bg-black/5 dark:bg-white/5 rounded-xl w-fit">
                     {tabs.map((tab) => (
                         <button
