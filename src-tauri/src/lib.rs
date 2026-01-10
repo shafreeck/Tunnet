@@ -613,16 +613,28 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app_handle, event| {
-            if let tauri::RunEvent::ExitRequested { api, .. } = event {
-                api.prevent_exit();
-                log::info!("Exit requested (System signal), performing emergency cleanup...");
+            match event {
+                tauri::RunEvent::ExitRequested { api, .. } => {
+                    api.prevent_exit();
+                    log::info!("Exit requested (System signal), performing emergency cleanup...");
 
-                let app = _app_handle.clone();
-                let service = app.state::<ProxyService<tauri::Wry>>();
-                service.emergency_cleanup();
+                    let app = _app_handle.clone();
+                    let service = app.state::<ProxyService<tauri::Wry>>();
+                    service.emergency_cleanup();
 
-                log::info!("Exiting process now.");
-                std::process::exit(0);
+                    log::info!("Exiting process now.");
+                    std::process::exit(0);
+                }
+                #[cfg(target_os = "macos")]
+                tauri::RunEvent::Reopen { .. } => {
+                    // Click on Dock icon triggers this when app is running but no windows are focused/visible
+                    if let Some(window) = _app_handle.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.unminimize();
+                        let _ = window.set_focus();
+                    }
+                }
+                _ => {}
             }
         });
 }
