@@ -22,7 +22,8 @@ const LEGACY_DESCRIPTION_MAP: Record<string, string> = {
     "Direct connection for Mainland China Domains": "rules.description.geosite_cn",
     "Force Google via Proxy": "rules.description.google",
     "Local Network": "rules.description.local_network",
-    "Block Ads": "rules.description.ads"
+    "Block Ads": "rules.description.ads",
+    "Default Fallback Policy": "rules.description.final_proxy"
 }
 
 // Presets Configuration
@@ -31,7 +32,7 @@ const PRESETS = {
         defaultPolicy: "PROXY",
         rules: [
             { id: "private-rule", type: "IP_IS_PRIVATE", value: "true", policy: "DIRECT", enabled: true, description: "rules.description.private_network" },
-            { id: "ads-1", type: "DOMAIN_KEYWORD", value: "ads", policy: "REJECT", enabled: true, description: "rules.description.ads_blocking" },
+            { id: "ads-1", type: "DOMAIN", value: "geosite:geosite-ads", policy: "REJECT", enabled: true, description: "rules.description.ads_blocking" },
             { id: "cn-1", type: "DOMAIN", value: "geosite:geosite-cn", policy: "DIRECT", enabled: true, description: "rules.description.china_all" },
             { id: "cn-2", type: "GEOIP", value: "geoip-cn", policy: "DIRECT", enabled: true, description: "rules.description.china_all" },
         ] as Rule[]
@@ -158,7 +159,7 @@ export function RulesView() {
             value: "default",
             policy: policy,
             enabled: true,
-            description: "Default Fallback Policy"
+            description: "rules.description.final_proxy"
         }
         const payload = [...rulesToSave, finalRule]
         await invoke("save_rules", { rules: payload })

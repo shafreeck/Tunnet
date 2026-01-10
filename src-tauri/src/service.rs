@@ -998,6 +998,13 @@ impl<R: Runtime> ProxyService<R> {
             } else {
                 None
             };
+            let geosite_ads_path = if app_local_data.join("geosite-category-ads-all.srs").exists() {
+                Some(app_local_data.join("geosite-category-ads-all.srs"))
+            } else if resource_dir.join("geosite-category-ads-all.srs").exists() {
+                Some(resource_dir.join("geosite-category-ads-all.srs"))
+            } else {
+                None
+            };
 
             route.rule_set = Some(vec![
                 if let Some(path) = geoip_path {
@@ -1038,6 +1045,27 @@ impl<R: Runtime> ProxyService<R> {
                         format: "binary".to_string(),
                         path: None,
                         url: Some("https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs".to_string()),
+                        download_detour: Some("direct".to_string()),
+                        update_interval: Some("1d".to_string()),
+                    }
+                },
+                if let Some(path) = geosite_ads_path {
+                    crate::config::RuleSet {
+                        rule_set_type: "local".to_string(),
+                        tag: "geosite-ads".to_string(),
+                        format: "binary".to_string(),
+                        path: Some(path.to_string_lossy().to_string()),
+                        url: None,
+                        download_detour: None,
+                        update_interval: None,
+                    }
+                } else {
+                    crate::config::RuleSet {
+                        rule_set_type: "remote".to_string(),
+                        tag: "geosite-ads".to_string(),
+                        format: "binary".to_string(),
+                        path: None,
+                        url: Some("https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ads-all.srs".to_string()),
                         download_detour: Some("direct".to_string()),
                         update_interval: Some("1d".to_string()),
                     }
@@ -1193,6 +1221,7 @@ impl<R: Runtime> ProxyService<R> {
         // We use a Selector with 1 item.
         // This allows 'proxy' to be used in rules.
         cfg = cfg.with_selector_outbound("proxy", vec![proxy_target]);
+        valid_tags.insert("proxy".to_string());
 
         // Apply Rules and Routing Mode
         let mut final_rules = Vec::new();
@@ -1477,6 +1506,7 @@ impl<R: Runtime> ProxyService<R> {
         let files = [
             ("geoip-cn.srs", "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-cn.srs", "https://testingcf.jsdelivr.net/gh/SagerNet/sing-geoip@rule-set/geoip-cn.srs"),
             ("geosite-cn.srs", "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs", "https://testingcf.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-cn.srs"),
+            ("geosite-category-ads-all.srs", "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ads-all.srs", "https://testingcf.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-category-ads-all.srs"),
         ];
 
         for (filename, url, fallback_url) in files {

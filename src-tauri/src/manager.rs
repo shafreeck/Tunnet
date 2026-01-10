@@ -269,8 +269,8 @@ impl<R: Runtime> CoreManager<R> {
                 crate::profile::Rule {
                     id: "ads-1".to_string(),
                     description: Some("rules.description.ads_blocking".to_string()),
-                    rule_type: "DOMAIN_KEYWORD".to_string(),
-                    value: "ads".to_string(),
+                    rule_type: "DOMAIN".to_string(),
+                    value: "geosite:geosite-ads".to_string(),
                     policy: "REJECT".to_string(),
                     enabled: true,
                 },
@@ -292,7 +292,7 @@ impl<R: Runtime> CoreManager<R> {
                 },
                 crate::profile::Rule {
                     id: "final-policy".to_string(),
-                    description: Some("Default Fallback Policy".to_string()),
+                    description: Some("rules.description.final_proxy".to_string()),
                     rule_type: "FINAL".to_string(),
                     value: "default".to_string(),
                     policy: "PROXY".to_string(),

@@ -706,14 +706,14 @@ function QuitButton() {
             onClick={handleQuit}
             disabled={isQuitting}
             className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border whitespace-nowrap",
+                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 relative border whitespace-nowrap",
                 "bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500 hover:text-white hover:border-red-500",
                 isQuitting && "opacity-50 cursor-not-allowed"
             )}
             title={t('sidebar.quit')}
         >
-            {isQuitting ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
-            <span className="hidden sm:inline leading-none pb-[1px]">{t('sidebar.quit')}</span>
+            {isQuitting ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
+            <span className="hidden sm:inline">{t('sidebar.quit')}</span>
         </button>
     )
 }
