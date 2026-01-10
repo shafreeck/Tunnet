@@ -239,8 +239,16 @@ interface HeaderProps {
 
 export function Header({ isConnected, onToggle, isLoading }: HeaderProps) {
     const { t } = useTranslation()
+    const [isMac, setIsMac] = React.useState(false)
+
+    React.useEffect(() => {
+        if (typeof navigator !== 'undefined') {
+            setIsMac(navigator.userAgent.toLowerCase().includes('mac'))
+        }
+    }, [])
+
     return (
-        <header className="flex items-center justify-between pl-8 pr-32 py-5 z-30">
+        <header className={`flex items-center justify-between pl-8 py-5 z-30 ${!isMac ? 'pr-32' : 'pr-6'}`}>
             <div data-tauri-drag-region className="flex-1 h-full cursor-default"></div>
             <div className="flex items-center gap-4">
 
