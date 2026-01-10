@@ -503,24 +503,10 @@ pub fn run() {
                     .show_menu_on_left_click(false)
                     .on_menu_event(|app, event| {
                         if event.id() == "quit" {
-                            log::info!("Tray Menu Item 'Quit' clicked. Attempting graceful exit via frontend...");
-                            use tauri::Manager;
-                            use tauri::Emitter;
-                            // Ensure window is visible to show animation
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                            let _ = app.emit("ui:initiate-exit", ());
-
-                            let app_handle = app.clone();
-                            std::thread::spawn(move || {
-                                std::thread::sleep(std::time::Duration::from_secs(2));
-                                log::info!("Force exiting after timeout...");
-                                let service = app_handle.state::<ProxyService<tauri::Wry>>();
-                                service.emergency_cleanup();
-                                std::process::exit(0);
-                            });
+                            log::info!("Tray Menu Item 'Quit' clicked. Cleanup and exit...");
+                            let service = app.state::<ProxyService<tauri::Wry>>();
+                            service.emergency_cleanup();
+                            std::process::exit(0);
                         }
                     })
                     .on_tray_icon_event(|tray, event| {
