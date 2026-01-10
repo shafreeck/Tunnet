@@ -248,7 +248,7 @@ export function Header({ isConnected, onToggle, isLoading }: HeaderProps) {
     }, [])
 
     return (
-        <header className={`flex items-center justify-between pl-8 py-5 z-30 ${!isMac ? 'pr-32' : 'pr-6'}`}>
+        <header className={`flex items-center justify-between pl-8 py-5 z-30 ${!isMac ? 'pr-28' : 'pr-6'}`}>
             <div data-tauri-drag-region className="flex-1 h-full cursor-default"></div>
             <div className="flex items-center gap-4">
 

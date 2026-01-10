@@ -1178,6 +1178,14 @@ export default function Home() {
     setCurrentView("subscription_detail" as any)
   }
 
+  // Platform detection for window controls layout
+  const [isMac, setIsMac] = useState(false)
+  useEffect(() => {
+    if (typeof navigator !== 'undefined') {
+      setIsMac(navigator.userAgent.toLowerCase().includes('mac'))
+    }
+  }, [])
+
   // Sub-components for views to keep return clean
   const renderView = () => {
     switch (currentView) {
@@ -1275,7 +1283,10 @@ export default function Home() {
 
         return (
           <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent px-8 pt-6 pb-2 shrink-0 relative z-30">
+            <div className={cn(
+              "border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent px-8 pt-6 pb-2 shrink-0 relative z-30",
+              !isMac && "pr-28"
+            )}>
               <div className="absolute inset-0 z-0" data-tauri-drag-region />
               <div className="max-w-5xl mx-auto w-full flex items-center justify-between mb-4 relative z-10 pointer-events-none">
                 <div className="flex items-center gap-4">

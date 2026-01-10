@@ -147,7 +147,7 @@ export function LocationsView({
             {/* Unified Header Style */}
             <div className={cn(
                 "border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-5 md:pl-8 md:pt-6 md:pb-2 shrink-0 relative z-30",
-                !isMac && "md:pr-36"
+                !isMac && "md:pr-28"
             )}>
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
                 <div className="max-w-5xl mx-auto w-full relative z-10 pointer-events-none">
