@@ -5,7 +5,7 @@
   "identifier": "run.tunnet.app",
   "build": {
     "frontendDist": "../out",
-    "devUrl": "http://localhost:4000",
+    "devUrl": "http://127.0.0.1:4000",
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
