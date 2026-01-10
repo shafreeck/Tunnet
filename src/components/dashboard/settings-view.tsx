@@ -47,6 +47,13 @@ export function SettingsView({ initialCategory = "general", clashApiPort, tunEna
     const [activeCategory, setActiveCategory] = useState<SettingCategory>(initialCategory)
     const [settings, setSettings] = useState<AppSettings>(defaultSettings)
     const [loading, setLoading] = useState(true)
+    const [isMac, setIsMac] = useState(false)
+
+    useEffect(() => {
+        if (typeof navigator !== 'undefined') {
+            setIsMac(navigator.userAgent.toLowerCase().includes('mac'))
+        }
+    }, [])
 
     const refreshSettings = useCallback(async () => {
         setLoading(true)
@@ -110,7 +117,10 @@ export function SettingsView({ initialCategory = "general", clashApiPort, tunEna
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500 text-foreground">
             {/* Top Navigation Tabs */}
-            <div className="h-14 border-b border-black/[0.02] dark:border-white/[0.02] flex items-center px-4 md:px-8 bg-transparent shrink-0 relative z-30">
+            <div className={cn(
+                "h-14 border-b border-black/[0.02] dark:border-white/[0.02] flex items-center px-4 md:pl-8 bg-transparent shrink-0 relative z-30",
+                !isMac && "md:pr-36"
+            )}>
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
                 <div className="flex bg-card-bg p-1 rounded-xl border border-border-color relative z-10 w-full md:w-auto overflow-x-auto no-scrollbar">
                     {categories.map((cat) => (
@@ -695,7 +705,7 @@ function QuitButton() {
             onClick={handleQuit}
             disabled={isQuitting}
             className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border border-transparent",
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border border-transparent whitespace-nowrap",
                 "text-tertiary hover:text-red-500 hover:bg-red-500/10 hover:border-red-500/20",
                 isQuitting && "opacity-50 cursor-not-allowed"
             )}

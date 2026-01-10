@@ -240,7 +240,7 @@ interface HeaderProps {
 export function Header({ isConnected, onToggle, isLoading }: HeaderProps) {
     const { t } = useTranslation()
     return (
-        <header className="flex items-center justify-between px-8 py-5 z-30">
+        <header className="flex items-center justify-between pl-8 pr-32 py-5 z-30">
             <div data-tauri-drag-region className="flex-1 h-full cursor-default"></div>
             <div className="flex items-center gap-4">
 

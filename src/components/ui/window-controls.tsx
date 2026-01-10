@@ -93,25 +93,25 @@ export function WindowControls({ className }: { className?: string }) {
             <div className={cn("fixed top-4 right-4 z-50 flex gap-3", className)} data-tauri-drag-region>
                 <button
                     onClick={handleMinimize}
-                    className="size-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                    className="size-6 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 flex items-center justify-center transition-colors text-foreground"
                 >
-                    <Minus size={14} className="text-white" />
+                    <Minus size={14} />
                 </button>
                 <button
                     onClick={handleMaximize}
-                    className="size-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                    className="size-6 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 flex items-center justify-center transition-colors text-foreground"
                 >
                     {isMaximized ? (
-                        <Copy size={12} className="text-white rotate-180" />
+                        <Copy size={12} className="rotate-180" />
                     ) : (
-                        <Square size={12} className="text-white" />
+                        <Square size={12} />
                     )}
                 </button>
                 <button
                     onClick={handleClose}
-                    className="size-6 rounded-full bg-white/10 hover:bg-[#E95420] flex items-center justify-center transition-colors group"
+                    className="size-6 rounded-full bg-black/5 dark:bg-white/10 hover:bg-[#E95420] hover:text-white flex items-center justify-center transition-colors group text-foreground"
                 >
-                    <X size={14} className="text-white" />
+                    <X size={14} />
                 </button>
             </div>
         )

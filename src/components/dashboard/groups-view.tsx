@@ -255,7 +255,7 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
 
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
-            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-5 md:p-8 md:pb-6 shrink-0 relative z-20">
+            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-5 md:pl-8 md:pr-36 md:pt-8 md:pb-6 shrink-0 relative z-20">
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
                 <div className="max-w-5xl mx-auto w-full relative z-10 pointer-events-none">
                     <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 md:mb-8 gap-4 md:gap-12">
