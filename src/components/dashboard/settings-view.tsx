@@ -19,7 +19,9 @@ import {
     Moon,
     Laptop,
     Plus,
-    Minus
+    Minus,
+    LogOut,
+    Loader2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
@@ -127,6 +129,10 @@ export function SettingsView({ initialCategory = "general", clashApiPort, tunEna
                             <span className="sm:hidden">{cat.label.slice(0, 2)}</span>
                         </button>
                     ))}
+                </div>
+
+                <div className="ml-auto z-10">
+                    <QuitButton />
                 </div>
             </div>
 
@@ -662,5 +668,41 @@ function Rocket(props: any) {
             height={props.size || 64}
             className="rounded-2xl shadow-lg"
         />
+    )
+}
+
+function QuitButton() {
+    const { t } = useTranslation()
+    const [isQuitting, setIsQuitting] = useState(false)
+
+    const handleQuit = async () => {
+        if (isQuitting) return
+        setIsQuitting(true)
+        const toastId = toast.loading(t('sidebar.quitting', { defaultValue: 'Quitting...' }))
+
+        try {
+            await invoke('quit_app')
+        } catch (e) {
+            console.error('Failed to quit app:', e)
+            setIsQuitting(false)
+            toast.dismiss(toastId)
+            toast.error(t('sidebar.quit_failed', { defaultValue: 'Failed to quit' }))
+        }
+    }
+
+    return (
+        <button
+            onClick={handleQuit}
+            disabled={isQuitting}
+            className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border border-transparent",
+                "text-tertiary hover:text-red-500 hover:bg-red-500/10 hover:border-red-500/20",
+                isQuitting && "opacity-50 cursor-not-allowed"
+            )}
+            title={t('sidebar.quit')}
+        >
+            {isQuitting ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
+            <span className="hidden sm:inline">{t('sidebar.quit')}</span>
+        </button>
     )
 }

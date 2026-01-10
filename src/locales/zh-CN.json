@@ -35,7 +35,10 @@
         "no_active_plan": "无有效订阅",
         "expired": "已过期",
         "unlimited": "不限流量",
-        "groups": "节点组"
+        "groups": "节点组",
+        "quit": "退出程序",
+        "quitting": "正在退出...",
+        "quit_failed": "退出失败"
     },
     "dashboard": {
         "node_info": "节点信息",
