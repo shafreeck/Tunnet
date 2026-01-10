@@ -477,6 +477,10 @@ pub fn run() {
                 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 
                 // Load dedicated monochromatic tray icon
+                // Load dedicated monochromatic tray icon for macOS/Linux, and colored for Windows
+                #[cfg(target_os = "windows")]
+                let tray_icon_bytes = include_bytes!("../icons/icon.ico");
+                #[cfg(not(target_os = "windows"))]
                 let tray_icon_bytes = include_bytes!("../resources/tray-icon.png");
                 let tray_icon = tauri::image::Image::from_bytes(tray_icon_bytes)
                     .expect("Failed to load tray icon");
