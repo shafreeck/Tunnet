@@ -713,7 +713,7 @@ function QuitButton() {
             title={t('sidebar.quit')}
         >
             {isQuitting ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
-            <span className="hidden sm:inline">{t('sidebar.quit')}</span>
+            <span className="hidden sm:inline leading-none pb-[1px]">{t('sidebar.quit')}</span>
         </button>
     )
 }
