@@ -504,7 +504,13 @@ pub fn run() {
                     .on_menu_event(|app, event| {
                         if event.id() == "quit" {
                             log::info!("Tray Menu Item 'Quit' clicked. Attempting graceful exit via frontend...");
+                            use tauri::Manager;
                             use tauri::Emitter;
+                            // Ensure window is visible to show animation
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
                             let _ = app.emit("ui:initiate-exit", ());
 
                             let app_handle = app.clone();
