@@ -969,8 +969,10 @@ impl<R: Runtime> ProxyService<R> {
         // Synchronize DNS strategy with app settings
         if let Some(dns) = &mut cfg.dns {
             let strategy = match settings.dns_strategy.as_str() {
-                "ipv4" | "only4" => "ipv4_only".to_string(),
-                "ipv6" | "only6" => "ipv6_only".to_string(),
+                "ipv4" => "prefer_ipv4".to_string(),
+                "ipv6" => "prefer_ipv6".to_string(),
+                "only4" => "ipv4_only".to_string(),
+                "only6" => "ipv6_only".to_string(),
                 s => s.to_string(),
             };
             dns.strategy = Some(strategy);
@@ -980,7 +982,7 @@ impl<R: Runtime> ProxyService<R> {
             // CRITICAL FIX: To prevent IPv6 leak, we must enable IPv6 address for TUN
             // even if dns_strategy is "prefer_ipv4". Only disable if explicitly "only4".
             let ipv6_enabled = settings.dns_strategy != "only4";
-            cfg = cfg.with_tun_inbound(settings.tun_mtu, settings.tun_stack.clone(), ipv6_enabled);
+            cfg = cfg.with_tun_inbound(settings.tun_mtu, settings.tun_stack.clone(), ipv6_enabled, settings.strict_route);
         }
 
         let listen = if settings.allow_lan {
@@ -2562,8 +2564,7 @@ impl<R: Runtime> ProxyService<R> {
 
         if need_restart {
             info!("Core configuration changed, restarting proxy...");
-            let tun = *self.tun_mode.lock().unwrap();
-            self.restart_proxy_by_config(tun).await?;
+            self.restart_proxy_by_config(settings.tun_mode).await?;
         } else {
             // If only system_proxy changed (or nothing important changed), handle system proxy toggle
             if settings.system_proxy != old_settings.system_proxy {

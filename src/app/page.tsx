@@ -479,6 +479,32 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
+    // Listen for update available event
+    const unlistenUpdate = listen<string>("update-available", (event) => {
+      const version = event.payload
+      toast.info(t('settings.advanced.core.new'), {
+        description: `v${version} ${t('settings.advanced.core.update')}`,
+        action: {
+          label: t('settings.advanced.core.update'),
+          onClick: () => {
+            import("@tauri-apps/plugin-updater").then(async ({ check }) => {
+              const update = await check()
+              if (update) {
+                await update.downloadAndInstall()
+                await invoke("restart_app")
+              }
+            })
+          }
+        }
+      })
+    })
+
+    return () => {
+      unlistenUpdate.then(f => f())
+    }
+  }, [])
+
+  useEffect(() => {
     // Fetch groups when mounting or needed
     invoke<Group[]>("get_groups").then(setGroups).catch(console.error)
   }, [])

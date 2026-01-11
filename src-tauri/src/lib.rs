@@ -516,7 +516,8 @@ pub fn run() {
                 let menu =
                     Menu::with_items(app.handle(), &[&quit_i]).expect("Failed to create tray menu");
 
-                let tray = TrayIconBuilder::new()
+                use tauri::Listener; // Import Listener trait
+                let tray = TrayIconBuilder::with_id("tray")
                     .icon(tray_icon)
                     .menu(&menu)
                     .show_menu_on_left_click(false)
@@ -603,6 +604,23 @@ pub fn run() {
                     })
                     .build(app)?;
 
+                // Listen for language changes to update tray menu
+                let handle = app.handle().clone();
+                app.listen("language-changed", move |event| {
+                    if let Ok(lang) = serde_json::from_str::<String>(event.payload()) {
+                        let quit_text = if lang == "zh-CN" { "退出" } else { "Quit" };
+                        if let Ok(quit_i) =
+                            MenuItem::with_id(&handle, "quit", quit_text, true, None::<&str>)
+                        {
+                            if let Ok(menu) = Menu::with_items(&handle, &[&quit_i]) {
+                                if let Some(tray) = handle.tray_by_id("tray") {
+                                    let _ = tray.set_menu(Some(menu));
+                                }
+                            }
+                        }
+                    }
+                });
+
                 #[cfg(target_os = "macos")]
                 let _ = tray.set_icon_as_template(true);
             }
@@ -683,7 +701,8 @@ pub fn run() {
             edit_profile,
             check_node_pings,
             get_group_status,
-            refresh_geodata
+            refresh_geodata,
+            restart_app
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -774,6 +793,11 @@ async fn get_group_status(
 #[tauri::command]
 async fn refresh_geodata(service: State<'_, ProxyService<tauri::Wry>>) -> Result<(), String> {
     service.refresh_geodata().await
+}
+
+#[tauri::command]
+fn restart_app(app: tauri::AppHandle) {
+    app.restart();
 }
 
 pub mod parsing_test_mod;

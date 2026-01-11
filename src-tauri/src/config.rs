@@ -461,7 +461,13 @@ impl SingBoxConfig {
         self
     }
 
-    pub fn with_tun_inbound(mut self, mtu: u16, stack: String, ipv6_enabled: bool) -> Self {
+    pub fn with_tun_inbound(
+        mut self,
+        mtu: u16,
+        stack: String,
+        ipv6_enabled: bool,
+        strict_route: bool,
+    ) -> Self {
         let addresses = if ipv6_enabled {
             vec!["172.19.0.1/30".to_string(), "fd00::1/126".to_string()]
         } else {
@@ -477,7 +483,7 @@ impl SingBoxConfig {
             tcp_fast_open: None,
             reuse_addr: None,
             auto_route: Some(true),
-            strict_route: Some(true),
+            strict_route: Some(strict_route),
             endpoint_independent_nat: None,
             address: Some(addresses),
             route_address: None,
