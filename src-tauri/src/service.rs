@@ -976,6 +976,24 @@ impl<R: Runtime> ProxyService<R> {
                 s => s.to_string(),
             };
             dns.strategy = Some(strategy);
+
+            // Enable Split DNS for CN domains in Rule mode to improve domestic access speed
+            if _routing_mode != "global" && _routing_mode != "direct" {
+                dns.rules.insert(
+                    0,
+                    crate::config::DnsRule {
+                        rule_set: Some(vec!["geosite-cn".to_string()]),
+                        server: Some("local".to_string()),
+                        action: Some("route".to_string()),
+                        inbound: None,
+                        outbound: None,
+                        domain: None,
+                        domain_suffix: None,
+                        domain_keyword: None,
+                        ip_cidr: None,
+                    },
+                );
+            }
         }
 
         if tun_mode {
