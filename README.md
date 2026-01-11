@@ -12,6 +12,11 @@
   <a href="README.zh-CN.md">简体中文</a>
 </p>
 
+<p align="center">
+  <img src="assets/screenshots/demo.gif" alt="Tunnet Demo" width="100%" />
+</p>
+
+
 ---
 
 Tunnet is a powerful yet elegant proxy client designed for the modern web. Built with the speed of Rust (Tauri) and the versatility of sing-box, it provides a seamless experience for managing your network traffic across macOS, Windows, and Linux.

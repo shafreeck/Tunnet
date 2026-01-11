@@ -12,6 +12,11 @@
   <a href="README.md">English</a>
 </p>
 
+<p align="center">
+  <img src="assets/screenshots/demo.gif" alt="Tunnet Demo" width="100%" />
+</p>
+
+
 ---
 
 Tunnet 是一款为现代互联网设计的强大且幽雅的代理客户端。基于 Rust (Tauri) 的高性能与 sing-box 的多功能性，它为 macOS、Windows 和 Linux 用户提供了卓越的网络流量管理体验。
