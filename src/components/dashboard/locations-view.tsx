@@ -78,7 +78,10 @@ export function LocationsView({
 
     const filteredServersForList = useMemo(() => {
         let list = servers
-        if (selectedCountryCode) list = list.filter(s => s.countryCode === selectedCountryCode)
+        if (selectedCountryCode) {
+            const code = selectedCountryCode.toLowerCase()
+            list = list.filter(s => (s.countryCode || "").toLowerCase() === code)
+        }
         if (searchQuery) {
             list = list.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 s.country?.toLowerCase().includes(searchQuery.toLowerCase()))

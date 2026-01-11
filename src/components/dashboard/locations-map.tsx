@@ -136,7 +136,8 @@ export function LocationsMap({
     // Filter servers for markers if a country is selected
     const filteredServers = useMemo(() => {
         if (!selectedCountryCode) return servers
-        return servers.filter(s => s.countryCode === selectedCountryCode)
+        const code = selectedCountryCode.toLowerCase()
+        return servers.filter(s => (s.countryCode || "").toLowerCase() === code)
     }, [servers, selectedCountryCode])
 
     return (
