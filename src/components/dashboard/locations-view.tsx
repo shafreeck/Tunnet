@@ -48,7 +48,7 @@ export function LocationsView({
     const [viewMode, setViewMode] = useState<"grid" | "map">("map")
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedRegion, setSelectedRegion] = useState("All Regions")
-    const [selectedCountry, setSelectedCountry] = useState<string | null>(null)
+    const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null)
     const [showListValues, setShowListValues] = useState(false)
     const [isRefreshing, setIsRefreshing] = useState(false)
     const [sortBy, setSortBy] = useState<"name" | "ping">("ping")
@@ -78,13 +78,13 @@ export function LocationsView({
 
     const filteredServersForList = useMemo(() => {
         let list = servers
-        if (selectedCountry) list = list.filter(s => s.country === selectedCountry)
+        if (selectedCountryCode) list = list.filter(s => s.countryCode === selectedCountryCode)
         if (searchQuery) {
             list = list.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 s.country?.toLowerCase().includes(searchQuery.toLowerCase()))
         }
         return list
-    }, [servers, selectedCountry, searchQuery])
+    }, [servers, selectedCountryCode, searchQuery])
 
     const handleAutoSelect = async () => {
         // Collect current filtered nodes
@@ -96,7 +96,9 @@ export function LocationsView({
         }
 
         const ids = currentList.map(n => n.id)
-        const name = `${t('auto_select_prefix', { defaultValue: 'Auto' })} - ${selectedCountry || t('locations.all_regions')}`
+        const countryName = selectedCountryCode ? getCountryName(selectedCountryCode, i18n.language) : t('locations.all_regions')
+
+        const name = `${t('auto_select_prefix', { defaultValue: 'Auto' })} - ${countryName}`
 
         // Handle Toggle (Deactivate)
         if (isAutoActive) {
@@ -112,13 +114,13 @@ export function LocationsView({
             }
         }
 
-        const systemId = selectedCountry
-            ? `system:region:${selectedCountry}`
+        const systemId = selectedCountryCode
+            ? `system:region:${selectedCountryCode.toUpperCase()}`
             : "system:global"
 
         onSelect(systemId)
         onToggle(systemId)
-        toast.success(t('auto_select_group_created', { name: selectedCountry || t('locations.all_regions') }))
+        toast.success(t('auto_select_group_created', { name: countryName }))
     }
 
     const totalCountries = useMemo(() => {
@@ -127,11 +129,11 @@ export function LocationsView({
     }, [servers])
 
     const isAutoActive = React.useMemo(() => {
-        if (selectedCountry) {
-            return activeServerId === `system:region:${selectedCountry}`
+        if (selectedCountryCode) {
+            return activeServerId === `system:region:${selectedCountryCode.toUpperCase()}`
         }
         return activeServerId === "system:global"
-    }, [activeServerId, selectedCountry])
+    }, [activeServerId, selectedCountryCode])
 
     const activeAutoNode = useMemo(() => {
         if (!activeAutoNodeId) return null
@@ -237,8 +239,8 @@ export function LocationsView({
                                 servers={servers}
                                 selectedRegion={selectedRegion}
                                 searchQuery={searchQuery}
-                                onSelectCountry={(country) => {
-                                    setSelectedCountry(country)
+                                onSelectCountry={(code) => {
+                                    setSelectedCountryCode(code)
                                     setShowListValues(true)
                                 }}
                             />
@@ -248,15 +250,15 @@ export function LocationsView({
                     <LocationsMap
                         servers={servers}
                         activeServerId={activeServerId}
-                        selectedCountry={selectedCountry}
+                        selectedCountryCode={selectedCountryCode}
                         onSelectCountry={(c) => {
-                            setSelectedCountry(c)
+                            setSelectedCountryCode(c)
                             if (c) setShowListValues(true)
                         }}
                         onSelectServer={(id) => {
                             const node = servers.find(s => s.id === id)
                             if (node) {
-                                setSelectedCountry(node.country)
+                                setSelectedCountryCode(node.countryCode)
                                 setShowListValues(true)
                                 onSelect(id)
                             }
@@ -272,7 +274,7 @@ export function LocationsView({
                     "absolute top-0 bottom-0 right-0 md:top-6 md:bottom-6 md:right-6 w-full sm:w-[400px] glass-card border-l md:border border-border-color md:rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden transition-all duration-300 transform z-40",
                     "bg-white/80 dark:bg-black/80 backdrop-blur-md", // Default: More transparent
                     "hover:bg-white/95 hover:dark:bg-black/95 hover:backdrop-blur-xl hover:shadow-2xl", // Hover: Solid & Focused
-                    (showListValues || (viewMode === 'map' && selectedCountry)) ? "translate-x-0 opacity-100" : "translate-x-full md:translate-x-[120%] opacity-0"
+                    (showListValues || (viewMode === 'map' && selectedCountryCode)) ? "translate-x-0 opacity-100" : "translate-x-full md:translate-x-[120%] opacity-0"
                 )}>
                     <div className="px-6 py-4 border-b border-border-color bg-card-bg flex items-center justify-between shrink-0">
                         <div className="flex items-center gap-3 overflow-hidden">
@@ -281,7 +283,7 @@ export function LocationsView({
                             </div>
                             <div className="flex flex-col overflow-hidden">
                                 <span className="text-sm font-black text-text-primary uppercase tracking-tight flex items-center gap-2 truncate">
-                                    {selectedCountry ? getCountryName(selectedCountry, i18n.language) : t('locations.drawer.region_nodes')}
+                                    {selectedCountryCode ? getCountryName(selectedCountryCode, i18n.language) : t('locations.drawer.region_nodes')}
                                     {activeAutoNode && (
                                         <span className="text-[9px] font-normal normal-case bg-accent-green/10 text-accent-green px-1.5 py-0.5 rounded opacity-80 whitespace-nowrap">
                                             {activeAutoNode.name}
@@ -372,7 +374,7 @@ export function LocationsView({
 
                             {/* Close Button - Distinct */}
                             <button
-                                onClick={() => { setShowListValues(false); setSelectedCountry(null); }}
+                                onClick={() => { setShowListValues(false); setSelectedCountryCode(null); }}
                                 className="size-8 flex items-center justify-center hover:bg-red-500/10 rounded-xl text-text-secondary hover:text-red-500 transition-all active:scale-90"
                             >
                                 <X size={18} />
@@ -408,7 +410,7 @@ export function LocationsView({
                             setShowLogs={() => { }}
                             logs={{ local: [], helper: [] }}
                             onClearLogs={() => { }}
-                            isFiltered={!!searchQuery || !!selectedCountry}
+                            isFiltered={!!searchQuery || !!selectedCountryCode}
                             connectionState={connectionState}
                             hideHeader={true}
                             testingNodeIds={testingNodeIds}

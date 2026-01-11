@@ -122,10 +122,11 @@ export function GroupCard({ group, isActive, onEdit, onDelete, onActivate, onSel
         if (group.name === "AUTO") return t('auto_select_prefix') || "Auto"
         if (group.name === "GLOBAL") return t('auto_select_global') || "Global"
 
-        // Check if name is a 2-letter country code (uppercase)
-        if (/^[A-Z]{2}$/.test(group.name)) {
+        // Handle System Region Groups (name is Country Code)
+        if (group.id.startsWith("system:region:") || /^[A-Z]{2}$/.test(group.name)) {
             return getCountryName(group.name, i18n.language)
         }
+
         return group.name
     }, [group.name, group.id, t, i18n.language])
 

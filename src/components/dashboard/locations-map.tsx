@@ -90,8 +90,8 @@ Object.entries(NAME_MAPPING).forEach(([k, v]) => {
 interface LocationsMapProps {
     servers: any[]
     activeServerId: string | null
-    selectedCountry: string | null
-    onSelectCountry: (country: string | null) => void
+    selectedCountryCode: string | null
+    onSelectCountry: (countryCode: string | null) => void
     onSelectServer: (id: string) => void
     onToggleServer: (id: string) => void
 }
@@ -99,7 +99,7 @@ interface LocationsMapProps {
 export function LocationsMap({
     servers,
     activeServerId,
-    selectedCountry,
+    selectedCountryCode,
     onSelectCountry,
     onSelectServer,
     onToggleServer
@@ -111,9 +111,14 @@ export function LocationsMap({
     const activeCountries = useMemo(() => {
         const groups: Record<string, number> = {}
         servers.forEach(s => {
-            if (s.country) {
-                const mapName = NAME_MAPPING[s.country] || s.country
-                groups[mapName] = (groups[mapName] || 0) + 1
+            if (s.countryCode && s.countryCode !== 'un') {
+                const codeUpper = s.countryCode.toUpperCase()
+                // Use code to resolve map name (e.g. JP -> Japan)
+                // Fallback to s.country only if mapping not found (might fail if localized)
+                const mapName = NAME_MAPPING[codeUpper] || s.country
+                if (mapName) {
+                    groups[mapName] = (groups[mapName] || 0) + 1
+                }
             }
         })
         return groups
@@ -128,14 +133,11 @@ export function LocationsMap({
     const nodeDisconnected = isDark ? "#52525b" : "#a1a1aa"
     const nodeStroke = isDark ? "#27272a" : "#ffffff"
 
-    // Filter servers for markers if a country is selected (optional, or show all markers always?)
-    // Current logic: Show markers matching selection if selected, else show all?
-    // Actually existing logic showed filtered servers in the list, but markers?
-    // Let's look at previous code: `filteredServers` was used for the LIST, but markers iterated `filteredServers` too.
+    // Filter servers for markers if a country is selected
     const filteredServers = useMemo(() => {
-        if (!selectedCountry) return servers
-        return servers.filter(s => s.country === selectedCountry)
-    }, [servers, selectedCountry])
+        if (!selectedCountryCode) return servers
+        return servers.filter(s => s.countryCode === selectedCountryCode)
+    }, [servers, selectedCountryCode])
 
     return (
         <div className="flex-1 flex flex-col relative w-full h-full overflow-hidden bg-white/0 rounded-xl">
@@ -157,7 +159,10 @@ export function LocationsMap({
                             geographies.map((geo) => {
                                 const countryName = geo.properties.name
                                 const hasServers = activeCountries[countryName]
-                                const isSelected = selectedCountry === countryName || (selectedCountry && NAME_MAPPING[selectedCountry] === countryName)
+
+                                // Resolve selected code to map name
+                                const mapNameFromCode = selectedCountryCode ? NAME_MAPPING[selectedCountryCode.toUpperCase()] : null
+                                const isSelected = mapNameFromCode === countryName
 
                                 return (
                                     <Geography
@@ -165,11 +170,11 @@ export function LocationsMap({
                                         geography={geo}
                                         onClick={() => {
                                             if (hasServers) {
-                                                // Convert Map Name back to Internal Name if needed
-                                                const internalName = REVERSE_NAME_MAPPING[countryName] || countryName
+                                                // Convert Map Name back to Code
+                                                const internalCode = REVERSE_NAME_MAPPING[countryName] || "un"
                                                 // Check both directions for toggle logic
-                                                const currentlySelected = selectedCountry === internalName
-                                                onSelectCountry(currentlySelected ? null : internalName)
+                                                const currentlySelected = selectedCountryCode === internalCode
+                                                onSelectCountry(currentlySelected ? null : internalCode)
                                             }
                                         }}
                                         onMouseEnter={(e) => {
@@ -194,7 +199,7 @@ export function LocationsMap({
                                                 cursor: hasServers ? "pointer" : "default"
                                             },
                                             hover: {
-                                                fill: hasServers ? "#22c55e" : mapStroke, // Slightly lighter on hover for empty? Or mapped?
+                                                fill: hasServers ? "#22c55e" : mapStroke,
                                                 stroke: mapStroke,
                                                 strokeWidth: 0.5,
                                                 outline: "none",

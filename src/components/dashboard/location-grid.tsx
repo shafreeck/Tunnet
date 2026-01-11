@@ -15,42 +15,41 @@ interface LocationGridProps {
 export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCountry }: LocationGridProps) {
     const { t, i18n } = useTranslation()
 
-    // 1. Group servers by Country first (aggregated view)
+    // 1. Group servers by Country Code (aggregated view)
     const countries = useMemo(() => {
         const map = new Map<string, {
-            country: string
+            countryCode: string
+            countryName: string
             flagUrl: string
             count: number
             avgPing: number
             region: string
             provider: string
-            displayName: string
         }>()
 
         servers.forEach(s => {
-            // Normalize country name
-            const country = s.country || t('locations.unknown', { defaultValue: 'Unknown' })
-            const region = getRegionForCountry(s.countryCode || country)
+            // Normalize country name and code
+            const countryCode = s.countryCode || "un"
+            const countryName = (countryCode && countryCode !== "un")
+                ? getCountryName(countryCode, i18n.language)
+                : (s.country || t('locations.unknown', { defaultValue: 'Unknown' }))
+            const region = getRegionForCountry(countryCode)
 
-            if (!map.has(country)) {
-                map.set(country, {
-                    country,
+            if (!map.has(countryCode)) {
+                map.set(countryCode, {
+                    countryCode,
+                    countryName, // Localized name
                     flagUrl: s.flagUrl,
                     count: 0,
                     avgPing: 0,
                     region,
                     provider: s.provider || t('locations.unknown', { defaultValue: 'Unknown' }),
-                    displayName: getCountryName(country, i18n.language)
                 })
             }
 
-            const entry = map.get(country)!
+            const entry = map.get(countryCode)!
             entry.count += 1
-            // Simple average for ping (mock calculation if needed, or real)
-            // If ping is 0 or undefined, maybe ignored? 
             if (s.ping > 0) {
-                // Weighted average or just sum? Let's just keep last known or min?
-                // Let's do min ping (best latency) for the card display
                 if (entry.avgPing === 0 || s.ping < entry.avgPing) {
                     entry.avgPing = s.ping
                 }
@@ -63,8 +62,7 @@ export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCou
     // 2. Filter by Search & Region
     const filteredCountries = useMemo(() => {
         return countries.filter(c => {
-            const matchesSearch = c.country.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                c.displayName.toLowerCase().includes(searchQuery.toLowerCase())
+            const matchesSearch = c.countryName.toLowerCase().includes(searchQuery.toLowerCase())
             const matchesRegion = selectedRegion === "All Regions"
                 ? true
                 : c.region === selectedRegion
@@ -111,13 +109,13 @@ export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCou
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
                         {group.items.map((country) => (
                             <ServerCard
-                                key={country.country}
-                                countryName={country.displayName}
+                                key={country.countryCode}
+                                countryName={country.countryName}
                                 flagUrl={country.flagUrl}
                                 locationCount={country.count}
-                                providerName={country.provider} // Display one provider or "Multiple"
+                                providerName={country.provider}
                                 ping={country.avgPing}
-                                onClick={() => onSelectCountry(country.country)}
+                                onClick={() => onSelectCountry(country.countryCode)}
                             />
                         ))}
                     </div>

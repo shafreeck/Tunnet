@@ -2289,49 +2289,47 @@ impl<R: Runtime> ProxyService<R> {
             std::collections::HashMap::new();
         for p in &profiles {
             for n in &p.nodes {
+                let keywords = [
+                    ("hk", "hk"), ("hong kong", "hk"), ("hongkong", "hk"), ("香港", "hk"),
+                    ("tw", "tw"), ("taiwan", "tw"), ("台湾", "tw"),
+                    ("jp", "jp"), ("japan", "jp"), ("日本", "jp"),
+                    ("sg", "sg"), ("singapore", "sg"), ("新加坡", "sg"),
+                    ("us", "us"), ("usa", "us"), ("united states", "us"), ("america", "us"), ("美国", "us"),
+                    ("kr", "kr"), ("korea", "kr"), ("韩国", "kr"),
+                    ("uk", "gb"), ("gb", "gb"), ("united kingdom", "gb"), ("britain", "gb"), ("英国", "gb"),
+                    ("de", "de"), ("germany", "de"), ("德国", "de"),
+                    ("fr", "fr"), ("france", "fr"), ("法国", "fr"),
+                    ("ca", "ca"), ("canada", "ca"), ("加拿大", "ca"),
+                    ("ru", "ru"), ("russia", "ru"), ("俄罗斯", "ru"),
+                    ("in", "in"), ("india", "in"), ("印度", "in"),
+                    ("tr", "tr"), ("turkey", "tr"), ("土耳其", "tr"),
+                    ("au", "au"), ("australia", "au"), ("澳大利亚", "au"), ("澳洲", "au"),
+                    ("br", "br"), ("brazil", "br"), ("巴西", "br"),
+                    ("cn", "cn"), ("china", "cn"), ("中国", "cn"), ("回国", "cn"),
+                ];
+
                 let mut country_code = String::new();
 
+                // 1. Prefer explicit location from metadata
                 if let Some(loc) = &n.location {
                     if !loc.country.is_empty() {
-                        country_code = loc.country.clone();
+                        let raw = loc.country.trim().to_lowercase();
+                        // Try to normalize known names
+                        if let Some((_, code)) = keywords.iter().find(|(k, _)| *k == raw) {
+                            country_code = code.to_string();
+                        } else {
+                            country_code = loc.country.clone();
+                        }
                     }
                 }
 
-                // Fallback: Infer from name if no explicit location code
+                // 2. Fallback: Infer from name if no explicit location code
                 if country_code.is_empty() {
                     let name_lower = n.name.to_lowercase();
                     
-                    // Helper to check for code (e.g. " us ", "us ", " us")
-                    // Simple contains check is risky ("bonus" contains "us"), so we need boundary checks or specific keywords
-                    // For simplicity and robustness matching flags.ts:
-                    let keywords = [
-                        ("hk", "hk"), ("hong kong", "hk"), ("hongkong", "hk"), ("香港", "hk"),
-                        ("tw", "tw"), ("taiwan", "tw"), ("台湾", "tw"),
-                        ("jp", "jp"), ("japan", "jp"), ("日本", "jp"),
-                        ("sg", "sg"), ("singapore", "sg"), ("新加坡", "sg"),
-                        ("us", "us"), ("usa", "us"), ("united states", "us"), ("america", "us"), ("美国", "us"),
-                        ("kr", "kr"), ("korea", "kr"), ("韩国", "kr"),
-                        ("uk", "gb"), ("gb", "gb"), ("united kingdom", "gb"), ("britain", "gb"), ("英国", "gb"),
-                        ("de", "de"), ("germany", "de"), ("德国", "de"),
-                        ("fr", "fr"), ("france", "fr"), ("法国", "fr"),
-                        ("ca", "ca"), ("canada", "ca"), ("加拿大", "ca"),
-                        ("ru", "ru"), ("russia", "ru"), ("俄罗斯", "ru"),
-                        ("in", "in"), ("india", "in"), ("印度", "in"),
-                        ("tr", "tr"), ("turkey", "tr"), ("土耳其", "tr"),
-                        ("au", "au"), ("australia", "au"), ("澳大利亚", "au"), ("澳洲", "au"),
-                        ("br", "br"), ("brazil", "br"), ("巴西", "br"),
-                        ("cn", "cn"), ("china", "cn"), ("中国", "cn"), ("回国", "cn"),
-                    ];
-                    
-                    // 1. Check for whole word matches of short codes
                     for (pattern, code) in keywords.iter() {
                         // For short codes (length 2), ensure boundaries
                         if pattern.len() == 2 {
-                             // Check if name_lower contains pattern with boundaries
-                             // Valid: "Node US 1", "HK-Server", "[JP] Node"
-                             // Invalid: "Bus", "Link"
-                             
-                             // A simple heuristic: check if the pattern exists and the char before/after is not a-z
                              if let Some(idx) = name_lower.find(pattern) {
                                  let before = if idx == 0 { false } else {
                                      name_lower.chars().nth(idx - 1).map(|c| c.is_alphabetic()).unwrap_or(false)
@@ -2344,7 +2342,6 @@ impl<R: Runtime> ProxyService<R> {
                                  }
                              }
                         } else {
-                            // For longer names (names/chinese), simple filtering is usually safe
                            if name_lower.contains(pattern) {
                                country_code = code.to_string();
                                break;
