@@ -481,6 +481,28 @@ impl<R: Runtime> ProxyService<R> {
                     }
                 }
 
+                if tun_mode && settings.dns_hijack {
+                    #[cfg(target_os = "macos")]
+                    {
+                        info!("TUN mode active: Steering DNS to ensure interception...");
+                        if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
+                            .arg("-listallnetworkservices")
+                            .output()
+                        {
+                            let stdout = String::from_utf8_lossy(&output.stdout);
+                            for service in stdout.lines() {
+                                if service.contains('*') || service.is_empty() {
+                                    continue;
+                                }
+                                let s = service.trim();
+                                let _ = std::process::Command::new("/usr/sbin/networksetup")
+                                    .args(["-setdnsservers", s, "8.8.8.8", "223.5.5.5", "2001:4860:4860::8888"])
+                                    .output();
+                            }
+                        }
+                    }
+                }
+
                 if settings.system_proxy {
                     self.enable_system_proxy(settings.mixed_port);
                 }
@@ -935,7 +957,7 @@ impl<R: Runtime> ProxyService<R> {
         let tun_mode = mode == crate::config::ConfigMode::TunOnly
             || mode == crate::config::ConfigMode::Combined;
         let app_local_data = self.app.path().app_local_data_dir().unwrap();
-        let mut cfg = crate::config::SingBoxConfig::new(clash_api_port, mode);
+        let mut cfg = crate::config::SingBoxConfig::new(clash_api_port, mode, &settings.dns_servers);
 
         // Synchronize log level with app settings
         if let Some(log) = &mut cfg.log {
@@ -1226,14 +1248,16 @@ impl<R: Runtime> ProxyService<R> {
         // Apply Rules and Routing Mode
         let mut final_rules = Vec::new();
 
-        // 1. Preserve DNS Rule from initial config
-        if let Some(route) = &cfg.route {
-            if let Some(dns_rule) = route
-                .rules
-                .iter()
-                .find(|r| r.action == Some("hijack-dns".to_string()))
-            {
-                final_rules.push(dns_rule.clone());
+        // 1. Preserve DNS Rule from initial config (only if enabled)
+        if settings.dns_hijack {
+            if let Some(route) = &cfg.route {
+                if let Some(dns_rule) = route
+                    .rules
+                    .iter()
+                    .find(|r| r.action == Some("hijack-dns".to_string()))
+                {
+                    final_rules.push(dns_rule.clone());
+                }
             }
         }
 
@@ -1746,6 +1770,29 @@ impl<R: Runtime> ProxyService<R> {
         *self.local_log_fd.lock().unwrap() = None;
         if broadcast {
             let _ = self.app.emit("proxy-status-change", self.get_status());
+        }
+
+        let prev_tun = *self.tun_mode.lock().unwrap();
+        if prev_tun {
+            #[cfg(target_os = "macos")]
+            {
+                info!("TUN mode stopping: resetting DNS settings...");
+                if let Ok(output) = std::process::Command::new("/usr/sbin/networksetup")
+                    .arg("-listallnetworkservices")
+                    .output()
+                {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    for service in stdout.lines() {
+                        if service.contains('*') || service.is_empty() {
+                            continue;
+                        }
+                        let s = service.trim();
+                        let _ = std::process::Command::new("/usr/sbin/networksetup")
+                            .args(["-setdnsservers", s, "empty"])
+                            .output();
+                    }
+                }
+            }
         }
     }
 
@@ -2886,7 +2933,8 @@ impl<R: Runtime> ProxyService<R> {
     }
 
     fn node_to_outbound(&self, node: &crate::profile::Node) -> crate::config::Outbound {
-        let mut cfg = crate::config::SingBoxConfig::new(None, crate::config::ConfigMode::Combined);
+        let settings = self.get_app_settings().unwrap_or_default();
+        let mut cfg = crate::config::SingBoxConfig::new(None, crate::config::ConfigMode::Combined, &settings.dns_servers);
         let tag = node.id.clone();
 
         match node.protocol.as_str() {

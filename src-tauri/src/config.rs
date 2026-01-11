@@ -310,33 +310,57 @@ pub struct DnsRule {
 }
 
 impl SingBoxConfig {
-    pub fn new(clash_api_port: Option<u16>, mode: ConfigMode) -> Self {
-        // Basic DNS for Tun Mode v1.12+ Format
-        let dns = DnsConfig {
-            servers: vec![
-                DnsServer {
+    pub fn new(clash_api_port: Option<u16>, mode: ConfigMode, dns_servers: &str) -> Self {
+        // Parse user DNS servers or use defaults
+        let mut servers = Vec::new();
+        let user_servers: Vec<&str> = dns_servers
+            .lines()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        if user_servers.is_empty() {
+            // Default fallback
+            servers.push(DnsServer {
+                dns_type: "udp".to_string(),
+                tag: "google".to_string(),
+                address: None,
+                server: Some("8.8.8.8".to_string()),
+                server_port: Some(53),
+                address_resolver: None,
+                address_fallback_delay: None,
+                detour: Some("proxy".to_string()),
+            });
+        } else {
+            for (i, s) in user_servers.iter().enumerate() {
+                servers.push(DnsServer {
                     dns_type: "udp".to_string(),
-                    tag: "google".to_string(),
+                    tag: format!("dns-{}", i),
                     address: None,
-                    server: Some("8.8.8.8".to_string()),
+                    server: Some(s.to_string()),
                     server_port: Some(53),
                     address_resolver: None,
                     address_fallback_delay: None,
                     detour: Some("proxy".to_string()),
-                },
-                DnsServer {
-                    dns_type: "udp".to_string(),
-                    tag: "local".to_string(),
-                    address: None,
-                    server: Some("223.5.5.5".to_string()),
-                    server_port: Some(53),
+                });
+            }
+        }
 
-                    address_resolver: None,
-                    address_fallback_delay: None,
-                    detour: Some("direct".to_string()),
-                },
-            ],
+        // Add a local fallback DNS server always
+        servers.push(DnsServer {
+            dns_type: "udp".to_string(),
+            tag: "local".to_string(),
+            address: None,
+            server: Some("223.5.5.5".to_string()),
+            server_port: Some(53),
 
+            address_resolver: None,
+            address_fallback_delay: None,
+            detour: Some("direct".to_string()),
+        });
+
+        let dns = DnsConfig {
+            servers,
             rules: vec![DnsRule {
                 inbound: Some(vec![match mode {
                     ConfigMode::TunOnly => "tun-in".to_string(),
@@ -348,7 +372,11 @@ impl SingBoxConfig {
                 domain_keyword: None,
                 ip_cidr: None,
                 rule_set: None,
-                server: Some("google".to_string()),
+                server: Some(if user_servers.is_empty() {
+                    "google".to_string()
+                } else {
+                    "dns-0".to_string()
+                }),
                 action: Some("route".to_string()),
             }],
             strategy: None,
