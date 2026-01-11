@@ -3,26 +3,35 @@
 import { motion } from "framer-motion";
 import { Apple, Monitor, Terminal } from "lucide-react";
 
+const RELEASE_BASE_URL = "https://github.com/shafreeck/Tunnet/releases/download/v0.1.0";
+
 const platforms = [
     {
         name: "macOS",
         icon: Apple,
         version: "v0.1.0",
-        link: "https://github.com/shafreeck/Tunnet/releases",
-        description: "Intel & Apple Silicon",
+        links: [
+            { label: "Apple Silicon", url: `${RELEASE_BASE_URL}/Tunnet_0.1.0_aarch64.dmg` },
+        ],
+        description: "Apple Silicon",
     },
     {
         name: "Windows",
         icon: Monitor,
         version: "v0.1.0",
-        link: "https://github.com/shafreeck/Tunnet/releases",
+        links: [
+            { label: "立即下载", url: `${RELEASE_BASE_URL}/Tunnet_0.1.0_x64-setup.exe` },
+        ],
         description: "x64 & ARM64",
     },
     {
         name: "Linux",
         icon: Terminal,
         version: "v0.1.0",
-        link: "https://github.com/shafreeck/Tunnet/releases",
+        links: [
+            { label: "AppImage", url: `${RELEASE_BASE_URL}/Tunnet_0.1.0_amd64.AppImage` },
+            { label: "Deb", url: `${RELEASE_BASE_URL}/Tunnet_0.1.0_amd64.deb` },
+        ],
         description: "AppImage & Deb",
     },
 ];
@@ -40,8 +49,7 @@ export function Download() {
                         <motion.div
                             key={index}
                             whileHover={{ y: -10 }}
-                            className="glass p-10 rounded-[2.5rem] flex flex-col items-center group cursor-pointer"
-                            onClick={() => window.open(platform.link, "_blank")}
+                            className="glass p-10 rounded-[2.5rem] flex flex-col items-center group"
                         >
                             <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-6 group-hover:bg-blue-600 transition-colors">
                                 <platform.icon className="w-8 h-8 text-white" />
@@ -49,9 +57,19 @@ export function Download() {
                             <h3 className="text-2xl font-bold mb-2">{platform.name}</h3>
                             <p className="text-blue-400 font-mono text-sm mb-4">{platform.version}</p>
                             <p className="text-slate-400 text-sm mb-8">{platform.description}</p>
-                            <button className="w-full py-3 rounded-xl bg-white/10 group-hover:bg-white group-hover:text-black transition-all font-semibold">
-                                立即下载
-                            </button>
+                            <div className="w-full flex flex-col gap-3">
+                                {platform.links.map((link, i) => (
+                                    <a
+                                        key={i}
+                                        href={link.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="w-full py-3 rounded-xl bg-white/10 hover:bg-white hover:text-black transition-all font-semibold block"
+                                    >
+                                        {link.label}
+                                    </a>
+                                ))}
+                            </div>
                         </motion.div>
                     ))}
                 </div>
