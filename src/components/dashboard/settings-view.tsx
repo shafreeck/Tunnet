@@ -706,7 +706,7 @@ function QuitButton() {
             onClick={handleQuit}
             disabled={isQuitting}
             className={cn(
-                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 relative border whitespace-nowrap",
+                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-300 border whitespace-nowrap",
                 "bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500 hover:text-white hover:border-red-500",
                 isQuitting && "opacity-50 cursor-not-allowed"
             )}
