@@ -1093,8 +1093,15 @@ export default function Home() {
   const [currentView, setCurrentView] = useState<ViewType>("dashboard")
   const [profiles, setProfiles] = useState<any[]>([])
 
+  const [activeAutoNodeId, setActiveAutoNodeId] = useState<string | null>(null)
+  const activeAutoNode = useMemo(() => {
+    if (!activeAutoNodeId) return null
+    return servers.find(s => s.id === activeAutoNodeId || s.name === activeAutoNodeId)
+  }, [servers, activeAutoNodeId])
+
   // Derive active subscription stats
   const activeSubscription = useMemo(() => {
+    if (!profiles || profiles.length === 0) return null
     if (!activeServerId) return profiles[0]
 
     // Check if it matches a subscription group ID
@@ -1105,17 +1112,18 @@ export default function Home() {
     }
 
     // Check if it matches a node within a subscription
-    const foundByNode = profiles.find(p => p.nodes.some((n: any) => String(n.id) === String(activeServerId)))
+    const foundByNode = profiles.find(p => p.nodes?.some((n: any) => String(n.id) === String(activeServerId)))
     if (foundByNode) return foundByNode
 
-    return profiles[0]
-  }, [profiles, activeServerId])
+    // Check by active auto node (if activeServerId is a group)
+    if (activeAutoNodeId) {
+      const foundByAuto = profiles.find(p => p.nodes?.some((n: any) => String(n.id) === String(activeAutoNodeId)))
+      if (foundByAuto) return foundByAuto
+    }
 
-  const [activeAutoNodeId, setActiveAutoNodeId] = useState<string | null>(null)
-  const activeAutoNode = useMemo(() => {
-    if (!activeAutoNodeId) return null
-    return servers.find(s => s.id === activeAutoNodeId || s.name === activeAutoNodeId)
-  }, [servers, activeAutoNodeId])
+    return profiles[0]
+  }, [profiles, activeServerId, activeAutoNodeId])
+
 
   // Global polling for active node in any group
   useEffect(() => {
@@ -1602,11 +1610,7 @@ export default function Home() {
       <Sidebar
         currentView={currentView}
         onViewChange={setCurrentView}
-        subscription={
-          profiles.length > 0 && profiles[0].subscription
-            ? profiles[0].subscription
-            : null
-        }
+        subscription={activeSubscription || null}
         onSearchClick={() => setIsSearchOpen(true)}
       />
 
