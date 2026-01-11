@@ -3,58 +3,33 @@
 import { motion } from "framer-motion";
 import { Zap, Shield, Globe, Layout, Cpu, Smartphone } from "lucide-react";
 
-const features = [
-    {
-        title: "极致性能",
-        description: "基于 sing-box 核心，提供极低延迟与超高吞吐量的网络转发体验。",
-        icon: Zap,
-        color: "text-amber-400",
-    },
-    {
-        title: "安全隐私",
-        description: "TUN 模式全流量接管，多重加密协议支持，守护你的网络边界。",
-        icon: Shield,
-        color: "text-blue-400",
-    },
-    {
-        title: "直观节点视图",
-        description: "通过地理位置直观展示全球节点分布，让复杂的网络拓扑一目了然。",
-        icon: Globe,
-        color: "text-emerald-400",
-    },
-    {
-        title: "现代化 UI",
-        description: "采用 Next.js 与 Shadcn UI 构建，极致丝滑的交互体验与视觉美感。",
-        icon: Layout,
-        color: "text-purple-400",
-    },
-    {
-        title: "轻量架构",
-        description: "Rust 与 Go 的完美结合，在保持高性能的同时，占用极低的系统资源。",
-        icon: Cpu,
-        color: "text-rose-400",
-    },
-    {
-        title: "全平台兼容",
-        description: "完美适配 macOS、Windows 与 Linux，提供一致的跨端使用体验。",
-        icon: Smartphone,
-        color: "text-cyan-400",
-    },
+const featureConfig = [
+    { icon: Zap, color: "text-amber-400" },
+    { icon: Shield, color: "text-blue-400" },
+    { icon: Globe, color: "text-emerald-400" },
+    { icon: Layout, color: "text-purple-400" },
+    { icon: Cpu, color: "text-rose-400" },
+    { icon: Smartphone, color: "text-cyan-400" },
 ];
 
-export function Features() {
+export function Features({ dict }: { dict: any }) {
+    const items = dict.items.map((item: any, index: number) => ({
+        ...item,
+        ...featureConfig[index],
+    }));
+
     return (
         <section id="features" className="py-24 bg-slate-950/50 relative">
             <div className="container mx-auto px-4">
                 <div className="text-center mb-16">
-                    <h2 className="text-3xl md:text-5xl font-bold mb-4">卓越特性，触手可及</h2>
+                    <h2 className="text-3xl md:text-5xl font-bold mb-4">{dict.section_title}</h2>
                     <p className="text-slate-400 max-w-2xl mx-auto">
-                        Tunnet 融合了前沿的技术栈与人性化的设计，旨在为你提供不仅仅是代理的连接体验。
+                        {dict.section_desc}
                     </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {features.map((feature, index) => (
+                    {items.map((feature: any, index: number) => (
                         <motion.div
                             key={index}
                             initial={{ opacity: 0, y: 20 }}

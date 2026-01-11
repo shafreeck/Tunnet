@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 
 
 
-export function Hero() {
+export function Hero({ dict }: { dict: any }) {
     return (
         <section className="relative pt-32 pb-20 overflow-hidden min-h-screen flex flex-col justify-center">
             {/* Background Image with Overlay */}
@@ -27,25 +27,24 @@ export function Hero() {
                     transition={{ duration: 0.8 }}
                 >
                     <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6">
-                        为现代互联网而生的<br />
-                        <span className="text-gradient">幽雅代理工具</span>
+                        {dict.title[0]}<br />
+                        <span className="text-gradient">{dict.title[1]}</span>
                     </h1>
                     <p className="max-w-2xl mx-auto text-lg md:text-xl text-slate-400 mb-10">
-                        基于 Tauri 与 sing-box，在全平台享受极简、高效的网络连接与规则管理。
-                        不再是冰冷的配置，而是你直观、可靠的跨端连接伙伴。
+                        {dict.subtitle}
                     </p>
                     <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
                         <a
                             href="#download"
                             className="px-8 py-4 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-semibold transition-all shadow-lg shadow-blue-500/20 w-48"
                         >
-                            立刻开始
+                            {dict.start}
                         </a>
                         <a
                             href="https://github.com/shafreeck/Tunnet"
                             className="px-8 py-4 rounded-full glass hover:bg-white/10 text-white font-semibold transition-all w-48"
                         >
-                            查看代码
+                            {dict.code}
                         </a>
                     </div>
                 </motion.div>

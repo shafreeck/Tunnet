@@ -9,18 +9,23 @@
         "lint": "next lint"
     },
     "dependencies": {
+        "@formatjs/intl-localematcher": "^0.7.5",
         "@radix-ui/react-dialog": "^1.1.15",
         "@radix-ui/react-visually-hidden": "^1.2.4",
         "class-variance-authority": "^0.7.1",
+        "client-only": "^0.0.1",
         "clsx": "^2.1.1",
         "framer-motion": "^11.18.2",
         "lucide-react": "^0.471.2",
+        "negotiator": "^1.0.0",
         "next": "^16.1.1",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
+        "server-only": "^0.0.1",
         "tailwind-merge": "^2.6.0"
     },
     "devDependencies": {
+        "@types/negotiator": "^0.6.4",
         "@types/node": "^20.19.27",
         "@types/react": "^19.2.7",
         "@types/react-dom": "^19.2.3",

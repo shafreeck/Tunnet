@@ -1,0 +1,105 @@
+{
+    "meta": {
+        "title": "Tunnet - Elegant Proxy Tool For Modern Web",
+        "description": "Tunnet is a cross-platform proxy tool built on Tauri and sing-box. Minimalist design, extreme performance, guarding your network connection."
+    },
+    "navbar": {
+        "features": "Features",
+        "preview": "Preview",
+        "download": "Download",
+        "github": "GitHub"
+    },
+    "hero": {
+        "title": [
+            "Elegant Proxy Tool",
+            "For Modern Web"
+        ],
+        "subtitle": "Built on Tauri & sing-box. Enjoy minimal, high-performance network connection and rule management across all platforms. No more cold configurations, but your intuitive, reliable cross-device partner.",
+        "start": "Get Started",
+        "code": "View Code",
+        "location": {
+            "title": "Node Locations",
+            "desc": "70 available nodes in 21 countries/regions"
+        }
+    },
+    "features": {
+        "section_title": "Excellence Within Reach",
+        "section_desc": "Tunnet combines modern tech stack with human-centric design, providing more than just a proxy connection.",
+        "items": [
+            {
+                "title": "Extreme Performance",
+                "description": "Powered by sing-box core, delivering ultra-low latency and high-throughput network forwarding experience."
+            },
+            {
+                "title": "Security & Privacy",
+                "description": "TUN mode full traffic takeover with multiple encryption protocols supported, guarding your network boundary."
+            },
+            {
+                "title": "Intuitive Node View",
+                "description": "Visualize global node distribution geographically, making complex network topology clear at a glance."
+            },
+            {
+                "title": "Modern UI",
+                "description": "Built with Next.js and Shadcn UI, offering an extremely smooth interactive experience and visual aesthetics."
+            },
+            {
+                "title": "Lightweight Architecture",
+                "description": "Perfect combination of Rust and Go, maintaining high performance while occupying extremely low system resources."
+            },
+            {
+                "title": "Cross-Platform",
+                "description": "Perfectly adapted for macOS, Windows, and Linux, providing a consistent cross-device experience."
+            }
+        ]
+    },
+    "download": {
+        "title": "Start Your Journey",
+        "platforms": {
+            "macos": {
+                "name": "macOS",
+                "desc": "Apple Silicon",
+                "links": [
+                    {
+                        "label": "Apple Silicon"
+                    }
+                ]
+            },
+            "windows": {
+                "name": "Windows",
+                "desc": "x64 & ARM64",
+                "links": [
+                    {
+                        "label": "Download Now"
+                    }
+                ]
+            },
+            "linux": {
+                "name": "Linux",
+                "desc": "AppImage & Deb",
+                "links": [
+                    {
+                        "label": "AppImage"
+                    },
+                    {
+                        "label": "Deb"
+                    }
+                ]
+            }
+        },
+        "agreement": "By downloading, you agree to our Terms of Service and Privacy Policy"
+    },
+    "footer": {
+        "desc": "Elegant proxy tool designed for the modern internet.",
+        "products": "Product",
+        "features": "Features",
+        "download": "Download",
+        "changelog": "Changelog",
+        "resources": "Resources",
+        "github": "GitHub",
+        "issues": "Issues",
+        "legal": "Legal",
+        "privacy": "Privacy",
+        "terms": "Terms",
+        "copyright": "© 2026 Tunnet. All rights reserved."
+    }
+}

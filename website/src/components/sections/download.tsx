@@ -5,44 +5,56 @@ import { Apple, Monitor, Terminal } from "lucide-react";
 
 const RELEASE_BASE_URL = "https://github.com/shafreeck/Tunnet/releases/download/v0.1.0";
 
-const platforms = [
-    {
-        name: "macOS",
+const platformConfig = {
+    macos: {
         icon: Apple,
         version: "v0.1.0",
         links: [
-            { label: "Apple Silicon", url: `${RELEASE_BASE_URL}/Tunnet_0.1.0_aarch64.dmg` },
+            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.0_aarch64.dmg` },
         ],
-        description: "Apple Silicon",
     },
-    {
-        name: "Windows",
+    windows: {
         icon: Monitor,
         version: "v0.1.0",
         links: [
-            { label: "立即下载", url: `${RELEASE_BASE_URL}/Tunnet_0.1.0_x64-setup.exe` },
+            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.0_x64-setup.exe` },
         ],
-        description: "x64 & ARM64",
     },
-    {
-        name: "Linux",
+    linux: {
         icon: Terminal,
         version: "v0.1.0",
         links: [
-            { label: "AppImage", url: `${RELEASE_BASE_URL}/Tunnet_0.1.0_amd64.AppImage` },
-            { label: "Deb", url: `${RELEASE_BASE_URL}/Tunnet_0.1.0_amd64.deb` },
+            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.0_amd64.AppImage` },
+            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.0_amd64.deb` },
         ],
-        description: "AppImage & Deb",
     },
-];
+};
 
-export function Download() {
+export function Download({ dict }: { dict: any }) {
+    // Reconstruct platforms using dict data and static config
+    const platforms = Object.keys(dict.platforms).map((key) => {
+        const platformKey = key as keyof typeof platformConfig;
+        const dictPlatform = dict.platforms[platformKey];
+        const configPlatform = platformConfig[platformKey];
+
+        return {
+            name: dictPlatform.name,
+            description: dictPlatform.desc,
+            icon: configPlatform.icon,
+            version: configPlatform.version,
+            links: dictPlatform.links.map((link: { label: string }, index: number) => ({
+                label: link.label,
+                url: configPlatform.links[index].url,
+            })),
+        };
+    });
+
     return (
         <section id="download" className="py-24 relative overflow-hidden">
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-blue-600/10 blur-[120px] rounded-full z-0" />
 
             <div className="container mx-auto px-4 relative z-10 text-center">
-                <h2 className="text-3xl md:text-5xl font-bold mb-12">开启你的极速旅程</h2>
+                <h2 className="text-3xl md:text-5xl font-bold mb-12">{dict.title}</h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
                     {platforms.map((platform, index) => (
@@ -58,7 +70,7 @@ export function Download() {
                             <p className="text-blue-400 font-mono text-sm mb-4">{platform.version}</p>
                             <p className="text-slate-400 text-sm mb-8">{platform.description}</p>
                             <div className="w-full flex flex-col gap-3">
-                                {platform.links.map((link, i) => (
+                                {platform.links.map((link: { url: string; label: string }, i: number) => (
                                     <a
                                         key={i}
                                         href={link.url}
@@ -75,7 +87,7 @@ export function Download() {
                 </div>
 
                 <p className="mt-12 text-slate-500 text-sm">
-                    通过下载即表示你同意我们的服务条款与隐私政策
+                    {dict.agreement}
                 </p>
             </div>
         </section>
