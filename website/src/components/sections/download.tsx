@@ -17,7 +17,7 @@ const platformConfig = {
         icon: Monitor,
         version: "v0.1.0",
         links: [
-            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.0_x64-setup.exe` },
+            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.0_x64_en-US.msi` },
         ],
     },
     linux: {
