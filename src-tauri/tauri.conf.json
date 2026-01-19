@@ -75,7 +75,8 @@
       "resources/geoip-cn.srs",
       "resources/geosite-cn.srs",
       "resources/geosite-category-ads-all.srs",
-      "resources/tunnet-helper"
+      "resources/tunnet-helper",
+      "resources/libbox.dll"
     ],
     "macOS": {
       "infoPlist": "Info.plist"

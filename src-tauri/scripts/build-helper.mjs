@@ -84,6 +84,12 @@ if (!existsSync(placeholderPath)) {
     writeFileSync(placeholderPath, '');
 }
 
+// Create a placeholder for libbox.dll to prevent Tauri build error on non-Windows platforms
+const libboxPath = join(resourcesDir, 'libbox.dll');
+if (!existsSync(libboxPath)) {
+    writeFileSync(libboxPath, '');
+}
+
 // Build the helper binary
 const cargoArgs = ['build', '--bin', 'tunnet-helper', '--release', '--target', target];
 const buildResult = spawnSync('cargo', cargoArgs, {

@@ -293,17 +293,28 @@ fn main() {
         if Command::new(&lib_exe).arg("/?").output().is_err() {
             // Try to find via vswhere
             if let Ok(program_files) = env::var("ProgramFiles(x86)") {
-                let vswhere = Path::new(&program_files).join("Microsoft Visual Studio\\Installer\\vswhere.exe");
+                let vswhere = Path::new(&program_files)
+                    .join("Microsoft Visual Studio\\Installer\\vswhere.exe");
                 if vswhere.exists() {
-                     if let Ok(output) = Command::new(vswhere)
-                        .args(&["-latest", "-products", "*", "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "installationPath"])
+                    if let Ok(output) = Command::new(vswhere)
+                        .args(&[
+                            "-latest",
+                            "-products",
+                            "*",
+                            "-requires",
+                            "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                            "-property",
+                            "installationPath",
+                        ])
                         .output()
                     {
-                        let install_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                        let install_path =
+                            String::from_utf8_lossy(&output.stdout).trim().to_string();
                         if !install_path.is_empty() {
                             let msvc_dir = Path::new(&install_path).join("VC\\Tools\\MSVC");
                             if let Ok(entries) = std::fs::read_dir(msvc_dir) {
-                                let mut versions: Vec<_> = entries.filter_map(Result::ok).map(|e| e.path()).collect();
+                                let mut versions: Vec<_> =
+                                    entries.filter_map(Result::ok).map(|e| e.path()).collect();
                                 versions.sort();
                                 if let Some(latest) = versions.last() {
                                     let candidate = latest.join("bin\\Hostx64\\x64\\lib.exe");
@@ -351,6 +362,16 @@ fn main() {
         }
 
         let _ = std::fs::copy(libbox_dir.join("libbox.dll"), target_dir.join("libbox.dll"));
+
+        // Copy libbox.dll to resources so it can be bundled (this overwrites any placeholder)
+        let resources_dir = Path::new(&manifest_dir).join("resources");
+        if !resources_dir.exists() {
+            let _ = std::fs::create_dir_all(&resources_dir);
+        }
+        let _ = std::fs::copy(
+            libbox_dir.join("libbox.dll"),
+            resources_dir.join("libbox.dll"),
+        );
     }
 
     let mut windows = tauri_build::WindowsAttributes::new();
