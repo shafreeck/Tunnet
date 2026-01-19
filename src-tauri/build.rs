@@ -343,6 +343,7 @@ fn main() {
         // Link instructions
         println!("cargo:rustc-link-search=native={}", libbox_dir.display());
         println!("cargo:rustc-link-lib=box");
+        println!("cargo:rustc-link-arg=/DELAYLOAD:libbox.dll");
 
         // Link Windows system libraries required by Go / Sing-box
         println!("cargo:rustc-link-lib=ws2_32");
