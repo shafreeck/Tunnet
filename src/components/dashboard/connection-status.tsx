@@ -244,11 +244,10 @@ export function Header({ isConnected, onToggle, isLoading }: HeaderProps) {
         <header className="flex items-center justify-between pl-8 py-5 z-30 pr-6">
             <div data-tauri-drag-region className="flex-1 h-full cursor-default"></div>
             <div className="flex items-center gap-4">
-
                 <button
                     onClick={onToggle}
                     disabled={isLoading}
-                    className={`bg-primary text-white hover:brightness-110 active:scale-95 border border-transparent px-5 py-1.5 rounded-lg shadow-lg flex items-center gap-2 transition-all group ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`bg-primary text-white hover:brightness-110 hover:shadow-xl hover:shadow-primary/30 active:scale-95 border border-transparent px-5 py-1.5 rounded-lg shadow-lg flex items-center gap-2 transition-all group ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                     <Power className={`size-4 ${isConnected ? 'text-red-200' : 'text-emerald-200'} group-hover:scale-110 transition-transform`} />
                     <span className="font-semibold text-xs tracking-wide">

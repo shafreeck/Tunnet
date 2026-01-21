@@ -450,6 +450,7 @@
     "import": "Import",
     "clipboard_empty": "Clipboard is empty or permissions denied",
     "clipboard_read_failed": "Failed to read clipboard",
+    "qr_scan_failed": "Failed to scan or decode QR code",
     "node_editor": {
         "edit_node": "Edit Node",
         "add_node": "Add Node",

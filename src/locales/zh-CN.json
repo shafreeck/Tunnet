@@ -452,6 +452,7 @@
     "import": "导入",
     "clipboard_empty": "剪贴板为空或权限被拒绝",
     "clipboard_read_failed": "读取剪贴板失败",
+    "qr_scan_failed": "二维码扫描或解析失败",
     "node_editor": {
         "edit_node": "编辑节点",
         "add_node": "添加节点",

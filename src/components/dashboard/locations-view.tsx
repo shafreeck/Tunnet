@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react"
 // @ts-ignore
 import { invoke } from "@tauri-apps/api/core"
-import { Search, RotateCcw, Map as MapIcon, LayoutGrid, Globe as GlobeIcon, Zap, X, Target, ArrowUpDown, Share2 } from "lucide-react"
+import { Search, RotateCcw, Map as MapIcon, LayoutGrid, Globe as GlobeIcon, Zap, X, Target, ArrowUpDown, Share2, Plus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -197,6 +197,7 @@ export function LocationsView({
                                     "p-2.5 bg-card-bg border border-border-color rounded-xl text-text-secondary hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-95 shadow-lg pointer-events-auto",
                                     isRefreshing && "animate-spin text-primary"
                                 )}
+                                title={t('common.refresh', { defaultValue: 'Refresh' })}
                             >
                                 <RotateCcw size={18} />
                             </button>

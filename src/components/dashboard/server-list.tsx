@@ -462,13 +462,10 @@ export function ServerList({
 
                             <button
                                 onClick={() => onEdit(null)} // Trigger Add New
-                                className={cn(
-                                    "p-1.5 transition-colors rounded hover:bg-black/5 dark:hover:bg-white/5",
-                                    "text-text-secondary hover:text-text-primary"
-                                )}
+                                className="flex items-center justify-center size-8 bg-primary/10 text-primary hover:bg-primary/25 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300 rounded-lg border border-primary/20 ml-2 mr-1 active:scale-95"
                                 title={t('add_node_tooltip', { defaultValue: 'Add New Node' })}
                             >
-                                <Plus size={16} />
+                                <Plus size={16} strokeWidth={3} />
                             </button>
                         </div>
                     ) : (

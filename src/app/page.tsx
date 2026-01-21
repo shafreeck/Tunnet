@@ -114,7 +114,7 @@ export default function Home() {
   const [subSortBy, setSubSortBy] = useState<"name" | "ping">("ping")
   const [showSubSortMenu, setShowSubSortMenu] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [exportTarget, setExportTarget] = useState<{ id: string, name: string, type: "profile" | "group" } | null>(null)
+  const [exportTarget, setExportTarget] = useState<{ id: string, name: string, type: "node" | "profile" | "group" } | null>(null)
 
   // Sync derived state
   useEffect(() => {

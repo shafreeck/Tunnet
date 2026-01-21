@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { X, Clipboard, Link, Plus, ScanLine, Edit3 } from "lucide-react"
+import { X, Clipboard, Link, Plus, QrCode, Edit3 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -56,9 +56,35 @@ export function AddNodeModal({ isOpen, onClose, onManual, onImport, title }: Add
         }
     }
 
+    const handleScanQR = async () => {
+        try {
+            const { open } = await import('@tauri-apps/plugin-dialog');
+            const { invoke } = await import('@tauri-apps/api/core');
+
+            const selected = await open({
+                multiple: false,
+                filters: [{
+                    name: 'Image',
+                    extensions: ['png', 'jpg', 'jpeg']
+                }]
+            });
+
+            if (selected && typeof selected === 'string') {
+                const content = await invoke<string>('decode_qr', { path: selected });
+                if (content) {
+                    onImport(content);
+                    onClose();
+                }
+            }
+        } catch (e) {
+            console.error("QR Scan error:", e);
+            toast.error(t('qr_scan_failed', { defaultValue: "Failed to scan QR code" }));
+        }
+    }
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="w-full max-w-md bg-surface border border-border-color rounded-3xl shadow-floating overflow-hidden flex flex-col scale-100 animate-in zoom-in-95 duration-300 ease-out">
+            <div className="w-full max-w-lg bg-surface border border-border-color rounded-3xl shadow-floating overflow-hidden flex flex-col scale-100 animate-in zoom-in-95 duration-300 ease-out">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-border-color bg-sidebar-bg">
                     <h2 className="text-lg font-semibold text-text-primary">{title || t('add_connection', { defaultValue: "Add Connection" })}</h2>
                     <button
@@ -69,33 +95,46 @@ export function AddNodeModal({ isOpen, onClose, onManual, onImport, title }: Add
                     </button>
                 </div>
 
-                <div className={cn("p-8 grid gap-5", onManual ? "grid-cols-2" : "grid-cols-1")}>
+                <div className={cn("p-8 grid gap-4", onManual ? "grid-cols-3" : "grid-cols-2")}>
                     {/* Option 1: Clipboard */}
                     <button
                         onClick={handleClipboardImport}
-                        className="flex flex-col items-center justify-center gap-4 p-8 rounded-2xl bg-black/5 dark:bg-white/5 border border-border-color hover:bg-black/10 dark:hover:bg-white/10 hover:border-primary/50 transition-all group active:scale-95"
+                        className="flex flex-col items-center justify-center gap-4 p-6 rounded-2xl bg-black/5 dark:bg-white/5 border border-border-color hover:bg-black/10 dark:hover:bg-white/10 hover:border-primary/50 transition-all group active:scale-95"
                     >
-                        <div className="p-4 rounded-2xl bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-all duration-300">
-                            <Clipboard size={24} />
+                        <div className="p-3.5 rounded-2xl bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-all duration-300">
+                            <Clipboard size={22} />
                         </div>
-                        <span className="text-sm font-bold text-text-secondary group-hover:text-text-primary text-center">
+                        <span className="text-xs font-bold text-text-secondary group-hover:text-text-primary text-center">
                             {t('import_from_clipboard', { defaultValue: "Import from Clipboard" })}
                         </span>
                     </button>
 
-                    {/* Option 2: Manual */}
+                    {/* Option 2: Scan QR */}
+                    <button
+                        onClick={handleScanQR}
+                        className="flex flex-col items-center justify-center gap-4 p-6 rounded-2xl bg-black/5 dark:bg-white/5 border border-border-color hover:bg-black/10 dark:hover:bg-white/10 hover:border-emerald-500/50 transition-all group active:scale-95"
+                    >
+                        <div className="p-3.5 rounded-2xl bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-white transition-all duration-300">
+                            <QrCode size={22} />
+                        </div>
+                        <span className="text-xs font-bold text-text-secondary group-hover:text-text-primary text-center">
+                            {t('scan_qr_code', { defaultValue: "Scan QR Code" })}
+                        </span>
+                    </button>
+
+                    {/* Option 3: Manual */}
                     {onManual && (
                         <button
                             onClick={() => {
                                 onClose()
                                 onManual()
                             }}
-                            className="flex flex-col items-center justify-center gap-4 p-8 rounded-2xl bg-black/5 dark:bg-white/5 border border-border-color hover:bg-black/10 dark:hover:bg-white/10 hover:border-purple-500/50 transition-all group active:scale-95"
+                            className="flex flex-col items-center justify-center gap-4 p-6 rounded-2xl bg-black/5 dark:bg-white/5 border border-border-color hover:bg-black/10 dark:hover:bg-white/10 hover:border-purple-500/50 transition-all group active:scale-95"
                         >
-                            <div className="p-4 rounded-2xl bg-purple-500/10 text-purple-400 group-hover:bg-purple-500 group-hover:text-white transition-all duration-300">
-                                <Edit3 size={24} />
+                            <div className="p-3.5 rounded-2xl bg-purple-500/10 text-purple-400 group-hover:bg-purple-500 group-hover:text-white transition-all duration-300">
+                                <Edit3 size={22} />
                             </div>
-                            <span className="text-sm font-bold text-text-secondary group-hover:text-text-primary text-center">
+                            <span className="text-xs font-bold text-text-secondary group-hover:text-text-primary text-center">
                                 {t('manual_configuration', { defaultValue: "Manual Configuration" })}
                             </span>
                         </button>

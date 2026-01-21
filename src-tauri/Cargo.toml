@@ -49,6 +49,8 @@ tauri-plugin-updater = "2.0.0-rc"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 sys-locale = "0.3.2"
+rqrr = "0.6"
+image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
 
 [[bin]]
 name = "tunnet-helper"

@@ -708,7 +708,8 @@ pub fn run() {
             get_node_link,
             export_node_content,
             export_profile_content,
-            export_group_content
+            export_group_content,
+            decode_qr
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -839,6 +840,14 @@ async fn export_node_content(
     format: String,
 ) -> Result<String, String> {
     service.export_node_content(id, format)
+}
+
+#[tauri::command]
+async fn decode_qr(
+    service: State<'_, ProxyService<tauri::Wry>>,
+    path: String,
+) -> Result<String, String> {
+    service.decode_qr(&path)
 }
 
 pub mod parsing_test_mod;
