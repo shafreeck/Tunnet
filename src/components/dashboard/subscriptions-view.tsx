@@ -195,7 +195,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* Unified Header */}
             <div className={cn(
-                "border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent pl-8 shrink-0 relative z-30 pr-8",
+                "border-b border-black/2 dark:border-white/2 bg-transparent pl-8 shrink-0 relative z-30 pr-8",
                 !isMac ? "pt-8 pb-2" : "pt-6 pb-2"
             )}>
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
@@ -299,7 +299,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                         </div>
                                     </div>
                                 </div>
-                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]" />
+                                <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]" />
                             </div>
                         )}
 
@@ -411,14 +411,14 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                             </div>
                                             <div className="h-2 w-full bg-black/5 dark:bg-black/20 rounded-full overflow-hidden p-[2px] border border-black/5 dark:border-white/5">
                                                 <div
-                                                    className="h-full bg-gradient-to-r from-primary to-primary-hover rounded-full transition-all duration-1000 ease-out shadow-[0_0_8px_rgba(var(--primary),0.3)]"
+                                                    className="h-full bg-linear-to-r from-primary to-primary-hover rounded-full transition-all duration-1000 ease-out shadow-[0_0_8px_rgba(var(--primary),0.3)]"
                                                     style={{ width: `${total > 0 ? percent : 0}%` }}
                                                 />
                                             </div>
                                         </div>
 
                                         {/* Metadata Row */}
-                                        <div className="flex items-center gap-6 pt-4 border-t border-black/[0.03] dark:border-white/[0.03]">
+                                        <div className="flex items-center gap-6 pt-4 border-t border-black/3 dark:border-white/3">
                                             <div className="flex items-center gap-2">
                                                 <Database size={12} className="text-text-tertiary" />
                                                 <span className="text-[11px] font-bold text-text-secondary">

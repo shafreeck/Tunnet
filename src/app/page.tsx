@@ -1319,7 +1319,7 @@ export default function Home() {
 
         return (
           <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-            <div className="border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent px-8 pt-6 pb-2 shrink-0 relative z-30">
+            <div className="border-b border-black/2 dark:border-white/2 bg-transparent px-8 pt-6 pb-2 shrink-0 relative z-30">
               <div className="absolute inset-0 z-0" data-tauri-drag-region />
               <div className="max-w-5xl mx-auto w-full flex items-center justify-between mb-4 relative z-10 pointer-events-none">
                 <div className="flex items-center gap-4">
@@ -1616,7 +1616,7 @@ export default function Home() {
   if (!mounted) return null
 
   return (
-    <div className="h-[100dvh] flex md:gap-2 md:p-2 overflow-hidden bg-background text-foreground" data-tauri-drag-region>
+    <div className="h-dvh flex md:gap-2 md:p-2 overflow-hidden bg-background text-foreground" data-tauri-drag-region>
       <WindowControls className="hidden md:flex" />
       <Sidebar
         currentView={currentView}

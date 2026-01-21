@@ -501,7 +501,7 @@ export function ServerList({
                         logs={logSource === "local" ? logs.local : logs.helper}
                         onClear={onClearLogs}
                         className="h-full rounded-xl border border-border-color bg-black/5 dark:bg-white/5 shadow-inner"
-                        filterText={logFilter}
+                        filter={logFilter}
                         autoScroll={autoScroll}
                     />
                 ) : (
@@ -574,7 +574,7 @@ function ServerItem({ server, isSelected, isRunning, isLoading, connectionState,
 
             {isSelected && <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-xl transition-colors", isRunning ? "bg-accent-green shadow-[0_0_10px_rgba(34,197,94,0.5)]" : "bg-primary")} ></div>}
 
-            <div className="size-8 md:size-10 rounded-full bg-black/5 dark:bg-black/30 overflow-hidden flex-shrink-0 mr-2 md:mr-4 shadow-inner ml-1 md:ml-2 flex items-center justify-center">
+            <div className="size-8 md:size-10 rounded-full bg-black/5 dark:bg-black/30 overflow-hidden shrink-0 mr-2 md:mr-4 shadow-inner ml-1 md:ml-2 flex items-center justify-center">
                 {server.flagUrl ? (
                     <img
                         className="w-full h-full object-cover"

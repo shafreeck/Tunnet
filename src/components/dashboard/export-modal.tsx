@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useTranslation } from "react-i18next"
-import { Copy, FileDown, QrCode, Check, Share2, FileJson, Link } from "lucide-react"
+import { Copy, FileDown, QrCode, Check, Share2, FileJson, Link, Zap } from "lucide-react"
 import { invoke } from "@tauri-apps/api/core"
 import { save } from "@tauri-apps/plugin-dialog"
 import { writeTextFile } from "@tauri-apps/plugin-fs"
@@ -20,7 +20,7 @@ interface ExportModalProps {
 
 export function ExportModal({ isOpen, onClose, targetId, targetName, targetType }: ExportModalProps) {
     const { t } = useTranslation()
-    const [format, setFormat] = useState<"sip002" | "json">("sip002")
+    const [format, setFormat] = useState<"sip002" | "tunnet" | "json">("sip002")
     const [isLoading, setIsLoading] = useState(false)
     const [qrValue, setQrValue] = useState("")
 
@@ -83,7 +83,7 @@ export function ExportModal({ isOpen, onClose, targetId, targetName, targetType 
                         {/* Format Selection */}
                         <div className="space-y-3">
                             <label className="text-xs font-bold text-text-tertiary uppercase tracking-wider">{t('export.format', { defaultValue: "Format" })}</label>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-3 gap-2">
                                 <button
                                     onClick={() => setFormat("sip002")}
                                     className={cn(
@@ -93,8 +93,20 @@ export function ExportModal({ isOpen, onClose, targetId, targetName, targetType 
                                             : "bg-black/5 dark:bg-white/5 border-transparent hover:bg-black/10 dark:hover:bg-white/10 text-text-secondary"
                                     )}
                                 >
-                                    <Link size={20} />
-                                    <span className="text-xs font-bold">{t('export.type_links', { defaultValue: "SIP002 / Links" })}</span>
+                                    <Link size={18} />
+                                    <span className="text-[10px] font-bold">{t('export.type_links', { defaultValue: "Standard" })}</span>
+                                </button>
+                                <button
+                                    onClick={() => setFormat("tunnet")}
+                                    className={cn(
+                                        "flex flex-col items-center gap-2 p-3 rounded-xl border transition-all",
+                                        format === "tunnet"
+                                            ? "bg-primary/10 border-primary text-primary"
+                                            : "bg-black/5 dark:bg-white/5 border-transparent hover:bg-black/10 dark:hover:bg-white/10 text-text-secondary"
+                                    )}
+                                >
+                                    <Zap size={18} />
+                                    <span className="text-[10px] font-bold">{t('export.type_tunnet', { defaultValue: "Tunnet" })}</span>
                                 </button>
                                 <button
                                     onClick={() => setFormat("json")}
@@ -105,9 +117,17 @@ export function ExportModal({ isOpen, onClose, targetId, targetName, targetType 
                                             : "bg-black/5 dark:bg-white/5 border-transparent hover:bg-black/10 dark:hover:bg-white/10 text-text-secondary"
                                     )}
                                 >
-                                    <FileJson size={20} />
-                                    <span className="text-xs font-bold">{t('export.type_json', { defaultValue: "Sing-box JSON" })}</span>
+                                    <FileJson size={18} />
+                                    <span className="text-[10px] font-bold">{t('export.type_json', { defaultValue: "JSON" })}</span>
                                 </button>
+                            </div>
+
+                            <div className="mt-2 px-1 min-h-[32px] flex items-center">
+                                <p key={format} className="text-[11px] leading-relaxed text-text-tertiary animate-in fade-in slide-in-from-top-1 duration-300">
+                                    {format === "sip002" && t('export.type_links_desc')}
+                                    {format === "tunnet" && t('export.type_tunnet_desc')}
+                                    {format === "json" && t('export.type_json_desc')}
+                                </p>
                             </div>
                         </div>
 

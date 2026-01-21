@@ -494,8 +494,12 @@
         "saved_file": "File saved successfully",
         "failed": "Export failed",
         "tooltip": "Export / Share",
-        "type_links": "SIP002 / Links",
-        "type_json": "Sing-box JSON",
+        "type_links": "Standard",
+        "type_links_desc": "Standard SIP002 format, compatible with most apps like Shadowrocket or Clash.",
+        "type_tunnet": "Tunnet",
+        "type_tunnet_desc": "Private lossless format. Preserves all advanced settings like Reality and ShadowTLS.",
+        "type_json": "JSON",
+        "type_json_desc": "Sing-box JSON outbound config, ideal for experts and manual setups.",
         "filter_links": "Subscription Links",
         "filter_json": "Sing-box Config"
     }

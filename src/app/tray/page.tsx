@@ -338,7 +338,7 @@ export default function TrayPage() {
         if (isQuitting) return
         setIsQuitting(true)
         try {
-            await invoke("quit_app")
+            await emit("ui:initiate-exit")
         } catch (e) {
             console.error("Quit failed", e)
             setIsQuitting(false)
@@ -351,7 +351,7 @@ export default function TrayPage() {
 
     return (
         <div className="h-screen w-full flex flex-col select-none transition-colors duration-300 bg-transparent text-text-primary">
-            <div className="h-12 shrink-0 flex items-center justify-between px-4 border-b border-white/[0.03] dark:border-white/[0.03] bg-black/5 dark:bg-white/5">
+            <div className="h-12 shrink-0 flex items-center justify-between px-4 border-b border-white/3 dark:border-white/3 bg-black/5 dark:bg-white/5">
                 <div className="flex items-center gap-2">
                     <div className={cn(
                         "size-2 rounded-full transition-colors",
@@ -379,7 +379,7 @@ export default function TrayPage() {
                         isTransitioning ? "opacity-90 cursor-wait bg-black/5 dark:bg-white/5 border-transparent" :
                             (status.is_running
                                 ? "bg-primary/10 border-primary/30 shadow-[0_12px_32px_-12px_rgba(0,122,255,0.3)]"
-                                : "glass-card hover:bg-white/5 border-white/[0.03]")
+                                : "glass-card hover:bg-white/5 border-white/3")
                     )}
                 >
                     <div className={cn(
@@ -499,7 +499,7 @@ export default function TrayPage() {
                     </div>
 
                     {activeNode && (
-                        <div className="px-1 pt-3 pb-1 flex flex-col gap-2 border-t border-white/[0.03]">
+                        <div className="px-1 pt-3 pb-1 flex flex-col gap-2 border-t border-white/3">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2.5 max-w-[70%]">
                                     <div className="size-6 bg-primary/10 rounded-lg flex items-center justify-center text-primary shrink-0">
@@ -546,12 +546,12 @@ export default function TrayPage() {
                     )}
 
                     {status.is_running && (
-                        <div className="px-1 pt-2 border-t border-white/[0.03] flex flex-col gap-1">
+                        <div className="px-1 pt-2 border-t border-white/3 flex flex-col gap-1">
                             <div className="flex items-center justify-between text-[10px] font-mono">
                                 <span className="text-emerald-500">↑ {formatSpeed(traffic.up)}</span>
                                 <span className="text-primary">↓ {formatSpeed(traffic.down)}</span>
                             </div>
-                            <div className="h-8 flex items-end gap-[1px] opacity-80">
+                            <div className="h-8 flex items-end gap-px opacity-80">
                                 {trafficHistory.map((val, i) => {
                                     const maxTotal = Math.max(...trafficHistory.map(t => t.up + t.down), 1024)
                                     const total = val.up + val.down
@@ -583,7 +583,7 @@ export default function TrayPage() {
                 </div>
             </div >
 
-            <div className="mt-auto shrink-0 px-4 py-2 border-t border-white/[0.03] flex items-center justify-between bg-black/5 dark:bg-white/5">
+            <div className="mt-auto shrink-0 px-4 py-2 border-t border-white/3 flex items-center justify-between bg-black/5 dark:bg-white/5">
                 <span className="text-[10px] font-mono opacity-20 whitespace-nowrap overflow-hidden max-w-[80px]">V{version}</span>
                 <button
                     onClick={handleQuit}

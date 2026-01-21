@@ -885,6 +885,15 @@ impl<R: Runtime> ProxyService<R> {
                  let b64 = general_purpose::STANDARD.encode(links);
                  Ok(b64)
             }
+            "tunnet" => {
+                let mut links = String::new();
+                for node in &profile.nodes {
+                    let link = node.to_tunnet_link();
+                    links.push_str(&link);
+                    links.push('\n');
+                }
+                Ok(links)
+            }
             "json" | "sing-box" => {
                 // Return just the nodes list or a full outbound config?
                 // For "Export Profile", usually users want the Node List in JSON format (Sing-box friendly).
@@ -912,6 +921,9 @@ impl<R: Runtime> ProxyService<R> {
                     return Err("Failed to generate link for node".to_string());
                 }
                 Ok(link)
+            }
+            "tunnet" => {
+                Ok(node.to_tunnet_link())
             }
             "json" | "sing-box" => {
                 serde_json::to_string_pretty(&node).map_err(|e| e.to_string())
@@ -966,6 +978,15 @@ impl<R: Runtime> ProxyService<R> {
                  use base64::{engine::general_purpose, Engine as _};
                  let b64 = general_purpose::STANDARD.encode(links);
                  Ok(b64)
+            }
+            "tunnet" => {
+                let mut links = String::new();
+                for node in nodes {
+                    let link = node.to_tunnet_link();
+                    links.push_str(&link);
+                    links.push('\n');
+                }
+                Ok(links)
             }
             "json" | "sing-box" => {
                  serde_json::to_string_pretty(&nodes).map_err(|e| e.to_string())

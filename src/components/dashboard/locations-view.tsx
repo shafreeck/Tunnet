@@ -55,7 +55,7 @@ export function LocationsView({
     const [sortBy, setSortBy] = useState<"name" | "ping">("ping")
     const [showSortMenu, setShowSortMenu] = useState(false)
     const [isMac, setIsMac] = useState(false)
-    const [exportTarget, setExportTarget] = useState<{ id: string, name: string, type: "profile" | "group" } | null>(null)
+    const [exportTarget, setExportTarget] = useState<{ id: string, name: string, type: "node" | "profile" | "group" } | null>(null)
 
     useEffect(() => {
         if (typeof navigator !== 'undefined') {
@@ -152,7 +152,7 @@ export function LocationsView({
         )}>
             {/* Unified Header Style */}
             <div className={cn(
-                "border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-5 md:pl-8 md:pb-2 shrink-0 relative z-30",
+                "border-b border-black/2 dark:border-white/2 bg-transparent p-5 md:pl-8 md:pb-2 shrink-0 relative z-30",
                 isMac ? "md:pt-6" : "md:pt-8"
             )}>
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />

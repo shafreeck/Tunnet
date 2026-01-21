@@ -496,8 +496,12 @@
         "saved_file": "文件保存成功",
         "failed": "导出失败",
         "tooltip": "导出 / 分享",
-        "type_links": "SIP002 / 分享链接",
-        "type_json": "Sing-box JSON 配置",
+        "type_links": "标准链接",
+        "type_links_desc": "标准 SIP002 格式，兼容 Shadowrocket, Clash 等大多数代理软件。",
+        "type_tunnet": "Tunnet 链接",
+        "type_tunnet_desc": "Tunnet 私有无损格式，保留 TLS、Reality、ShadowTLS 等所有高级配置。",
+        "type_json": "JSON 配置",
+        "type_json_desc": "标准的 Sing-box JSON 出站配置，适合手动配置或高级用户。",
         "filter_links": "订阅链接文件",
         "filter_json": "Sing-box 配置文件"
     }

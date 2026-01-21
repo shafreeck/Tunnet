@@ -311,34 +311,20 @@ async fn open_main_window(app: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 async fn quit_app(
-    app: tauri::AppHandle,
+    _app: tauri::AppHandle,
     service: State<'_, ProxyService<tauri::Wry>>,
 ) -> Result<(), String> {
-    log::info!("Quitting application (Option B: Sync with animation)...");
-    let start_time = std::time::Instant::now();
+    log::info!("Preparing to quit: Stopping proxy service...");
+    // 真正等待服务停止完成 (stop_proxy(true) will join the task)
+    service.stop_proxy(true).await;
+    log::info!("Proxy service stopped successfully.");
+    Ok(())
+}
 
-    // 1. Perform backend cleanup (Stop proxy, etc.)
-    service.stop_proxy(false).await;
-
-    // 2. Ensure total elapsed time is at least 1000ms to match frontend animation
-    let elapsed = start_time.elapsed();
-    let min_duration = std::time::Duration::from_millis(1000);
-
-    if elapsed < min_duration {
-        let remaining = min_duration - elapsed;
-        log::info!(
-            "Cleanup finished in {:?}, waiting {:?} more for animation...",
-            elapsed,
-            remaining
-        );
-        tokio::time::sleep(remaining).await;
-    } else {
-        log::info!("Cleanup finished in {:?}, exiting immediately.", elapsed);
-    }
-
+#[tauri::command]
+fn final_exit(app: tauri::AppHandle) {
+    log::info!("Final exit signal received. Closing process.");
     app.exit(0);
-    // Force exit if tauri's exit is prevented
-    std::process::exit(0);
 }
 
 #[tauri::command]
@@ -700,6 +686,7 @@ pub fn run() {
             hide_tray_window,
             set_routing_mode_command,
             get_proxy_status,
+            final_exit,
             edit_profile,
             check_node_pings,
             get_group_status,

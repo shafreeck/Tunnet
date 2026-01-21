@@ -99,7 +99,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                             )}
                         </>
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                    <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent"></div>
                     {!isLoading && (hasNoServers ? (
                         null
                     ) : isConnected ? (
@@ -133,7 +133,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
 
             <Tooltip
                 id="node-info-tooltip"
-                className="z-50 !bg-black/90 !text-white !px-4 !py-3 !rounded-xl !shadow-xl !opacity-100 backdrop-blur-md border border-white/10"
+                className="z-50 bg-black/90! text-white! px-4! py-3! rounded-xl! shadow-xl! opacity-100! backdrop-blur-md border border-white/10"
                 place="bottom"
                 variant="dark"
                 border="1px solid rgba(255,255,255,0.1)"

@@ -407,7 +407,7 @@ impl Node {
         )
     }
 
-    fn to_tunnet_link(&self) -> String {
+    pub fn to_tunnet_link(&self) -> String {
         let json = serde_json::to_string(self).unwrap_or_default();
         use base64::{engine::general_purpose, Engine as _};
         let b64 = general_purpose::STANDARD.encode(json);
