@@ -75,15 +75,29 @@
             },
             "linux": {
                 "name": "Linux",
-                "desc": "AppImage & Deb",
-                "links": [
-                    {
-                        "label": "AppImage"
-                    },
-                    {
-                        "label": "Deb"
-                    }
-                ]
+                "desc": "Debian & RedHat",
+                "links": {
+                    "x64": [
+                        {
+                            "label": "Deb (x64)",
+                            "url": "Tunnet_0.1.2_amd64.deb"
+                        },
+                        {
+                            "label": "RPM (x64)",
+                            "url": "tunnet-0.1.2-1.x86_64.rpm"
+                        }
+                    ],
+                    "arm64": [
+                        {
+                            "label": "Deb (ARM64)",
+                            "url": "Tunnet_0.1.2_arm64.deb"
+                        },
+                        {
+                            "label": "RPM (ARM64)",
+                            "url": "tunnet-0.1.2-1.aarch64.rpm"
+                        }
+                    ]
+                }
             }
         },
         "agreement": "By downloading, you agree to our Terms of Service and Privacy Policy"
