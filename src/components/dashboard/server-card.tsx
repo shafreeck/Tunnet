@@ -2,7 +2,7 @@ import React from "react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 // @ts-ignore
-import { Globe, ChevronRight } from "lucide-react"
+import { Globe, ChevronRight, Share2 } from "lucide-react"
 
 interface ServerCardProps {
     countryName: string
@@ -11,6 +11,7 @@ interface ServerCardProps {
     providerName?: string
     ping?: number
     onClick: () => void
+    onShare?: (e: React.MouseEvent) => void
 
     isHovered?: boolean
     isAutoSelected?: boolean
@@ -23,6 +24,7 @@ export function ServerCard({
     providerName = "Multiple Providers",
     ping,
     onClick,
+    onShare,
     isAutoSelected
 }: ServerCardProps) {
     const { t } = useTranslation()
@@ -79,14 +81,25 @@ export function ServerCard({
                         <Globe className="text-text-tertiary size-5" />
                     )}
                 </div>
-                {ping !== undefined && ping > 0 && (
-                    <div className="flex items-center gap-1.5 bg-black/5 dark:bg-black/40 px-2 py-1 rounded-full border border-border-color">
-                        <div className={cn("size-1.5 rounded-full", ping < 200 ? "bg-emerald-500" : ping <= 600 ? "bg-yellow-500" : "bg-red-500")} />
-                        <span className={cn("text-[10px] font-bold font-mono", getPingColor(ping))}>
-                            {ping}ms
-                        </span>
-                    </div>
-                )}
+                <div className="flex items-center gap-2">
+                    {onShare && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onShare(e); }}
+                            className="p-1.5 text-text-tertiary hover:text-primary hover:bg-black/5 dark:hover:bg-white/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                            title={t('common.share_tooltip', { defaultValue: 'Share' })}
+                        >
+                            <Share2 size={14} />
+                        </button>
+                    )}
+                    {ping !== undefined && ping > 0 && (
+                        <div className="flex items-center gap-1.5 bg-black/5 dark:bg-black/40 px-2 py-1 rounded-full border border-border-color">
+                            <div className={cn("size-1.5 rounded-full", ping < 200 ? "bg-emerald-500" : ping <= 600 ? "bg-yellow-500" : "bg-red-500")} />
+                            <span className={cn("text-[10px] font-bold font-mono", getPingColor(ping))}>
+                                {ping}ms
+                            </span>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Content */}

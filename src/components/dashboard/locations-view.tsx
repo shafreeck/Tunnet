@@ -248,6 +248,13 @@ export function LocationsView({
                                     setSelectedCountryCode(code)
                                     setShowListValues(true)
                                 }}
+                                onExport={(code, name) => {
+                                    setExportTarget({
+                                        id: `system:region:${code.toUpperCase()}`,
+                                        name: name,
+                                        type: "group"
+                                    })
+                                }}
                             />
                         </div>
                     </div>

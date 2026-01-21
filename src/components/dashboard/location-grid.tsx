@@ -10,9 +10,10 @@ interface LocationGridProps {
     selectedRegion: string // "All Regions" or specific region
     searchQuery: string
     onSelectCountry: (countryName: string) => void
+    onExport?: (countryCode: string, countryName: string) => void
 }
 
-export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCountry }: LocationGridProps) {
+export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCountry, onExport }: LocationGridProps) {
     const { t, i18n } = useTranslation()
 
     // 1. Group servers by Country Code (aggregated view)
@@ -116,6 +117,7 @@ export function LocationGrid({ servers, selectedRegion, searchQuery, onSelectCou
                                 providerName={country.provider}
                                 ping={country.avgPing}
                                 onClick={() => onSelectCountry(country.countryCode)}
+                                onShare={() => onExport?.(country.countryCode, country.countryName)}
                             />
                         ))}
                     </div>

@@ -2,11 +2,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocationInfo {
+    #[serde(default)]
     pub ip: String,
+    #[serde(default)]
     pub country: String,
+    #[serde(default)]
     pub city: String,
+    #[serde(default)]
     pub lat: f64,
+    #[serde(default)]
     pub lon: f64,
+    #[serde(default)]
     pub isp: String,
     #[serde(default)]
     pub latency: u64,
@@ -38,42 +44,66 @@ pub struct Profile {
     pub nodes: Vec<Node>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Node {
+    #[serde(default)]
     pub id: String,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub protocol: String, // "vmess", "shadowsocks", "trojan", etc.
+    #[serde(default)]
     pub server: String,
+    #[serde(default)]
     pub port: u16,
     // Protocol specific fields are flattened for simplicity in storage,
     // but in a real app we might use an enum with tag.
     // For now, let's keep it simple key-value map or specific optional fields.
+    #[serde(default)]
     pub uuid: Option<String>,
+    #[serde(default)]
     pub cipher: Option<String>,
+    #[serde(default)]
     pub password: Option<String>,
     #[serde(default)]
     pub tls: bool,
+    #[serde(default)]
     pub network: Option<String>, // "ws", "grpc", "tcp"
-    pub path: Option<String>,    // "/path" for ws/grpc
-    pub host: Option<String>,    // Host header for ws/grpc
+    #[serde(default)]
+    pub path: Option<String>, // "/path" for ws/grpc
+    #[serde(default)]
+    pub host: Option<String>, // Host header for ws/grpc
+    #[serde(default)]
     pub location: Option<LocationInfo>,
 
     // New fields for VLESS / Hysteria / TUIC / Reality
+    #[serde(default)]
     pub flow: Option<String>,
+    #[serde(default)]
     pub alpn: Option<Vec<String>>,
     #[serde(default)]
     pub insecure: bool,
+    #[serde(default)]
     pub sni: Option<String>,
+    #[serde(default)]
     pub public_key: Option<String>,
+    #[serde(default)]
     pub short_id: Option<String>,
+    #[serde(default)]
     pub fingerprint: Option<String>,
+    #[serde(default)]
     pub up: Option<String>, // Bandwidth hint
+    #[serde(default)]
     pub down: Option<String>,
+    #[serde(default)]
     pub obfs: Option<String>, // Obfs type
+    #[serde(default)]
     pub obfs_password: Option<String>,
     #[serde(default)]
     pub ping: Option<u64>,
+    #[serde(default)]
     pub packet_encoding: Option<String>,
+    #[serde(default)]
     pub disable_sni: Option<bool>,
 }
 
@@ -83,10 +113,13 @@ impl Node {
             "vmess" => self.to_vmess_link(),
             "vless" => self.to_vless_link(),
             "hysteria2" | "hy2" => self.to_hysteria2_link(),
+            "hysteria" | "hy" => self.to_hysteria_link(),
             "tuic" => self.to_tuic_link(),
             "trojan" => self.to_trojan_link(),
             "shadowsocks" | "ss" => self.to_ss_link(),
-            _ => String::new(),
+            "anytls" => self.to_anytls_link(),
+            "shadowtls" => self.to_shadowtls_link(),
+            _ => self.to_tunnet_link(),
         }
     }
 
@@ -291,6 +324,95 @@ impl Node {
             b64_userinfo, self.server, self.port, name
         )
     }
+
+    fn to_anytls_link(&self) -> String {
+        let password = self.password.clone().unwrap_or_default();
+        let mut query = Vec::new();
+        if let Some(sni) = &self.sni {
+            query.push(format!("sni={}", urlencoding::encode(sni)));
+        }
+        if let Some(fp) = &self.fingerprint {
+            query.push(format!("fp={}", fp));
+        }
+        if self.insecure {
+            query.push("allowInsecure=1".to_string());
+        }
+        let query_str = if query.is_empty() {
+            String::new()
+        } else {
+            format!("?{}", query.join("&"))
+        };
+        let name = urlencoding::encode(&self.name);
+        format!(
+            "anytls://{}@{}:{}{}#{}",
+            password, self.server, self.port, query_str, name
+        )
+    }
+
+    fn to_hysteria_link(&self) -> String {
+        let auth = self
+            .password
+            .clone()
+            .or_else(|| self.uuid.clone())
+            .unwrap_or_default();
+        let mut query = Vec::new();
+        if !auth.is_empty() {
+            query.push(format!("auth={}", urlencoding::encode(&auth)));
+        }
+        if let Some(sni) = &self.sni {
+            query.push(format!("peer={}", urlencoding::encode(sni)));
+        }
+        if self.insecure {
+            query.push("insecure=1".to_string());
+        }
+        if let Some(up) = &self.up {
+            query.push(format!("upmbps={}", up));
+        }
+        if let Some(down) = &self.down {
+            query.push(format!("downmbps={}", down));
+        }
+        if let Some(obfs) = &self.obfs {
+            query.push(format!("obfs={}", obfs));
+        }
+        let query_str = if query.is_empty() {
+            String::new()
+        } else {
+            format!("?{}", query.join("&"))
+        };
+        let name = urlencoding::encode(&self.name);
+        format!(
+            "hysteria://{}:{}{}#{}",
+            self.server, self.port, query_str, name
+        )
+    }
+
+    fn to_shadowtls_link(&self) -> String {
+        let password = self.password.clone().unwrap_or_default();
+        let mut query = Vec::new();
+        if let Some(sni) = &self.sni {
+            query.push(format!("sni={}", urlencoding::encode(sni)));
+        }
+        if let Some(version) = &self.flow {
+            query.push(format!("version={}", version));
+        }
+        let query_str = if query.is_empty() {
+            String::new()
+        } else {
+            format!("?{}", query.join("&"))
+        };
+        let name = urlencoding::encode(&self.name);
+        format!(
+            "shadowtls://{}@{}:{}{}#{}",
+            password, self.server, self.port, query_str, name
+        )
+    }
+
+    fn to_tunnet_link(&self) -> String {
+        let json = serde_json::to_string(self).unwrap_or_default();
+        use base64::{engine::general_purpose, Engine as _};
+        let b64 = general_purpose::STANDARD.encode(json);
+        format!("tunnet://{}", b64)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -476,8 +598,32 @@ pub mod parser {
             return vec![];
         }
 
-        // 0. Try Parsing as sing-box JSON first (modern airports)
+        // 0. Try Parsing as our own exported JSON format (Node list or single Node)
+        if content.starts_with('[') || content.starts_with('{') {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(content) {
+                if let Some(arr) = v.as_array() {
+                    let mut nodes = Vec::new();
+                    for val in arr {
+                        if let Ok(mut node) = serde_json::from_value::<Node>(val.clone()) {
+                            node.id = Uuid::new_v4().to_string();
+                            node.location = None;
+                            nodes.push(node);
+                        }
+                    }
+                    if !nodes.is_empty() {
+                        return nodes;
+                    }
+                } else if let Ok(mut node) = serde_json::from_value::<Node>(v.clone()) {
+                    // It's a single node object
+                    node.id = Uuid::new_v4().to_string();
+                    node.location = None;
+                    return vec![node];
+                }
+            }
+        }
+
         if content.starts_with('{') {
+            // First check if it's a sing-box JSON with "outbounds"
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(content) {
                 if let Some(outbounds) = v.get("outbounds").and_then(|o| o.as_array()) {
                     let mut nodes = Vec::new();
@@ -699,6 +845,17 @@ pub mod parser {
     }
 
     fn parse_link(link: &str) -> Option<Node> {
+        if link.starts_with("tunnet://") {
+            let b64 = &link[9..];
+            use base64::{engine::general_purpose, Engine as _};
+            if let Ok(bytes) = general_purpose::STANDARD.decode(b64) {
+                if let Ok(mut node) = serde_json::from_slice::<Node>(&bytes) {
+                    node.id = Uuid::new_v4().to_string();
+                    node.location = None;
+                    return Some(node);
+                }
+            }
+        }
         if link.starts_with("vmess://") {
             let b64_part = if let Some(idx) = link.find('?') {
                 &link[8..idx]
@@ -1162,6 +1319,134 @@ pub mod parser {
                                                 node.alpn = Some(list);
                                             }
                                         }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                        return Some(node);
+                    }
+                }
+            }
+        } else if link.starts_with("anytls://") {
+            if let Some(remainder) = link.strip_prefix("anytls://") {
+                let (user_host_port, fragment) = match remainder.split_once('#') {
+                    Some((u, f)) => (
+                        u,
+                        Some(urlencoding::decode(f).unwrap_or(f.into()).to_string()),
+                    ),
+                    None => (remainder, None),
+                };
+                let (user_host_port, query) = match user_host_port.split_once('?') {
+                    Some((u, q)) => (u, Some(q)),
+                    None => (user_host_port, None),
+                };
+
+                if let Some((password, host_port)) = user_host_port.split_once('@') {
+                    if let Some((host, port_str)) = host_port.rsplit_once(':') {
+                        let mut node = Node {
+                            id: Uuid::new_v4().to_string(),
+                            name: fragment.unwrap_or("AnyTLS Node".to_string()),
+                            protocol: "anytls".to_string(),
+                            server: host.to_string(),
+                            port: port_str.parse().unwrap_or(443),
+                            password: Some(password.to_string()),
+                            tls: true,
+                            ..Default::default()
+                        };
+                        if let Some(q) = query {
+                            for pair in q.split('&') {
+                                if let Some((k, v)) = pair.split_once('=') {
+                                    let v = urlencoding::decode(v).unwrap_or(v.into()).to_string();
+                                    match k {
+                                        "sni" => node.sni = Some(v),
+                                        "fp" => node.fingerprint = Some(v),
+                                        "insecure" | "allowInsecure" => {
+                                            node.insecure = v == "1" || v == "true"
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                        return Some(node);
+                    }
+                }
+            }
+        } else if link.starts_with("hysteria://") {
+            if let Some(remainder) = link.strip_prefix("hysteria://") {
+                let (host_port_query, fragment) = match remainder.split_once('#') {
+                    Some((u, f)) => (
+                        u,
+                        Some(urlencoding::decode(f).unwrap_or(f.into()).to_string()),
+                    ),
+                    None => (remainder, None),
+                };
+                let (host_port, query) = match host_port_query.split_once('?') {
+                    Some((u, q)) => (u, Some(q)),
+                    None => (host_port_query, None),
+                };
+
+                if let Some((host, port_str)) = host_port.rsplit_once(':') {
+                    let mut node = Node {
+                        id: Uuid::new_v4().to_string(),
+                        name: fragment.unwrap_or("Hysteria Node".to_string()),
+                        protocol: "hysteria".to_string(),
+                        server: host.to_string(),
+                        port: port_str.parse().unwrap_or(443),
+                        ..Default::default()
+                    };
+                    if let Some(q) = query {
+                        for pair in q.split('&') {
+                            if let Some((k, v)) = pair.split_once('=') {
+                                let v = urlencoding::decode(v).unwrap_or(v.into()).to_string();
+                                match k {
+                                    "auth" => node.password = Some(v),
+                                    "peer" => node.sni = Some(v),
+                                    "insecure" => node.insecure = v == "1" || v == "true",
+                                    "upmbps" => node.up = Some(v),
+                                    "downmbps" => node.down = Some(v),
+                                    "obfs" => node.obfs = Some(v),
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                    return Some(node);
+                }
+            }
+        } else if link.starts_with("shadowtls://") {
+            if let Some(remainder) = link.strip_prefix("shadowtls://") {
+                let (user_host_port, fragment) = match remainder.split_once('#') {
+                    Some((u, f)) => (
+                        u,
+                        Some(urlencoding::decode(f).unwrap_or(f.into()).to_string()),
+                    ),
+                    None => (remainder, None),
+                };
+                let (user_host_port, query) = match user_host_port.split_once('?') {
+                    Some((u, q)) => (u, Some(q)),
+                    None => (user_host_port, None),
+                };
+
+                if let Some((password, host_port)) = user_host_port.split_once('@') {
+                    if let Some((host, port_str)) = host_port.rsplit_once(':') {
+                        let mut node = Node {
+                            id: Uuid::new_v4().to_string(),
+                            name: fragment.unwrap_or("ShadowTLS Node".to_string()),
+                            protocol: "shadowtls".to_string(),
+                            server: host.to_string(),
+                            port: port_str.parse().unwrap_or(443),
+                            password: Some(password.to_string()),
+                            ..Default::default()
+                        };
+                        if let Some(q) = query {
+                            for pair in q.split('&') {
+                                if let Some((k, v)) = pair.split_once('=') {
+                                    let v = urlencoding::decode(v).unwrap_or(v.into()).to_string();
+                                    match k {
+                                        "sni" => node.sni = Some(v),
+                                        "version" => node.flow = Some(v),
                                         _ => {}
                                     }
                                 }
