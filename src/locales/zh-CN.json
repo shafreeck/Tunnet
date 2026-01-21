@@ -161,7 +161,9 @@
                 "latest": "最新版本",
                 "error": "错误",
                 "update": "更新",
-                "new": "新版本"
+                "new": "新版本",
+                "downloading": "下载中",
+                "restart": "重启以应用"
             }
         },
         "language": {
@@ -504,5 +506,12 @@
         "type_json_desc": "标准的 Sing-box JSON 出站配置，适合手动配置或高级用户。",
         "filter_links": "订阅链接文件",
         "filter_json": "Sing-box 配置文件"
+    },
+    "update": {
+        "ready_title": "新版本就绪",
+        "restart_desc": "重启以应用更新。",
+        "ready_desc": "新版本已下载。重启以应用。",
+        "restart": "重启",
+        "downloading": "下载中"
     }
 }

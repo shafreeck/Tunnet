@@ -118,7 +118,7 @@ export function SettingsView({ initialCategory = "general", clashApiPort, tunEna
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500 text-foreground">
             {/* Top Navigation Tabs */}
             <div className={cn(
-                "border-b border-black/[0.02] dark:border-white/[0.02] flex items-center px-4 md:pl-8 bg-transparent shrink-0 relative z-30",
+                "border-b border-black/2 dark:border-white/2 flex items-center px-4 md:pl-8 bg-transparent shrink-0 relative z-30",
                 isMac ? "h-14" : "h-16 pt-8"
             )}>
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
@@ -325,42 +325,105 @@ function GeneralSettings({ settings, update }: CommonProps) {
 
 function CheckUpdateBtn() {
     const { t } = useTranslation()
-    const [checking, setChecking] = useState(false)
+    const [status, setStatus] = useState<'idle' | 'checking' | 'downloading' | 'ready'>('idle')
+    const [progress, setProgress] = useState(0)
+    const [isSimulation, setIsSimulation] = useState(false)
 
-    const checkUpdate = async () => {
-        setChecking(true)
+    const checkUpdate = async (e: React.MouseEvent) => {
+        if (status === 'ready') {
+            if (isSimulation) {
+                toast.info("This is a simulation. App would restart now.")
+                setTimeout(() => {
+                    setStatus('idle')
+                    setIsSimulation(false)
+                }, 1000)
+                return
+            }
+            await invoke("restart_app")
+            return
+        }
+
+        // SIMULATION MODE
+        if (e.altKey) {
+            setIsSimulation(true)
+            setStatus('checking')
+            setTimeout(() => {
+                setStatus('downloading')
+                let p = 0
+                const interval = setInterval(() => {
+                    p += 10
+                    setProgress(p)
+                    if (p >= 100) {
+                        clearInterval(interval)
+                        setStatus('ready')
+                        toast.success(t('update.ready_title', { defaultValue: 'Update Ready' }), {
+                            description: t('update.restart_desc', { defaultValue: 'Restart to apply update.' })
+                        })
+                    }
+                }, 200)
+            }, 1000)
+            return
+        }
+
+        setStatus('checking')
         try {
             const { check } = await import("@tauri-apps/plugin-updater")
             const update = await check()
             if (update) {
-                toast.success(t('settings.advanced.core.new'), {
-                    description: `v${update.version} ${t('settings.advanced.core.update')}`,
-                    action: {
-                        label: t('settings.advanced.core.update'),
-                        onClick: () => update.downloadAndInstall()
+                // Found update, start downloading
+                setStatus('downloading')
+                let downloaded = 0
+                let total = 0
+
+                await update.downloadAndInstall((event) => {
+                    switch (event.event) {
+                        case 'Started':
+                            total = event.data.contentLength || 0
+                            break
+                        case 'Progress':
+                            downloaded += event.data.chunkLength
+                            if (total > 0) {
+                                setProgress(Math.round((downloaded / total) * 100))
+                            }
+                            break
                     }
+                })
+
+                setStatus('ready')
+                toast.success(t('update.ready_title', { defaultValue: 'Update Ready' }), {
+                    description: t('update.restart_desc', { defaultValue: 'Restart to apply update.' })
                 })
             } else {
                 toast.info(t('settings.advanced.core.latest'))
+                setStatus('idle')
             }
         } catch (e) {
             console.error(e)
             toast.error(t('settings.advanced.core.error'), {
                 description: String(e)
             })
-        } finally {
-            setChecking(false)
+            setStatus('idle')
         }
     }
 
     return (
         <button
             onClick={checkUpdate}
-            disabled={checking}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-all text-xs font-bold disabled:opacity-50"
+            disabled={status === 'checking' || status === 'downloading'}
+            className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-xl transition-all text-xs font-bold disabled:opacity-50 min-w-[120px] justify-center overflow-hidden",
+                status === 'ready'
+                    ? "bg-green-500/10 text-green-500 hover:bg-green-500/20"
+                    : "bg-primary/10 text-primary hover:bg-primary/20"
+            )}
         >
-            <RefreshCw size={14} className={checking ? "animate-spin" : ""} />
-            {checking ? t('settings.advanced.core.checking') : t('settings.advanced.core.check_update')}
+            <RefreshCw size={14} className={status === 'checking' || status === 'downloading' ? "animate-spin shrink-0" : "shrink-0"} />
+            <span className="truncate">
+                {status === 'checking' && t('settings.advanced.core.checking')}
+                {status === 'downloading' && `${t('settings.advanced.core.downloading', { defaultValue: 'Downloading' })} ${progress}%`}
+                {status === 'ready' && t('settings.advanced.core.restart', { defaultValue: 'Restart to Apply' })}
+                {status === 'idle' && t('settings.advanced.core.check_update')}
+            </span>
         </button>
     )
 }
@@ -640,10 +703,23 @@ function AdvancedSettings({ settings, update, clashApiPort }: AdvancedProps) {
 
 function AboutSection() {
     const [version, setVersion] = useState<string>("")
+    const [clicks, setClicks] = useState(0)
 
     useEffect(() => {
         getVersion().then(setVersion)
     }, [])
+
+    const handleTestUpdate = () => {
+        const newClicks = clicks + 1
+        setClicks(newClicks)
+        if (newClicks >= 5) {
+            setClicks(0)
+            import("@tauri-apps/api/event").then(({ emit }) => {
+                emit("update-available", "TEST-0.9.9")
+                toast.info("Simulating Auto Update: TEST-0.9.9 found")
+            })
+        }
+    }
 
     return (
         <div className="flex flex-col items-center justify-center py-10 gap-10">
@@ -658,7 +734,12 @@ function AboutSection() {
                 <h2 className="text-4xl font-extrabold tracking-tighter text-foreground">Tunnet</h2>
                 <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">Alpha Access</span>
-                    <span className="text-[10px] text-secondary font-mono uppercase tracking-widest">v{version}</span>
+                    <span
+                        onClick={handleTestUpdate}
+                        className="text-[10px] text-secondary font-mono uppercase tracking-widest cursor-pointer hover:text-primary transition-colors select-none"
+                    >
+                        v{version}
+                    </span>
                 </div>
             </div>
 

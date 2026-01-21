@@ -480,24 +480,53 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    // Listen for update available event
-    const unlistenUpdate = listen<string>("update-available", (event) => {
+    // Listen for update available event (Silent background update)
+    const unlistenUpdate = listen<string>("update-available", async (event) => {
       const version = event.payload
-      toast.info(t('settings.advanced.core.new'), {
-        description: `v${version} ${t('settings.advanced.core.update')}`,
-        action: {
-          label: t('settings.advanced.core.update'),
-          onClick: () => {
-            import("@tauri-apps/plugin-updater").then(async ({ check }) => {
-              const update = await check()
-              if (update) {
-                await update.downloadAndInstall()
-                await invoke("restart_app")
-              }
-            })
-          }
+      console.log("Auto-update detected version:", version);
+
+      // SIMULATION FOR TESTING
+      if (version.startsWith("TEST-")) {
+        const displayVer = version.replace("TEST-", "")
+        console.log("Simulating auto-update download for:", displayVer)
+
+        // Simulate lag
+        await new Promise(r => setTimeout(r, 2000))
+
+        toast.success(t('update.ready_title', { defaultValue: 'New Version Ready' }), {
+          description: t('update.ready_desc', { defaultValue: `v${displayVer} has been downloaded. Restart to apply.` }),
+          action: {
+            label: t('update.restart', { defaultValue: 'Restart' }),
+            onClick: () => {
+              toast.info("This is a simulation. App would restart now.")
+              // invoke("restart_app")
+            }
+          },
+          duration: Infinity,
+        })
+        return
+      }
+
+      try {
+        const { check } = await import("@tauri-apps/plugin-updater")
+        const update = await check()
+        if (update && update.version === version) {
+          // Silent download
+          await update.downloadAndInstall()
+
+          // Prompt to restart
+          toast.success(t('update.ready_title', { defaultValue: 'New Version Ready' }), {
+            description: t('update.ready_desc', { defaultValue: `v${version} has been downloaded. Restart to apply.` }),
+            action: {
+              label: t('update.restart', { defaultValue: 'Restart' }),
+              onClick: () => invoke("restart_app")
+            },
+            duration: Infinity, // Keep it open until user clicks or dismisses
+          })
         }
-      })
+      } catch (e) {
+        console.error("Auto-update failed:", e)
+      }
     })
 
     return () => {
