@@ -27,7 +27,6 @@ import { getFlagUrl, getCountryName, getFlagUrlFromCode, getCountryCode } from "
 import { NodeEditor, Node } from "@/components/dashboard/node-editor"
 import { ConfirmationModal } from "@/components/ui/confirmation-modal"
 import { AddNodeModal } from "@/components/dashboard/add-node-modal"
-import { InputModal } from "@/components/ui/input-modal"
 import { TrafficMonitor } from "@/components/dashboard/traffic-monitor"
 import { SearchDialog } from "@/components/dashboard/search-dialog"
 
@@ -1708,17 +1707,14 @@ export default function Home() {
           onConfirm={handleConfirmDeleteSubscription}
           onCancel={() => setDeleteSubscriptionConfirm(null)}
         />
-        <InputModal
+        <AddNodeModal
           isOpen={showAddSubscription}
           title={t('subscriptions.import')}
-          message={t('subscriptions.enter_url')}
-          confirmText={t('common.confirm', { defaultValue: 'Import' })}
-          cancelText={t('common.cancel', { defaultValue: 'Cancel' })}
-          onConfirm={(url) => {
+          onImport={(url) => {
             handleImport(url)
             setShowAddSubscription(false)
           }}
-          onCancel={() => setShowAddSubscription(false)}
+          onClose={() => setShowAddSubscription(false)}
         />
       </main>
     </div>

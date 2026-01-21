@@ -6,11 +6,12 @@ import { toast } from "sonner"
 interface AddNodeModalProps {
     isOpen: boolean
     onClose: () => void
-    onManual: () => void
+    onManual?: () => void
     onImport: (url: string) => void
+    title?: string
 }
 
-export function AddNodeModal({ isOpen, onClose, onManual, onImport }: AddNodeModalProps) {
+export function AddNodeModal({ isOpen, onClose, onManual, onImport, title }: AddNodeModalProps) {
     const { t } = useTranslation()
     const [urlInput, setUrlInput] = useState("")
 
@@ -58,7 +59,7 @@ export function AddNodeModal({ isOpen, onClose, onManual, onImport }: AddNodeMod
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="w-full max-w-md bg-surface border border-border-color rounded-3xl shadow-floating overflow-hidden flex flex-col scale-100 animate-in zoom-in-95 duration-300 ease-out">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-border-color bg-sidebar-bg">
-                    <h2 className="text-lg font-semibold text-text-primary">{t('add_connection', { defaultValue: "Add Connection" })}</h2>
+                    <h2 className="text-lg font-semibold text-text-primary">{title || t('add_connection', { defaultValue: "Add Connection" })}</h2>
                     <button
                         onClick={onClose}
                         className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-text-tertiary hover:text-text-primary transition-colors"
@@ -67,7 +68,7 @@ export function AddNodeModal({ isOpen, onClose, onManual, onImport }: AddNodeMod
                     </button>
                 </div>
 
-                <div className="p-8 grid grid-cols-2 gap-5">
+                <div className={cn("p-8 grid gap-5", onManual ? "grid-cols-2" : "grid-cols-1")}>
                     {/* Option 1: Clipboard */}
                     <button
                         onClick={handleClipboardImport}
@@ -82,20 +83,22 @@ export function AddNodeModal({ isOpen, onClose, onManual, onImport }: AddNodeMod
                     </button>
 
                     {/* Option 2: Manual */}
-                    <button
-                        onClick={() => {
-                            onClose()
-                            onManual()
-                        }}
-                        className="flex flex-col items-center justify-center gap-4 p-8 rounded-2xl bg-black/5 dark:bg-white/5 border border-border-color hover:bg-black/10 dark:hover:bg-white/10 hover:border-purple-500/50 transition-all group active:scale-95"
-                    >
-                        <div className="p-4 rounded-2xl bg-purple-500/10 text-purple-400 group-hover:bg-purple-500 group-hover:text-white transition-all duration-300">
-                            <Edit3 size={24} />
-                        </div>
-                        <span className="text-sm font-bold text-text-secondary group-hover:text-text-primary text-center">
-                            {t('manual_configuration', { defaultValue: "Manual Configuration" })}
-                        </span>
-                    </button>
+                    {onManual && (
+                        <button
+                            onClick={() => {
+                                onClose()
+                                onManual()
+                            }}
+                            className="flex flex-col items-center justify-center gap-4 p-8 rounded-2xl bg-black/5 dark:bg-white/5 border border-border-color hover:bg-black/10 dark:hover:bg-white/10 hover:border-purple-500/50 transition-all group active:scale-95"
+                        >
+                            <div className="p-4 rounded-2xl bg-purple-500/10 text-purple-400 group-hover:bg-purple-500 group-hover:text-white transition-all duration-300">
+                                <Edit3 size={24} />
+                            </div>
+                            <span className="text-sm font-bold text-text-secondary group-hover:text-text-primary text-center">
+                                {t('manual_configuration', { defaultValue: "Manual Configuration" })}
+                            </span>
+                        </button>
+                    )}
                 </div>
 
                 {/* URL Input Area */}
