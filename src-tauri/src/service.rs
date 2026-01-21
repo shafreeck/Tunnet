@@ -854,6 +854,126 @@ impl<R: Runtime> ProxyService<R> {
         Err(last_err)
     }
 
+    pub fn export_node_link(&self, node_id: String) -> Result<String, String> {
+        // 1. Load profiles to find the node
+        let profiles = self.manager.load_profiles().map_err(|e| e.to_string())?;
+        
+        for p in profiles {
+            if let Some(node) = p.nodes.iter().find(|n| n.id == node_id) {
+                return Ok(node.to_link());
+            }
+        }
+        
+        Err("Node not found".to_string())
+    }
+
+    pub fn export_profile_content(&self, profile_id: String, format: String) -> Result<String, String> {
+        let profiles = self.manager.load_profiles().map_err(|e| e.to_string())?;
+        let profile = profiles.iter().find(|p| p.id == profile_id).ok_or("Profile not found")?;
+
+        match format.as_str() {
+            "sip002" | "base64" => {
+                let mut links = String::new();
+                for node in &profile.nodes {
+                    let link = node.to_link();
+                    if !link.is_empty() {
+                        links.push_str(&link);
+                        links.push('\n');
+                    }
+                }
+                 use base64::{engine::general_purpose, Engine as _};
+                 let b64 = general_purpose::STANDARD.encode(links);
+                 Ok(b64)
+            }
+            "json" | "sing-box" => {
+                // Return just the nodes list or a full outbound config?
+                // For "Export Profile", usually users want the Node List in JSON format (Sing-box friendly).
+                // Let's return the nodes array directly for now.
+                serde_json::to_string_pretty(&profile.nodes).map_err(|e| e.to_string())
+            }
+            "yaml" | "clash" => {
+                Err("Clash export not implemented yet".to_string())
+            }
+            _ => Err("Unknown format".to_string())
+        }
+    }
+
+    pub fn export_node_content(&self, node_id: String, format: String) -> Result<String, String> {
+        let profiles = self.manager.load_profiles().map_err(|e| e.to_string())?;
+        let node = profiles.iter()
+            .flat_map(|p| &p.nodes)
+            .find(|n| n.id == node_id)
+            .ok_or("Node not found")?;
+
+        match format.as_str() {
+            "sip002" | "base64" => {
+                let link = node.to_link();
+                if link.is_empty() {
+                    return Err("Failed to generate link for node".to_string());
+                }
+                Ok(link)
+            }
+            "json" | "sing-box" => {
+                serde_json::to_string_pretty(&node).map_err(|e| e.to_string())
+            }
+            _ => Err("Unknown format".to_string())
+        }
+    }
+
+    // New Helper: Resolve all nodes for a group (System or User-defined)
+    fn resolve_group_nodes(&self, group_id: &str) -> Result<Vec<crate::profile::Node>, String> {
+        // 1. Get Group Definition (try persisted, then generate implicit/system ones if missing)
+        let groups = self.get_groups()?; 
+        let group = groups.iter().find(|g| g.id == group_id).ok_or("Group not found")?;
+
+        // 2. Get All Available Nodes
+        let profiles = self.manager.load_profiles().map_err(|e| e.to_string())?;
+        let mut all_nodes = Vec::new();
+        for p in profiles {
+            all_nodes.extend(p.nodes);
+        }
+
+        // 3. Filter Nodes based on Source
+        let member_nodes = match &group.source {
+            crate::profile::GroupSource::Static { node_ids } => {
+                all_nodes.into_iter().filter(|n| node_ids.contains(&n.id)).collect()
+            }
+            crate::profile::GroupSource::Filter { criteria } => {
+                let keywords = criteria.keywords.as_deref().unwrap_or(&[]);
+                all_nodes.into_iter().filter(|n| {
+                    if keywords.is_empty() { return true; }
+                     keywords.iter().any(|k| n.name.contains(k))
+                }).collect()
+            }
+        };
+
+        Ok(member_nodes)
+    }
+
+    pub fn export_group_content(&self, group_id: String, format: String) -> Result<String, String> {
+        let nodes = self.resolve_group_nodes(&group_id)?;
+
+        match format.as_str() {
+             "sip002" | "base64" => {
+                let mut links = String::new();
+                for node in nodes {
+                    let link = node.to_link();
+                    if !link.is_empty() {
+                        links.push_str(&link);
+                        links.push('\n');
+                    }
+                }
+                 use base64::{engine::general_purpose, Engine as _};
+                 let b64 = general_purpose::STANDARD.encode(links);
+                 Ok(b64)
+            }
+            "json" | "sing-box" => {
+                 serde_json::to_string_pretty(&nodes).map_err(|e| e.to_string())
+            }
+            _ => Err("Unknown format".to_string())
+        }
+    }
+
     fn ensure_clash_port(&self) -> Option<u16> {
         let mut port_lock = self.clash_api_port.lock().unwrap();
         if let Some(port) = *port_lock {

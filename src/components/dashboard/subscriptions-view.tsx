@@ -9,6 +9,8 @@ import { ConfirmationModal } from "@/components/ui/confirmation-modal"
 import { open } from "@tauri-apps/plugin-shell"
 import { invoke } from "@tauri-apps/api/core"
 import { toast } from "sonner"
+import { Share2 } from "lucide-react"
+import { ExportModal } from "@/components/dashboard/export-modal"
 
 export interface Subscription {
     id: string
@@ -76,6 +78,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
     const [sortBy, setSortBy] = useState<"name" | "usage" | "nodes" | "expiry">("name")
     const [showSortMenu, setShowSortMenu] = useState(false)
     const [isMac, setIsMac] = useState(false)
+    const [targetProfile, setTargetProfile] = useState<{ id: string, name: string } | null>(null)
 
     useEffect(() => {
         if (typeof navigator !== 'undefined') {
@@ -374,6 +377,13 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                                 <Edit2 size={14} />
                                             </button>
                                             <button
+                                                onClick={(e) => { e.stopPropagation(); setTargetProfile({ id: profile.id, name: profile.name }); }}
+                                                className="p-2 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-90"
+                                                title={t('export.tooltip', { defaultValue: 'Export / Share' })}
+                                            >
+                                                <Share2 size={14} />
+                                            </button>
+                                            <button
                                                 onClick={(e) => handleDeleteClick(profile.id, profile.name, e)}
                                                 className="p-2 text-text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all active:scale-90"
                                                 title={t('subscriptions.delete_tooltip')}
@@ -469,6 +479,16 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                 }}
                 onCancel={() => setProfileToDelete(null)}
             />
+
+            {targetProfile && (
+                <ExportModal
+                    isOpen={!!targetProfile}
+                    onClose={() => setTargetProfile(null)}
+                    targetId={targetProfile.id}
+                    targetName={targetProfile.name}
+                    targetType="profile"
+                />
+            )}
         </div >
     )
 }

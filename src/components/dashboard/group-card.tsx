@@ -1,6 +1,6 @@
 import React, { useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { Edit2, Trash2, Check, Zap, List, Play, MousePointerClick, Filter, Layers, MoreHorizontal, Target, Server, Activity, ArrowRightLeft, Globe } from "lucide-react"
+import { Edit2, Trash2, Check, Zap, List, Play, MousePointerClick, Filter, Layers, MoreHorizontal, Target, Server, Activity, ArrowRightLeft, Globe, Share2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getCountryName } from "@/lib/flags"
 
@@ -27,12 +27,13 @@ interface GroupCardProps {
     onDelete: (id: string) => void
     onActivate: (id: string) => void
     onSelectNode?: (group: Group) => void
+    onExport: (group: Group) => void
     t: (key: string, options?: any) => string
     nodeCount?: number
     allNodes: any[]
 }
 
-export function GroupCard({ group, isActive, onEdit, onDelete, onActivate, onSelectNode, t, nodeCount, allNodes }: GroupCardProps) {
+export function GroupCard({ group, isActive, onEdit, onDelete, onActivate, onSelectNode, onExport, t, nodeCount, allNodes }: GroupCardProps) {
     const { i18n } = useTranslation()
     const isAuto = group.group_type === "UrlTest"
     const isStatic = group.source.type === "Static"
@@ -192,6 +193,13 @@ export function GroupCard({ group, isActive, onEdit, onDelete, onActivate, onSel
                                 <List size={16} />
                             </button>
                         )}
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onExport(group); }}
+                            className="p-2 text-text-tertiary hover:text-primary hover:bg-black/5 dark:hover:bg-white/10 rounded-xl transition-colors"
+                            title={t('export.tooltip', { defaultValue: 'Export / Share' })}
+                        >
+                            <Share2 size={16} />
+                        </button>
                         {!group.id.includes(":") && (
                             <>
                                 <button

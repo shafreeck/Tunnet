@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from "react"
-import { ArrowUpDown, Filter, Play, Square, Plus, Pencil, Trash2, Globe, RotateCw, Search, Scroll, Pause, Copy, Zap, X, Target } from "lucide-react"
+import { ArrowUpDown, Filter, Play, Square, Plus, Pencil, Trash2, Globe, RotateCw, Search, Scroll, Pause, Copy, Zap, X, Target, Share2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
 import { useTranslation } from "react-i18next"
@@ -46,6 +46,7 @@ interface ServerListProps {
     onImport: (url: string) => Promise<void>
     onEdit: (node: Server | null) => void // null means add new
     onDelete: (id: string) => void
+    onExport?: (node: Server) => void
     showLogs: boolean
     setShowLogs: (show: boolean) => void
     logs: { local: string[], helper: string[] }
@@ -73,6 +74,7 @@ export function ServerList({
     onImport,
     onEdit,
     onDelete,
+    onExport,
     showLogs,
     setShowLogs,
     logs,
@@ -491,33 +493,22 @@ export function ServerList({
                             >
                                 {autoScroll ? <Scroll size={14} /> : <Pause size={14} />}
                             </button>
-
-                            <button onClick={handleCopyLogs} className="p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary hover:text-text-primary transition-colors" title="Copy Logs">
-                                <Copy size={14} />
-                            </button>
-
-                            <button onClick={onClearLogs} className="p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/10 text-text-secondary hover:text-red-500 transition-colors" title="Clear Logs">
-                                <Trash2 size={14} />
-                            </button>
                         </div>
                     )}
                 </div>
             )}
 
-            <div className="flex-1">
+            <div className="flex-1 overflow-y-auto p-2 sidebar-scroll">
                 {showLogs ? (
                     <LogViewer
-                        logs={logs[logSource]}
+                        logs={logSource === "local" ? logs.local : logs.helper}
                         onClear={onClearLogs}
-                        filter={logFilter}
+                        className="h-full rounded-xl border border-border-color bg-black/5 dark:bg-white/5 shadow-inner"
+                        filterText={logFilter}
                         autoScroll={autoScroll}
-                        className="h-[calc(100vh-180px)] border-none bg-transparent backdrop-blur-none"
                     />
                 ) : (
-                    <div className="space-y-3 pb-12">
-                        {/* Sentinel element to detect top of list */}
-                        <div ref={listTopRef} className="h-px w-full absolute -top-10 opacity-0 pointer-events-none" />
-
+                    <div className="space-y-1 pb-20">
                         {filteredAndSortedServers.map((server) => {
                             const isSelected = server.id === activeServerId
                             const isRunning = isSelected && isConnected
@@ -534,6 +525,7 @@ export function ServerList({
                                     onEdit={onEdit}
                                     onDelete={onDelete}
                                     onPing={onPing}
+                                    onExport={onExport}
                                     isAutoSelected={activeAutoNodeId === server.id || activeAutoNodeId === server.name}
                                     t={t}
                                     connectionState={connectionState}
@@ -560,13 +552,16 @@ interface ServerItemProps {
     onToggle: () => void
     onEdit: (server: Server) => void
     onDelete: (id: string) => void
+    onExport?: (server: Server) => void
     onPing?: (id: string) => void
     isAutoSelected?: boolean
     t: any
     isTestingLatency?: boolean
 }
 
-function ServerItem({ server, isSelected, isRunning, isLoading, connectionState, onClick, onToggle, onEdit, onDelete, onPing, isAutoSelected, t, isTestingLatency }: ServerItemProps) {
+function ServerItem({ server, isSelected, isRunning, isLoading, connectionState, onClick, onToggle, onEdit, onDelete, onExport, onPing, isAutoSelected, t, isTestingLatency }: ServerItemProps) {
+    // Debug log for missing export button
+    // console.log("ServerItem render:", server.name, "Has onExport:", !!onExport);
     return (
         <div
             onClick={onClick}
@@ -673,6 +668,15 @@ function ServerItem({ server, isSelected, isRunning, isLoading, connectionState,
                         >
                             <Pencil size={14} />
                         </button>
+                        {onExport && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onExport(server); }}
+                                className="p-1.5 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                                title={t('common.share_tooltip', { defaultValue: 'Share' })}
+                            >
+                                <Share2 size={14} />
+                            </button>
+                        )}
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();

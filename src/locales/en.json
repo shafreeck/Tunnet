@@ -18,7 +18,13 @@
     "common": {
         "confirm": "Confirm",
         "cancel": "Cancel",
-        "delete": "Delete"
+        "delete": "Delete",
+        "copied": "Copied to clipboard",
+        "copy_failed": "Failed to copy",
+        "scan_qr": "Scan QR Code",
+        "qr_too_long": "Data too long",
+        "use_copy": "Please use Copy Text",
+        "share_tooltip": "Share"
     },
     "delete_node_title": "Delete Node",
     "delete_node_message": "Are you sure you want to delete this connection? This action cannot be undone.",
@@ -472,5 +478,24 @@
         "short_id": "Short ID",
         "up_mbps": "Upload (Mbps)",
         "down_mbps": "Download (Mbps)"
+    },
+    "export": {
+        "title": "Export",
+        "format": "Format",
+        "action": "Action",
+        "copy_content": "Copy to Clipboard",
+        "copy_desc": "Copy the raw content",
+        "show_qr": "Show QR Code",
+        "qr_desc": "Display content as QR code",
+        "qr_too_long": "Content too long for QR code",
+        "save_file": "Save to File",
+        "save_desc": "Export content to a local file",
+        "saved_file": "File saved successfully",
+        "failed": "Export failed",
+        "tooltip": "Export / Share",
+        "type_links": "SIP002 / Links",
+        "type_json": "Sing-box JSON",
+        "filter_links": "Subscription Links",
+        "filter_json": "Sing-box Config"
     }
 }

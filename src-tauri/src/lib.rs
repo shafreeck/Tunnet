@@ -378,7 +378,9 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_updater::Builder::new().build());
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init());
 
     #[cfg(desktop)]
     {
@@ -702,7 +704,11 @@ pub fn run() {
             check_node_pings,
             get_group_status,
             refresh_geodata,
-            restart_app
+            restart_app,
+            get_node_link,
+            export_node_content,
+            export_profile_content,
+            export_group_content
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -798,6 +804,41 @@ async fn refresh_geodata(service: State<'_, ProxyService<tauri::Wry>>) -> Result
 #[tauri::command]
 fn restart_app(app: tauri::AppHandle) {
     app.restart();
+}
+
+#[tauri::command]
+async fn get_node_link(
+    service: State<'_, ProxyService<tauri::Wry>>,
+    id: String,
+) -> Result<String, String> {
+    service.export_node_link(id)
+}
+
+#[tauri::command]
+async fn export_profile_content(
+    service: State<'_, ProxyService<tauri::Wry>>,
+    id: String,
+    format: String,
+) -> Result<String, String> {
+    service.export_profile_content(id, format)
+}
+
+#[tauri::command]
+async fn export_group_content(
+    service: State<'_, ProxyService<tauri::Wry>>,
+    id: String,
+    format: String,
+) -> Result<String, String> {
+    service.export_group_content(id, format)
+}
+
+#[tauri::command]
+async fn export_node_content(
+    service: State<'_, ProxyService<tauri::Wry>>,
+    id: String,
+    format: String,
+) -> Result<String, String> {
+    service.export_node_content(id, format)
 }
 
 pub mod parsing_test_mod;

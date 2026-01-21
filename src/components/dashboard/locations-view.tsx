@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react"
 // @ts-ignore
 import { invoke } from "@tauri-apps/api/core"
-import { Search, RotateCcw, Map as MapIcon, LayoutGrid, Globe as GlobeIcon, Zap, X, Target, ArrowUpDown } from "lucide-react"
+import { Search, RotateCcw, Map as MapIcon, LayoutGrid, Globe as GlobeIcon, Zap, X, Target, ArrowUpDown, Share2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -12,6 +12,7 @@ import { getCountryName } from "@/lib/flags"
 import { LocationsMap } from "./locations-map"
 import { LocationGrid } from "./location-grid"
 import { ServerList } from "./server-list"
+import { ExportModal } from "./export-modal"
 
 interface LocationsViewProps {
     servers: any[]
@@ -54,6 +55,7 @@ export function LocationsView({
     const [sortBy, setSortBy] = useState<"name" | "ping">("ping")
     const [showSortMenu, setShowSortMenu] = useState(false)
     const [isMac, setIsMac] = useState(false)
+    const [exportTarget, setExportTarget] = useState<{ id: string, name: string, type: "profile" | "group" } | null>(null)
 
     useEffect(() => {
         if (typeof navigator !== 'undefined') {
@@ -330,6 +332,25 @@ export function LocationsView({
                                     <Target size={14} fill={isAutoActive ? "currentColor" : "none"} />
                                 </button>
 
+                                {/* Share / Export Group */}
+                                <button
+                                    onClick={() => {
+                                        const systemId = selectedCountryCode
+                                            ? `system:region:${selectedCountryCode.toUpperCase()}`
+                                            : "system:global"
+                                        const name = selectedCountryCode ? getCountryName(selectedCountryCode, i18n.language) : t('locations.all_regions')
+                                        setExportTarget({
+                                            id: systemId,
+                                            name: name,
+                                            type: "group"
+                                        })
+                                    }}
+                                    className="size-7 flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/10 rounded-lg text-text-secondary hover:text-primary transition-all active:scale-95"
+                                    title={t('common.share_tooltip', { defaultValue: 'Share' })}
+                                >
+                                    <Share2 size={14} />
+                                </button>
+
                                 {/* Sort Button & Menu */}
                                 <div className="relative">
                                     <button
@@ -409,6 +430,11 @@ export function LocationsView({
                             onDelete={onDelete}
                             onImport={onImport}
                             onPing={onPing}
+                            onExport={(node) => setExportTarget({
+                                id: node.id,
+                                name: node.name,
+                                type: "node"
+                            })}
                             showLogs={false} // Force logs hidden, though header is hidden anyway
                             setShowLogs={() => { }}
                             logs={{ local: [], helper: [] }}
@@ -423,6 +449,15 @@ export function LocationsView({
                     </div>
                 </div>
             </div>
+            {exportTarget && (
+                <ExportModal
+                    isOpen={!!exportTarget}
+                    onClose={() => setExportTarget(null)}
+                    targetId={exportTarget.id}
+                    targetName={exportTarget.name}
+                    targetType={exportTarget.type}
+                />
+            )}
         </div>
     )
 }

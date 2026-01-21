@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next"
 import { ConfirmationModal } from "@/components/ui/confirmation-modal"
 import { Switch } from "@/components/ui/switch"
 import { GroupCard } from "./group-card"
+import { ExportModal } from "@/components/dashboard/export-modal"
 
 export interface Group {
     id: string
@@ -70,6 +71,8 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
     // Deletion Modal State
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
     const [groupToDelete, setGroupToDelete] = useState<string | null>(null)
+
+    const [targetGroup, setTargetGroup] = useState<{ id: string, name: string } | null>(null)
     const [sortBy, setSortBy] = useState<"name" | "type">("name")
     const [showSortMenu, setShowSortMenu] = useState(false)
     const [isMac, setIsMac] = useState(false)
@@ -349,7 +352,9 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
                                             onEdit={() => openDialog(group)}
                                             onDelete={(id) => handleDeleteClick(id)}
                                             onActivate={(id) => handleActivateGroup(id)}
+
                                             onSelectNode={() => openSelectionDialog(group)}
+                                            onExport={() => setTargetGroup({ id: group.id, name: group.name })}
                                             t={t}
                                             allNodes={allNodes || []}
                                         />
@@ -375,7 +380,9 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
                                                 onEdit={() => openDialog(group)}
                                                 onDelete={(id) => handleDeleteClick(id)}
                                                 onActivate={(id) => handleActivateGroup(id)}
+
                                                 onSelectNode={() => openSelectionDialog(group)}
+                                                onExport={() => setTargetGroup({ id: group.id, name: group.name })}
                                                 t={t}
                                                 allNodes={allNodes || []}
                                             />
@@ -546,7 +553,18 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
                 onConfirm={confirmDelete}
                 onCancel={() => setIsDeleteModalOpen(false)}
                 isDanger
+
             />
+
+            {targetGroup && (
+                <ExportModal
+                    isOpen={!!targetGroup}
+                    onClose={() => setTargetGroup(null)}
+                    targetId={targetGroup.id}
+                    targetName={targetGroup.name}
+                    targetType="group"
+                />
+            )}
         </div>
     )
 }

@@ -17,6 +17,7 @@ import { Zap, RefreshCw, Edit2, Trash2, Target, ExternalLink, ArrowUpDown } from
 import { SettingsView } from "@/components/dashboard/settings-view"
 import { Header, ConnectionStatus } from "@/components/dashboard/connection-status"
 import { ServerList } from "@/components/dashboard/server-list"
+import { ExportModal } from "@/components/dashboard/export-modal"
 import { ProxiesView } from "@/components/dashboard/proxies-view"
 import { LogViewer } from "@/components/dashboard/log-viewer"
 import { WindowControls } from "@/components/ui/window-controls"
@@ -114,6 +115,7 @@ export default function Home() {
   const [subSortBy, setSubSortBy] = useState<"name" | "ping">("ping")
   const [showSubSortMenu, setShowSubSortMenu] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [exportTarget, setExportTarget] = useState<{ id: string, name: string, type: "profile" | "group" } | null>(null)
 
   // Sync derived state
   useEffect(() => {
@@ -1483,6 +1485,11 @@ export default function Home() {
                   hideHeader={true}
                   sortBy={subSortBy}
                   onSortByChange={setSubSortBy}
+                  onExport={(node) => setExportTarget({
+                    id: node.id,
+                    name: node.name,
+                    type: "node"
+                  })}
                 />
               </div>
             </div>
@@ -1594,6 +1601,11 @@ export default function Home() {
                 isLoading={isLoading}
                 connectionState={connectionState}
                 testingNodeIds={testingNodeIds}
+                onExport={(node) => setExportTarget({
+                  id: node.id,
+                  name: node.name,
+                  type: "node"
+                })}
               />
             </div>
           </div>
@@ -1677,6 +1689,15 @@ export default function Home() {
           }}
           onImport={handleImport}
         />
+        {exportTarget && (
+          <ExportModal
+            isOpen={!!exportTarget}
+            onClose={() => setExportTarget(null)}
+            targetId={exportTarget.id}
+            targetName={exportTarget.name}
+            targetType={exportTarget.type}
+          />
+        )}
         <ConfirmationModal
           isOpen={!!deleteSubscriptionConfirm}
           title={t('subscriptions.delete_title', { defaultValue: 'Confirm Delete' })}

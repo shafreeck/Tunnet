@@ -18,7 +18,13 @@
     "common": {
         "confirm": "确定",
         "cancel": "取消",
-        "delete": "删除"
+        "delete": "删除",
+        "copied": "已复制到剪贴板",
+        "copy_failed": "复制失败",
+        "scan_qr": "扫描二维码",
+        "qr_too_long": "数据过长",
+        "use_copy": "请使用复制文本",
+        "share_tooltip": "分享"
     },
     "delete_node_title": "删除节点",
     "delete_node_message": "确定要删除这个连接吗？此操作无法撤销。",
@@ -474,5 +480,24 @@
         "short_id": "Short ID",
         "up_mbps": "上行带宽 (Mbps)",
         "down_mbps": "下行带宽 (Mbps)"
+    },
+    "export": {
+        "title": "导出",
+        "format": "格式",
+        "action": "操作",
+        "copy_content": "复制到剪贴板",
+        "copy_desc": "复制原始配置内容",
+        "show_qr": "二维码分享",
+        "qr_desc": "将配置显示为二维码以供移动端扫描",
+        "qr_too_long": "内容过长，无法生成二维码",
+        "save_file": "保存到文件",
+        "save_desc": "将内容导出为本地文件",
+        "saved_file": "文件保存成功",
+        "failed": "导出失败",
+        "tooltip": "导出 / 分享",
+        "type_links": "SIP002 / 分享链接",
+        "type_json": "Sing-box JSON 配置",
+        "filter_links": "订阅链接文件",
+        "filter_json": "Sing-box 配置文件"
     }
 }

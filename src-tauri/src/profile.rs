@@ -77,6 +77,222 @@ pub struct Node {
     pub disable_sni: Option<bool>,
 }
 
+impl Node {
+    pub fn to_link(&self) -> String {
+        match self.protocol.as_str() {
+            "vmess" => self.to_vmess_link(),
+            "vless" => self.to_vless_link(),
+            "hysteria2" | "hy2" => self.to_hysteria2_link(),
+            "tuic" => self.to_tuic_link(),
+            "trojan" => self.to_trojan_link(),
+            "shadowsocks" | "ss" => self.to_ss_link(),
+            _ => String::new(),
+        }
+    }
+
+    fn to_vmess_link(&self) -> String {
+        let json = serde_json::json!({
+            "v": "2",
+            "ps": self.name,
+            "add": self.server,
+            "port": self.port,
+            "id": self.uuid,
+            "aid": "0",
+            "net": match self.network.as_deref() {
+                Some("ws") => "ws",
+                Some("grpc") => "grpc",
+                _ => "tcp",
+            },
+            "type": "none",
+            "host": self.host.clone().unwrap_or_default(),
+            "path": self.path.clone().unwrap_or_default(),
+            "tls": if self.tls { "tls" } else { "" },
+            "sni": self.sni.clone().unwrap_or_default(),
+            "alpn": self.alpn.as_ref().map(|v| v.join(",")).unwrap_or_default(),
+        });
+
+        // Compact JSON serialization
+        let json_str = serde_json::to_string(&json).unwrap_or_default();
+        use base64::{engine::general_purpose, Engine as _};
+        let b64 = general_purpose::STANDARD.encode(json_str);
+        format!("vmess://{}", b64)
+    }
+
+    fn to_vless_link(&self) -> String {
+        let uuid = self.uuid.clone().unwrap_or_default();
+        let mut query = Vec::new();
+
+        query.push(format!("type={}", self.network.as_deref().unwrap_or("tcp")));
+
+        if self.tls {
+            if self.public_key.is_some() {
+                query.push("security=reality".to_string());
+            } else {
+                query.push("security=tls".to_string());
+            }
+        } else {
+            query.push("security=none".to_string());
+        }
+
+        if let Some(flow) = &self.flow {
+            query.push(format!("flow={}", flow));
+        }
+        if let Some(path) = &self.path {
+            query.push(format!("path={}", urlencoding::encode(path)));
+        }
+        if let Some(host) = &self.host {
+            query.push(format!("host={}", urlencoding::encode(host)));
+        }
+        if let Some(sni) = &self.sni {
+            query.push(format!("sni={}", urlencoding::encode(sni)));
+        }
+        if let Some(fp) = &self.fingerprint {
+            query.push(format!("fp={}", fp));
+        }
+        if let Some(pbk) = &self.public_key {
+            query.push(format!("pbk={}", pbk));
+        }
+        if let Some(sid) = &self.short_id {
+            query.push(format!("sid={}", sid));
+        }
+        if let Some(alpn) = &self.alpn {
+            if !alpn.is_empty() {
+                query.push(format!("alpn={}", urlencoding::encode(&alpn.join(","))));
+            }
+        }
+
+        let query_str = query.join("&");
+        let name = urlencoding::encode(&self.name);
+
+        format!(
+            "vless://{}@{}:{}?{}#{}",
+            uuid, self.server, self.port, query_str, name
+        )
+    }
+
+    fn to_hysteria2_link(&self) -> String {
+        let auth = self
+            .password
+            .clone()
+            .or_else(|| self.uuid.clone())
+            .unwrap_or_default();
+        let mut query = Vec::new();
+
+        if self.insecure {
+            query.push("insecure=1".to_string());
+        }
+        if let Some(sni) = &self.sni {
+            query.push(format!("sni={}", urlencoding::encode(sni)));
+        }
+        if let Some(obfs) = &self.obfs {
+            query.push(format!("obfs={}", obfs));
+            if let Some(op) = &self.obfs_password {
+                query.push(format!("obfs-password={}", urlencoding::encode(op)));
+            }
+        }
+
+        let query_str = if query.is_empty() {
+            String::new()
+        } else {
+            format!("?{}", query.join("&"))
+        };
+        let name = urlencoding::encode(&self.name);
+
+        format!(
+            "hysteria2://{}@{}:{}{}#{}",
+            auth, self.server, self.port, query_str, name
+        )
+    }
+
+    fn to_tuic_link(&self) -> String {
+        let uuid = self.uuid.clone().unwrap_or_default();
+        let password = self.password.clone().unwrap_or_default();
+        let mut query = Vec::new();
+
+        if let Some(sni) = &self.sni {
+            query.push(format!("sni={}", urlencoding::encode(sni)));
+        }
+        if self.insecure {
+            query.push("allow_insecure=1".to_string());
+        }
+        if let Some(alpn) = &self.alpn {
+            if !alpn.is_empty() {
+                query.push(format!("alpn={}", urlencoding::encode(&alpn.join(","))));
+            }
+        }
+
+        let query_str = if query.is_empty() {
+            String::new()
+        } else {
+            format!("?{}", query.join("&"))
+        };
+        let name = urlencoding::encode(&self.name);
+
+        format!(
+            "tuic://{}:{}@{}:{}{}#{}",
+            uuid, password, self.server, self.port, query_str, name
+        )
+    }
+
+    fn to_trojan_link(&self) -> String {
+        let password = self
+            .password
+            .clone()
+            .or_else(|| self.uuid.clone())
+            .unwrap_or_default();
+        let mut query = Vec::new();
+
+        if let Some(sni) = &self.sni {
+            query.push(format!("sni={}", urlencoding::encode(sni)));
+        }
+        // Trojan-Go / standard extensions usually leverage 'type', 'host', 'path' roughly same as vless
+        if let Some(net) = &self.network {
+            query.push(format!("type={}", net));
+        }
+        if let Some(host) = &self.host {
+            query.push(format!("host={}", urlencoding::encode(host)));
+        }
+        if let Some(path) = &self.path {
+            query.push(format!("path={}", urlencoding::encode(path)));
+        }
+        if self.insecure {
+            query.push("allowInsecure=1".to_string());
+        }
+
+        let query_str = if query.is_empty() {
+            String::new()
+        } else {
+            format!("?{}", query.join("&"))
+        };
+        let name = urlencoding::encode(&self.name);
+
+        format!(
+            "trojan://{}@{}:{}{}#{}",
+            password, self.server, self.port, query_str, name
+        )
+    }
+
+    fn to_ss_link(&self) -> String {
+        // ss://method:password@host:port#name
+        // or base64(method:password@host:port)#name
+        let method = self
+            .cipher
+            .clone()
+            .unwrap_or("chacha20-ietf-poly1305".to_string());
+        let password = self.password.clone().unwrap_or_default();
+        let userinfo = format!("{}:{}", method, password);
+
+        use base64::{engine::general_purpose, Engine as _};
+        let b64_userinfo = general_purpose::URL_SAFE_NO_PAD.encode(&userinfo); // SIP002 uses UrlSafe
+
+        let name = urlencoding::encode(&self.name);
+        format!(
+            "ss://{}@{}:{}#{}",
+            b64_userinfo, self.server, self.port, name
+        )
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub enum GroupType {
     Selector,

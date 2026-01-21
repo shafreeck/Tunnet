@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react"
-import { X, Save, Check, ChevronDown, ChevronRight } from "lucide-react"
+import { X, Save, Check, ChevronDown, ChevronRight, Share2, Copy, QrCode } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { invoke } from "@tauri-apps/api/core"
+import { writeText } from "@tauri-apps/plugin-clipboard-manager"
+import { toast } from "sonner"
+import { QRModal } from "@/components/ui/qr-modal"
 
 export interface Node {
     id: string
@@ -45,6 +49,7 @@ const PROTOCOLS = [
 export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorProps) {
     const { t } = useTranslation()
     const [showAdvanced, setShowAdvanced] = useState(false)
+    const [qrValue, setQrValue] = useState<string>("")
     const [node, setNode] = useState<Node>({
         id: "",
         name: "New Node",
@@ -59,6 +64,35 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
         host: "",
         insecure: false,
     })
+
+    const handleShare = async (mode: 'copy' | 'qr') => {
+        try {
+            // We need to save the node first or at least convert current state to a link
+            // But get_node_link relies on finding the node in backend profiles which might not be saved yet if "New Node"
+            // If it is an existing node (initialNode exists), we can try specific logic.
+            // BETTER: If we want to share *current edits*, we need backend helper `generate_link_from_node_struct`.
+            // BUT: Plan says `get_node_link(id)`. 
+            // LIMITATION: Only saved nodes can be shared for now to keep it simple as per plan.
+            // OR we assume we only enable Share button if it's an existing node.
+
+            if (!initialNode?.id) {
+                toast.error(t('node_editor.save_first_to_share', { defaultValue: "Please save the node first to share" }))
+                return
+            }
+
+            const link = await invoke<string>('get_node_link', { id: initialNode.id })
+
+            if (mode === 'copy') {
+                await writeText(link)
+                toast.success(t('common.copied_link', { defaultValue: "Link copied to clipboard" }))
+            } else {
+                setQrValue(link)
+            }
+        } catch (e) {
+            console.error(e)
+            toast.error(t('common.share_failed', { defaultValue: "Failed to generate link" }))
+        }
+    }
 
     useEffect(() => {
         if (initialNode) {
@@ -416,24 +450,54 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
                 </div>
 
                 {/* Footer */}
-                <div className="p-6 border-t border-border-color bg-sidebar-bg flex items-center justify-end gap-3 shrink-0">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
-                    >
-                        {t('node_editor.cancel')}
-                    </button>
-                    <button
-                        type="submit"
-                        form="node-form"
-                        className="flex items-center gap-2 px-6 py-2 bg-primary hover:bg-primary/90 text-white text-sm font-medium rounded-xl shadow-lg shadow-primary/20 transition-all active:scale-95"
-                    >
-                        <Save size={16} />
-                        {t('node_editor.save_node')}
-                    </button>
+                <div className="p-6 border-t border-border-color bg-sidebar-bg flex items-center justify-between shrink-0">
+                    <div className="flex gap-2">
+                        {initialNode && (
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => handleShare('copy')}
+                                    className="p-2 text-text-secondary hover:text-primary transition-colors rounded-lg hover:bg-black/5 dark:hover:bg-white/5"
+                                    title={t('common.copy_link', { defaultValue: "Copy Link" })}
+                                >
+                                    <Copy size={18} />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleShare('qr')}
+                                    className="p-2 text-text-secondary hover:text-primary transition-colors rounded-lg hover:bg-black/5 dark:hover:bg-white/5"
+                                    title={t('common.qr_code', { defaultValue: "QR Code" })}
+                                >
+                                    <QrCode size={18} />
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex gap-3">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
+                        >
+                            {t('node_editor.cancel')}
+                        </button>
+                        <button
+                            type="submit"
+                            form="node-form"
+                            className="flex items-center gap-2 px-6 py-2 bg-primary hover:bg-primary/90 text-white text-sm font-medium rounded-xl shadow-lg shadow-primary/20 transition-all active:scale-95"
+                        >
+                            <Save size={16} />
+                            {t('node_editor.save_node')}
+                        </button>
+                    </div>
                 </div>
             </div>
+
+            <QRModal
+                isOpen={!!qrValue}
+                onClose={() => setQrValue("")}
+                value={qrValue}
+            />
         </div>
     )
 }
