@@ -181,6 +181,8 @@ export default function TrayPage() {
         status.node ||
         nodes[0]
 
+    const [isLatencyTesting, setIsLatencyTesting] = useState(false)
+
     const checkLatency = useCallback(() => {
         const nodeId = activeNode?.id
         if (!nodeId) {
@@ -196,10 +198,12 @@ export default function TrayPage() {
         }
 
         setLatency(null)
+        setIsLatencyTesting(true)
 
         invoke<number>("url_test", { nodeId })
             .then(lat => setLatency(lat))
             .catch(e => console.error("Latency test failed", e))
+            .finally(() => setIsLatencyTesting(false))
     }, [activeNode])
 
     useEffect(() => {
@@ -511,13 +515,19 @@ export default function TrayPage() {
                                 </div>
                                 <button
                                     onClick={checkLatency}
+                                    disabled={isLatencyTesting}
                                     className={cn(
-                                        "text-[11px] font-mono font-bold px-2 py-1 rounded-lg bg-black/5 dark:bg-white/5 transition-all hover:bg-black/10 dark:hover:bg-white/10 active:scale-95 cursor-pointer shrink-0",
-                                        getLatencyColor(latency)
+                                        "text-[11px] font-mono font-bold px-2 py-1 rounded-lg bg-black/5 dark:bg-white/5 transition-all hover:bg-black/10 dark:hover:bg-white/10 active:scale-95 cursor-pointer shrink-0 min-w-[52px] flex items-center justify-center",
+                                        !isLatencyTesting && getLatencyColor(latency),
+                                        isLatencyTesting && "cursor-wait opacity-70"
                                     )}
                                     title="Click to re-test latency"
                                 >
-                                    {formatLatency(latency)}
+                                    {isLatencyTesting ? (
+                                        <Loader2 size={12} className="animate-spin text-text-secondary" />
+                                    ) : (
+                                        formatLatency(latency)
+                                    )}
                                 </button>
                             </div>
 
