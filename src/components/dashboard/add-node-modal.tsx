@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { X, Clipboard, Link, Plus, ScanLine, Edit3 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 interface AddNodeModalProps {
     isOpen: boolean
