@@ -276,12 +276,12 @@ export function ServerList({
     return (
         <div className="flex-1 flex flex-col min-h-0 relative">
             {!hideHeader && (
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 mt-2 px-1 shrink-0 sticky top-0 bg-sidebar-bg backdrop-blur-xl z-20 py-2 sm:py-2 -mx-1 rounded-t-xl border-b border-border-color gap-3 sm:gap-0">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2.5 mt-2 px-1 shrink-0 sticky top-0 bg-sidebar-bg backdrop-blur-xl z-20 py-2 sm:py-2 -mx-1 rounded-t-xl border-b border-border-color gap-3 sm:gap-0">
                     <div className="flex items-center gap-3 md:gap-6 w-full sm:w-auto">
                         <button
                             onClick={() => setShowLogs(false)}
                             className={cn(
-                                "text-[10px] font-bold uppercase tracking-widest pl-1 transition-colors",
+                                "text-xs font-bold uppercase tracking-widest pl-1 transition-colors",
                                 !showLogs ? "text-text-primary" : "text-text-tertiary hover:text-text-primary"
                             )}
                         >
@@ -316,7 +316,7 @@ export function ServerList({
                         <button
                             onClick={() => setShowLogs(true)}
                             className={cn(
-                                "flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors",
+                                "flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest transition-colors",
                                 showLogs ? "text-text-primary" : "text-text-tertiary hover:text-text-primary"
                             )}
                         >
