@@ -43,7 +43,7 @@ interface ServerListProps {
     isConnected: boolean
     onSelect: (id: string) => void
     onToggle: (id: string) => void
-    onImport: (url: string) => Promise<void>
+    onImport: (url: string, name?: string) => Promise<void>
     onEdit: (node: Server | null) => void // null means add new
     onDelete: (id: string) => void
     onExport?: (node: Server) => void

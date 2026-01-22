@@ -93,6 +93,13 @@ impl<R: Runtime> CoreManager<R> {
                 .await
                 .map_err(|e| e.to_string())?;
 
+            if !res.status().is_success() {
+                return Err(format!(
+                    "Subscription server returned error: {}",
+                    res.status()
+                ));
+            }
+
             let mut profile = crate::profile::Profile {
                 id: uuid::Uuid::new_v4().to_string(),
                 name: name.unwrap_or("New Subscription".to_string()),

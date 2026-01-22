@@ -325,7 +325,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                         </div>
 
                                         {/* Action Buttons - Animated width to give space to title when hidden */}
-                                        <div className="flex items-center gap-1 transition-all duration-300 max-w-0 group-hover:max-w-[160px] overflow-hidden opacity-0 group-hover:opacity-100 shrink-0">
+                                        <div className="flex items-center gap-1 transition-all duration-300 max-w-0 group-hover:max-w-[220px] overflow-hidden opacity-0 group-hover:opacity-100 shrink-0">
                                             {profile.url && (() => {
                                                 const isTesting = profile.nodes.some(n => testingNodeIds.includes(n.id));
                                                 return (

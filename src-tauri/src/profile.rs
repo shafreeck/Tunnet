@@ -540,7 +540,6 @@ where
 pub mod parser {
     use super::*;
     use base64::{engine::general_purpose, Engine as _};
-    use log::warn;
     use uuid::Uuid;
 
     #[derive(Debug, Deserialize)]
@@ -593,149 +592,161 @@ pub mod parser {
     }
 
     pub fn parse_subscription(content: &str) -> Vec<Node> {
-        let content = content.trim();
+        let mut content = content.trim();
         if content.is_empty() {
             return vec![];
         }
 
-        // 0. Try Parsing as our own exported JSON format (Node list or single Node)
-        if content.starts_with('[') || content.starts_with('{') {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(content) {
-                if let Some(arr) = v.as_array() {
-                    let mut nodes = Vec::new();
-                    for val in arr {
-                        if let Ok(mut node) = serde_json::from_value::<Node>(val.clone()) {
-                            node.id = Uuid::new_v4().to_string();
-                            node.location = None;
-                            nodes.push(node);
-                        }
-                    }
-                    if !nodes.is_empty() {
-                        return nodes;
-                    }
-                } else if let Ok(mut node) = serde_json::from_value::<Node>(v.clone()) {
-                    // It's a single node object
-                    node.id = Uuid::new_v4().to_string();
-                    node.location = None;
-                    return vec![node];
-                }
-            }
+        // Remove UTF-8 BOM if present
+        if content.as_bytes().starts_with(b"\xef\xbb\xbf") {
+            content = &content[3..];
         }
 
-        if content.starts_with('{') {
-            // First check if it's a sing-box JSON with "outbounds"
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(content) {
-                if let Some(outbounds) = v.get("outbounds").and_then(|o| o.as_array()) {
-                    let mut nodes = Vec::new();
-                    for o in outbounds {
-                        let tag = o.get("tag").and_then(|t| t.as_str()).unwrap_or("unnamed");
-                        let protocol = o.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                        let server = o.get("server").and_then(|s| s.as_str()).unwrap_or("");
-                        let port =
-                            o.get("server_port").and_then(|p| p.as_u64()).unwrap_or(0) as u16;
-
-                        if server.is_empty()
-                            || protocol.is_empty()
-                            || protocol == "direct"
-                            || protocol == "block"
-                            || protocol == "dns"
-                        {
-                            continue;
-                        }
-
-                        nodes.push(Node {
-                            id: Uuid::new_v4().to_string(),
-                            name: tag.to_string(),
-                            protocol: protocol.to_string(),
-                            server: server.to_string(),
-                            port,
-                            uuid: o
-                                .get("uuid")
-                                .and_then(|u| u.as_str())
-                                .map(|s| s.to_string()),
-                            cipher: o
-                                .get("method")
-                                .and_then(|m| m.as_str())
-                                .map(|s| s.to_string()),
-                            password: o
-                                .get("password")
-                                .and_then(|p| p.as_str())
-                                .map(|s| s.to_string()),
-                            tls: o.get("tls").is_some(),
-                            network: o
-                                .get("transport")
-                                .and_then(|t| t.get("type"))
-                                .and_then(|t| t.as_str())
-                                .map(|s| s.to_string()),
-                            path: o
-                                .get("transport")
-                                .and_then(|t| t.get("path"))
-                                .and_then(|p| p.as_str())
-                                .map(|s| s.to_string()),
-                            host: o
-                                .get("transport")
-                                .and_then(|t| t.get("headers"))
-                                .and_then(|h| h.get("Host"))
-                                .and_then(|h| h.as_str())
-                                .map(|s| s.to_string()),
-                            location: None,
-                            flow: o
-                                .get("flow")
-                                .and_then(|f| f.as_str())
-                                .map(|s| s.to_string()),
-                            alpn: o
-                                .get("tls")
-                                .and_then(|t| t.get("alpn"))
-                                .and_then(|a| a.as_array())
-                                .map(|arr| {
-                                    arr.iter()
-                                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                        .collect()
-                                }),
-                            insecure: o
-                                .get("tls")
-                                .and_then(|t| t.get("insecure"))
-                                .and_then(|i| i.as_bool())
-                                .unwrap_or(false),
-                            sni: o
-                                .get("tls")
-                                .and_then(|t| t.get("server_name"))
-                                .and_then(|s| s.as_str())
-                                .map(|s| s.to_string()),
-                            disable_sni: o
-                                .get("tls")
-                                .and_then(|t| t.get("disable_sni"))
-                                .and_then(|d| d.as_bool()),
-                            public_key: o
-                                .get("tls")
-                                .and_then(|t| t.get("reality"))
-                                .and_then(|r| r.get("public_key"))
-                                .and_then(|p| p.as_str())
-                                .map(|s| s.to_string()),
-                            short_id: o
-                                .get("tls")
-                                .and_then(|t| t.get("reality"))
-                                .and_then(|r| r.get("short_id"))
-                                .and_then(|s| s.as_str())
-                                .map(|s| s.to_string()),
-                            fingerprint: o
-                                .get("tls")
-                                .and_then(|t| t.get("utls"))
-                                .and_then(|u| u.get("fingerprint"))
-                                .and_then(|f| f.as_str())
-                                .map(|s| s.to_string()),
-                            up: None,
-                            down: None,
-                            obfs: None,
-                            obfs_password: None,
-                            ping: None,
-                            packet_encoding: None,
-                        });
-                    }
-                    if !nodes.is_empty() {
-                        return nodes;
+        // 0. Try Parsing as JSON directly
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(content) {
+            // Case A: A list of nodes (our own format)
+            if let Some(arr) = v.as_array() {
+                let mut nodes = Vec::new();
+                for val in arr {
+                    if let Ok(mut node) = serde_json::from_value::<Node>(val.clone()) {
+                        node.id = Uuid::new_v4().to_string();
+                        node.location = None;
+                        nodes.push(node);
                     }
                 }
+                if !nodes.is_empty() {
+                    return nodes;
+                }
+            }
+
+            // Case B: A sing-box config object
+            if let Some(outbounds) = v.get("outbounds").and_then(|o| o.as_array()) {
+                let mut nodes = Vec::new();
+                for o in outbounds {
+                    let tag = o.get("tag").and_then(|t| t.as_str()).unwrap_or("unnamed");
+                    let protocol = o.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                    let server = o.get("server").and_then(|s| s.as_str()).unwrap_or("");
+
+                    // Prioritize server_port (sing-box standard) but fallback to port
+                    let port = o
+                        .get("server_port")
+                        .or(o.get("port"))
+                        .and_then(|p| p.as_u64())
+                        .unwrap_or(0) as u16;
+
+                    if protocol.is_empty()
+                        || protocol == "direct"
+                        || protocol == "block"
+                        || protocol == "dns"
+                        || protocol == "selector"
+                        || protocol == "urltest"
+                    {
+                        continue;
+                    }
+
+                    // Some protocols like shadowsocks might use 'port' instead of 'server_port'
+                    // but most sing-box configs use 'server_port'.
+                    // If both are missing but it has a server, it might be an issue.
+                    if server.is_empty() && protocol != "direct" {
+                        continue;
+                    }
+
+                    nodes.push(Node {
+                        id: Uuid::new_v4().to_string(),
+                        name: tag.to_string(),
+                        protocol: protocol.to_string(),
+                        server: server.to_string(),
+                        port,
+                        uuid: o
+                            .get("uuid")
+                            .and_then(|u| u.as_str())
+                            .map(|s| s.to_string()),
+                        cipher: o
+                            .get("method")
+                            .or(o.get("cipher"))
+                            .and_then(|m| m.as_str())
+                            .map(|s| s.to_string()),
+                        password: o
+                            .get("password")
+                            .and_then(|p| p.as_str())
+                            .map(|s| s.to_string()),
+                        tls: o.get("tls").is_some(),
+                        network: o
+                            .get("transport")
+                            .and_then(|t| t.get("type"))
+                            .and_then(|t| t.as_str())
+                            .map(|s| s.to_string()),
+                        path: o
+                            .get("transport")
+                            .and_then(|t| t.get("path"))
+                            .and_then(|p| p.as_str())
+                            .map(|s| s.to_string()),
+                        host: o
+                            .get("transport")
+                            .and_then(|t| t.get("headers"))
+                            .and_then(|h| h.get("Host"))
+                            .and_then(|h| h.as_str())
+                            .map(|s| s.to_string()),
+                        location: None,
+                        flow: o
+                            .get("flow")
+                            .and_then(|f| f.as_str())
+                            .map(|s| s.to_string()),
+                        alpn: o
+                            .get("tls")
+                            .and_then(|t| t.get("alpn"))
+                            .and_then(|a| a.as_array())
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                    .collect()
+                            }),
+                        insecure: o
+                            .get("tls")
+                            .and_then(|t| t.get("insecure"))
+                            .and_then(|i| i.as_bool())
+                            .unwrap_or(false),
+                        sni: o
+                            .get("tls")
+                            .and_then(|t| t.get("server_name"))
+                            .and_then(|s| s.as_str())
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.to_string()),
+                        disable_sni: o
+                            .get("tls")
+                            .and_then(|t| t.get("disable_sni"))
+                            .and_then(|d| d.as_bool()),
+                        public_key: o
+                            .get("tls")
+                            .and_then(|t| t.get("reality"))
+                            .and_then(|r| r.get("public_key"))
+                            .and_then(|p| p.as_str())
+                            .map(|s| s.to_string()),
+                        short_id: o
+                            .get("tls")
+                            .and_then(|t| t.get("reality"))
+                            .and_then(|r| r.get("short_id"))
+                            .and_then(|s| s.as_str())
+                            .map(|s| s.to_string()),
+                        fingerprint: o
+                            .get("tls")
+                            .and_then(|t| t.get("utls"))
+                            .and_then(|u| u.get("fingerprint"))
+                            .and_then(|f| f.as_str())
+                            .map(|s| s.to_string()),
+                        ..Default::default()
+                    });
+                }
+                if !nodes.is_empty() {
+                    return nodes;
+                }
+            }
+
+            // Case C: A single node object
+            if let Ok(mut node) = serde_json::from_value::<Node>(v.clone()) {
+                node.id = Uuid::new_v4().to_string();
+                node.location = None;
+                return vec![node];
             }
         }
 
@@ -744,7 +755,7 @@ pub mod parser {
             if let Some(proxies) = clash_cfg.proxies {
                 let mut nodes = Vec::new();
                 for p in proxies {
-                    let mut node = Node {
+                    nodes.push(Node {
                         id: Uuid::new_v4().to_string(),
                         name: p.name,
                         protocol: p.proxy_type.to_lowercase(),
@@ -755,45 +766,9 @@ pub mod parser {
                         password: p.password,
                         tls: p.tls.unwrap_or(false),
                         network: p.network,
-                        path: None,
-                        host: None,
-                        location: None,
-                        flow: None,
-                        alpn: None,
                         insecure: p.skip_cert_verify.unwrap_or(false),
-                        sni: None,
-                        public_key: None,
-                        short_id: None,
-                        fingerprint: None,
-                        up: None,
-                        down: None,
-                        obfs: None,
-                        obfs_password: None,
-                        ping: None,
-                        packet_encoding: None,
-                        disable_sni: None,
-                    };
-
-                    // Map specific fields
-                    if node.protocol == "vmess" {
-                        if let Some(ws) = p.ws_opts {
-                            if let Some(path) = ws.path {
-                                node.path = Some(path);
-                            }
-                            if let Some(headers) = ws.headers {
-                                if let Some(host) = headers.get("Host") {
-                                    node.host = Some(host.clone());
-                                }
-                            }
-                        }
-                        if node.path.is_none() {
-                            node.path = p.ws_path;
-                        }
-                    } else if node.protocol == "ss" || node.protocol == "shadowsocks" {
-                        node.protocol = "shadowsocks".to_string();
-                    }
-
-                    nodes.push(node);
+                        ..Default::default()
+                    });
                 }
                 if !nodes.is_empty() {
                     return nodes;
@@ -801,43 +776,58 @@ pub mod parser {
             }
         }
 
+        // 2. Try Base64 decoding (many formats are base64 encoded lists of links or JSON)
+        let mut decoded_text = None;
+
+        let engines = [
+            general_purpose::STANDARD,
+            general_purpose::URL_SAFE,
+            general_purpose::STANDARD_NO_PAD,
+            general_purpose::URL_SAFE_NO_PAD,
+        ];
+
+        for engine in engines {
+            if let Ok(bytes) = engine.decode(content.replace(|c: char| c.is_whitespace(), "")) {
+                if let Ok(text) = String::from_utf8(bytes) {
+                    decoded_text = Some(text);
+                    break;
+                }
+            }
+        }
+
+        if let Some(text) = decoded_text {
+            // If decoded text looks like JSON, recurse once to parse it
+            let trimmed = text.trim();
+            if trimmed.starts_with('{') || trimmed.starts_with('[') {
+                let nodes = parse_subscription(trimmed);
+                if !nodes.is_empty() {
+                    return nodes;
+                }
+            }
+
+            // Otherwise treat as line-separated links
+            let mut nodes = Vec::new();
+            for line in text.lines() {
+                let line = line.trim();
+                if !line.is_empty() {
+                    if let Some(node) = parse_link(line) {
+                        nodes.push(node);
+                    }
+                }
+            }
+            if !nodes.is_empty() {
+                return nodes;
+            }
+        }
+
+        // 3. Last fallback: treat as plaintext line-separated links
         let mut nodes = Vec::new();
-        // 1. Try Base64 decode content first (SIP002 format often is base64 encoded list)
-        let decoded = match general_purpose::STANDARD.decode(content.trim()) {
-            Ok(bytes) => String::from_utf8_lossy(&bytes).to_string(),
-            Err(_) => content.to_string(), // Maybe plaintext line separated
-        };
-
-        for line in decoded.lines() {
+        for line in content.lines() {
             let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-
-            if let Some(node) = parse_link(line) {
-                nodes.push(node);
-            }
-        }
-        if !nodes.is_empty() {
-            return nodes;
-        }
-
-        // 1. Try Base64 decode content first (SIP002 format often is base64 encoded list)
-        let decoded = match general_purpose::STANDARD.decode(content.trim()) {
-            Ok(bytes) => String::from_utf8_lossy(&bytes).to_string(),
-            Err(_) => content.to_string(), // Maybe plaintext line separated
-        };
-
-        for line in decoded.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-
-            if let Some(node) = parse_link(line) {
-                nodes.push(node);
-            } else {
-                warn!("parse_link failed for line: {}", line);
+            if !line.is_empty() {
+                if let Some(node) = parse_link(line) {
+                    nodes.push(node);
+                }
             }
         }
 

@@ -1,6 +1,6 @@
 "use client" // Ensure this is client component for hooks
 
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { listen, emit } from "@tauri-apps/api/event"
 import { useTranslation } from "react-i18next"
@@ -13,7 +13,7 @@ import { SubscriptionsView, EditSubscriptionModal, Subscription } from "@/compon
 import { RulesView } from "@/components/dashboard/rules-view"
 import { open } from "@tauri-apps/plugin-shell"
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link"
-import { Zap, RefreshCw, Edit2, Trash2, Target, ExternalLink, ArrowUpDown } from "lucide-react"
+import { Zap, RefreshCw, Edit2, Trash2, Target, ExternalLink, ArrowUpDown, Upload } from "lucide-react"
 import { SettingsView } from "@/components/dashboard/settings-view"
 import { Header, ConnectionStatus } from "@/components/dashboard/connection-status"
 import { ServerList } from "@/components/dashboard/server-list"
@@ -115,6 +115,8 @@ export default function Home() {
   const [showSubSortMenu, setShowSubSortMenu] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [exportTarget, setExportTarget] = useState<{ id: string, name: string, type: "node" | "profile" | "group" } | null>(null)
+  const [isWindowDragging, setIsWindowDragging] = useState(false)
+
 
   // Sync derived state
   useEffect(() => {
@@ -556,7 +558,7 @@ export default function Home() {
   const connectionDetailsRef = useRef(connectionDetails)
   useEffect(() => { connectionDetailsRef.current = connectionDetails }, [connectionDetails])
 
-  const fetchProfiles = (checkPing = false) => {
+  const fetchProfiles = useCallback((checkPing = false) => {
     invoke("get_profiles").then((profiles: any) => {
       setProfiles(profiles.reverse()) // Show newest first
 
@@ -602,7 +604,7 @@ export default function Home() {
         checkLatency(allNodes, true)
       }
     }).catch(console.error)
-  }
+  }, []) // updateServersState is now stable
 
   const [testingNodeIds, setTestingNodeIds] = useState<string[]>([])
 
@@ -630,7 +632,7 @@ export default function Home() {
   }
 
   // Helper to map backend nodes to UI servers
-  const updateServersState = (nodes: any[]) => {
+  const updateServersState = useCallback((nodes: any[]) => {
     const safeNodes = Array.isArray(nodes) ? nodes : [];
     const mapped = safeNodes.map((node: any) => {
       // Resolve location info: Try explicit location first. 
@@ -654,7 +656,7 @@ export default function Home() {
       }
     })
     setServers(mapped)
-  }
+  }, [])
 
   // Persist preferences
   useEffect(() => {
@@ -674,53 +676,107 @@ export default function Home() {
   // Import State
   const [isImporting, setIsImporting] = useState(false)
 
-  const handleImport = async (url: string) => {
-    if (!url) return
-    setIsImporting(true)
-    try {
-      // 1. Snapshot existing profiles to identify the new one later (Wait, we get ID now!)
-      // No need for snapshotting anymore.
+  const handleImport = useMemo(() => {
+    return async (url: string, name?: string) => {
+      if (!url) return
+      setIsImporting(true)
+      try {
+        // 2. Perform Import
+        // Backend now returns the new Profile ID string
+        const newProfileId: string = await invoke("import_subscription", { url, name: name || null })
 
-      // 2. Perform Import
-      // Backend now returns the new Profile ID string
-      const newProfileId: string = await invoke("import_subscription", { url, name: null })
+        // 3. update UI immediately to show the new card
+        const postProfiles: any[] = await invoke("get_profiles")
+        // Reverse to show newest at top (backend appends, so reverse order is correct)
+        setProfiles(postProfiles.reverse())
 
-      // 3. update UI immediately to show the new card
-      const postProfiles: any[] = await invoke("get_profiles")
-      // Reverse to show newest at top (backend appends, so reverse order is correct)
-      setProfiles(postProfiles.reverse())
+        // Flatten nodes for server list immediately
+        const allNodes = postProfiles.flatMap((p: any) => p.nodes)
+        updateServersState(allNodes)
 
-      // Flatten nodes for server list immediately
-      const allNodes = postProfiles.flatMap((p: any) => p.nodes)
-      updateServersState(allNodes)
+        toast.success(t('toast.import_success'))
+        setIsImporting(false) // Stop loading animation immediately
+        setShowAddModal(false)
+        setShowAddSubscription(false)
 
-      toast.success(t('toast.import_success'))
-      setIsImporting(false) // Stop loading animation immediately
-
-      // 4. Find the NEW profile and probe its nodes
-      const targetProfile = postProfiles.find(p => p.id === newProfileId)
-      if (targetProfile && targetProfile.nodes) {
-        const ids = targetProfile.nodes.map((n: any) => n.id)
-        if (ids.length > 0) {
-          // Run in background, refresh UI when done
-          // NO AWAIT here to ensure UI is unblocked
-          invoke("check_node_locations", { nodeIds: ids }).then(() => {
-            // Re-fetch profiles to get the updated location data
-            fetchProfiles()
-          }).catch(e => console.error("Background probe failed:", e))
+        // 4. Find the NEW profile and probe its nodes
+        const targetProfile = postProfiles.find(p => p.id === newProfileId)
+        if (targetProfile && targetProfile.nodes) {
+          const ids = targetProfile.nodes.map((n: any) => n.id)
+          if (ids.length > 0) {
+            // Run in background, refresh UI when done
+            // NO AWAIT here to ensure UI is unblocked
+            invoke("check_node_locations", { nodeIds: ids }).then(() => {
+              // Re-fetch profiles to get the updated location data
+              fetchProfiles()
+            }).catch(e => console.error("Background probe failed:", e))
+          }
         }
+      } catch (e: any) {
+        console.error("Import failed:", e)
+        const errorMsg = String(e)
+        if (errorMsg.includes("No valid nodes found in this subscription")) {
+          toast.error(t('toast.import_no_nodes'))
+        } else {
+          toast.error(t('toast.action_failed', { error: errorMsg }))
+        }
+        setIsImporting(false)
       }
-    } catch (e: any) {
-      console.error("Import failed:", e)
-      const errorMsg = String(e)
-      if (errorMsg.includes("No valid nodes found in this subscription")) {
-        toast.error(t('toast.import_no_nodes'))
-      } else {
-        toast.error(t('toast.action_failed', { error: errorMsg }))
-      }
-      setIsImporting(false)
     }
-  }
+  }, [t, fetchProfiles, updateServersState]) // All dependencies are now stable
+
+  const handleImportRef = useRef(handleImport)
+  useEffect(() => {
+    handleImportRef.current = handleImport
+  }, [handleImport])
+
+  // Window-wide drag-drop listener (Stable Version)
+  useEffect(() => {
+    let unlistenDragEnter: any;
+    let unlistenDragLeave: any;
+    let unlistenDragDrop: any;
+
+    const setup = async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        unlistenDragEnter = await listen('tauri://drag-enter', () => setIsWindowDragging(true));
+        unlistenDragLeave = await listen('tauri://drag-leave', () => setIsWindowDragging(false));
+        unlistenDragDrop = await listen('tauri://drag-drop', async (event: any) => {
+          setIsWindowDragging(false);
+          const paths = event.payload.paths as string[];
+          if (paths.length > 0) {
+            try {
+              const { readTextFile } = await import('@tauri-apps/plugin-fs');
+              const content = await readTextFile(paths[0]);
+              if (content) {
+                const filename = paths[0].split(/[\/\\]/).pop() || "";
+                handleImportRef.current(content, filename.replace(/\.[^/.]+$/, ""));
+              }
+            } catch (err) {
+              console.error("Window drop error:", err);
+            }
+          }
+        });
+      } catch (e) {
+        console.warn("Global drag drop setup failed", e);
+      }
+    }
+
+    setup();
+    return () => {
+      const cleanup = (ul: any) => {
+        if (!ul) return;
+        if (typeof ul.then === 'function') {
+          ul.then((f: any) => f?.());
+        } else {
+          ul();
+        }
+      };
+      cleanup(unlistenDragEnter);
+      cleanup(unlistenDragLeave);
+      cleanup(unlistenDragDrop);
+    };
+  }, []); // Run once, use ref for logic
 
   // Deep Link Listener
   useEffect(() => {
@@ -1240,6 +1296,7 @@ export default function Home() {
     if (!deleteSubscriptionConfirm) return
     handleDeleteProfile(deleteSubscriptionConfirm.id)
     setDeleteSubscriptionConfirm(null)
+    setCurrentView("proxies") // Go back to subscriptions grid after deletion
   }
 
   const handleSubscriptionSelect = (id: string) => {
@@ -1384,13 +1441,15 @@ export default function Home() {
                   </button>
 
                   {/* Update (Refresh) */}
-                  <button
-                    onClick={() => handleUpdateProfile(subscription.id)}
-                    className="p-2 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-95"
-                    title={t('subscriptions.refresh_tooltip')}
-                  >
-                    <RefreshCw size={18} />
-                  </button>
+                  {subscription.url && (
+                    <button
+                      onClick={() => handleUpdateProfile(subscription.id)}
+                      className="p-2 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-xl transition-all active:scale-95"
+                      title={t('subscriptions.refresh_tooltip')}
+                    >
+                      <RefreshCw size={18} />
+                    </button>
+                  )}
 
                   {/* Auto Select */}
                   <button
@@ -1739,12 +1798,27 @@ export default function Home() {
         <AddNodeModal
           isOpen={showAddSubscription}
           title={t('subscriptions.import')}
-          onImport={(url) => {
-            handleImport(url)
+          onImport={(url, name) => {
+            handleImport(url, name)
             setShowAddSubscription(false)
           }}
           onClose={() => setShowAddSubscription(false)}
         />
+
+        {/* Global Drag Drop Overlay */}
+        {isWindowDragging && (
+          <div className="absolute inset-0 z-100 bg-primary/20 backdrop-blur-md flex items-center justify-center animate-in fade-in duration-300 pointer-events-none">
+            <div className="flex flex-col items-center gap-6 p-12 rounded-[3rem] bg-white/10 border border-white/20 shadow-2xl scale-110 animate-in zoom-in-95 duration-500">
+              <div className="size-24 rounded-full bg-primary flex items-center justify-center text-white shadow-xl shadow-primary/40 animate-bounce">
+                <Upload size={48} />
+              </div>
+              <div className="flex flex-col items-center gap-2">
+                <h2 className="text-3xl font-black text-white uppercase tracking-tighter">{t('drop_to_import')}</h2>
+                <p className="text-white/70 font-medium tracking-wide uppercase text-xs">{t('drag_drop_guide')}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )

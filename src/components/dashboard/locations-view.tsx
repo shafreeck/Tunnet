@@ -22,7 +22,7 @@ interface LocationsViewProps {
     onToggle: (id: string) => void
     onEdit: (node: any) => void
     onDelete: (id: string) => void
-    onImport: (url: string) => Promise<void>
+    onImport: (url: string, name?: string) => Promise<void>
     onRefresh: () => void
     onPing: (id: string | string[]) => Promise<void>
     activeAutoNodeId?: string | null
