@@ -349,8 +349,7 @@ fn main() {
             .args(&[
                 "/DEF:libbox.def",
                 "/OUT:box.lib",
-                "/MACHINE",
-                machine,
+                &format!("/MACHINE:{}", machine),
                 "/NOLOGO",
             ])
             .status();
