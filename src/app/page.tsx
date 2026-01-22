@@ -679,44 +679,57 @@ export default function Home() {
   const handleImport = useMemo(() => {
     return async (url: string, name?: string) => {
       if (!url) return
+      const trimmedUrl = url.trim()
+      if (!trimmedUrl) return
+
       setIsImporting(true)
-      try {
-        // 2. Perform Import
-        // Backend now returns the new Profile ID string
-        const newProfileId: string = await invoke("import_subscription", { url, name: name || null })
+      const importPromise = (async () => {
+        try {
+          // 2. Perform Import
+          const newProfileId: string = await invoke("import_subscription", { url: trimmedUrl, name: name || null })
 
-        // 3. update UI immediately to show the new card
-        const postProfiles: any[] = await invoke("get_profiles")
-        // Reverse to show newest at top (backend appends, so reverse order is correct)
-        setProfiles(postProfiles.reverse())
+          // 3. update UI immediately to show the new card
+          const postProfiles: any[] = await invoke("get_profiles")
+          // Reverse to show newest at top (backend appends, so reverse order is correct)
+          setProfiles([...postProfiles].reverse())
 
-        // Flatten nodes for server list immediately
-        const allNodes = postProfiles.flatMap((p: any) => p.nodes)
-        updateServersState(allNodes)
+          // Flatten nodes for server list immediately
+          const allNodes = postProfiles.flatMap((p: any) => p.nodes)
+          updateServersState(allNodes)
 
-        toast.success(t('toast.import_success'))
-        setIsImporting(false) // Stop loading animation immediately
-        setShowAddModal(false)
-        setShowAddSubscription(false)
+          setIsImporting(false) // Stop loading animation immediately
+          setShowAddModal(false)
+          setShowAddSubscription(false)
 
-        // 4. Find the NEW profile and probe its nodes
-        const targetProfile = postProfiles.find(p => p.id === newProfileId)
-        if (targetProfile && targetProfile.nodes) {
-          if (targetProfile.nodes.length > 0) {
-            // Run in background, checkLatency handles UI refresh
+          // 4. Find the NEW profile and probe its nodes
+          const targetProfile = postProfiles.find(p => p.id === newProfileId)
+
+          if (targetProfile && targetProfile.nodes && targetProfile.nodes.length > 0) {
             checkLatency(targetProfile.nodes, true)
+          } else {
+            fetchProfiles(false)
           }
+          return
+        } catch (e: any) {
+          setIsImporting(false)
+          console.error("Import failed:", e)
+          throw e
         }
-      } catch (e: any) {
-        console.error("Import failed:", e)
-        const errorMsg = String(e)
-        if (errorMsg.includes("No valid nodes found in this subscription")) {
-          toast.error(t('toast.import_no_nodes'))
-        } else {
-          toast.error(t('toast.action_failed', { error: errorMsg }))
+      })()
+
+      toast.promise(importPromise, {
+        loading: t('importing'),
+        success: t('toast.import_success'),
+        error: (e) => {
+          const errorMsg = String(e)
+          if (errorMsg.includes("No valid nodes found in this subscription")) {
+            return t('toast.import_no_nodes')
+          }
+          return t('toast.action_failed', { error: errorMsg })
         }
-        setIsImporting(false)
-      }
+      })
+
+      return importPromise
     }
   }, [t, fetchProfiles, updateServersState, checkLatency]) // All dependencies are now stable
 
@@ -740,15 +753,31 @@ export default function Home() {
           setIsWindowDragging(false);
           const paths = event.payload.paths as string[];
           if (paths.length > 0) {
+            const path = paths[0];
+            const lowerPath = path.toLowerCase();
+            const isImage = /\.(png|jpg|jpeg|webp|bmp|gif)$/.test(lowerPath);
+
             try {
-              const { readTextFile } = await import('@tauri-apps/plugin-fs');
-              const content = await readTextFile(paths[0]);
-              if (content) {
-                const filename = paths[0].split(/[\/\\]/).pop() || "";
-                handleImportRef.current(content, filename.replace(/\.[^/.]+$/, ""));
+              if (isImage) {
+                // Try to decode QR code
+                const decoded: string = await invoke("decode_qr", { path });
+                if (decoded && decoded.trim()) {
+                  handleImportRef.current(decoded.trim(), t('qr_import'));
+                }
+              } else {
+                // Legacy: treat as text file
+                const { readTextFile } = await import('@tauri-apps/plugin-fs');
+                const content = await readTextFile(path);
+                if (content) {
+                  const filename = path.split(/[\/\\]/).pop() || "";
+                  handleImportRef.current(content, filename.replace(/\.[^/.]+$/, ""));
+                }
               }
             } catch (err) {
               console.error("Window drop error:", err);
+              if (isImage) {
+                toast.error(t('qr_scan_failed'));
+              }
             }
           }
         });
@@ -1431,14 +1460,16 @@ export default function Home() {
                   <div className="flex flex-col">
                     <h2 className="text-2xl font-bold text-text-primary tracking-tight">
                       {(() => {
-                        const lower = subscription.name.toLowerCase()
+                        const name = (subscription.name || "").trim();
+                        const lower = name.toLowerCase()
                         if (lower === "new subscription" || lower === "新订阅") return t('subscriptions.new_subscription')
                         if (lower === "local import" || lower === "本地导入") return t('subscriptions.local_import')
-                        return subscription.name
+                        if (lower === "qr import" || lower === "二维码导入") return t('qr_import')
+                        return name
                       })()}
                     </h2>
                     <p className="text-sm text-text-secondary font-medium">
-                      {subServers.length} Nodes
+                      {t('subscriptions.nodes', { count: subServers.length })}
                     </p>
                   </div>
                 </div>

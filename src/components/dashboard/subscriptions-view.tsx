@@ -47,6 +47,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
         const lower = name.toLowerCase()
         if (lower === "new subscription" || lower === "新订阅") return t('subscriptions.new_subscription')
         if (lower === "local import" || lower === "本地导入") return t('subscriptions.local_import')
+        if (lower === "qr import" || lower === "二维码导入") return t('qr_import')
         return name
     }
 
@@ -496,10 +497,12 @@ export function EditSubscriptionModal({ isOpen, onClose, onSave, initialData }: 
     const { t } = useTranslation()
 
     const getDisplayName = (name: string) => {
-        const lower = name.toLowerCase()
+        const trimmed = (name || "").trim();
+        const lower = trimmed.toLowerCase()
         if (lower === "new subscription" || lower === "新订阅") return t('subscriptions.new_subscription')
         if (lower === "local import" || lower === "本地导入") return t('subscriptions.local_import')
-        return name
+        if (lower === "qr import" || lower === "二维码导入") return t('qr_import')
+        return trimmed
     }
 
     const [name, setName] = useState(getDisplayName(initialData.name))

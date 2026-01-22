@@ -107,8 +107,8 @@ export function AddNodeModal({ isOpen, onClose, onManual, onImport, title }: Add
 
             if (selected && typeof selected === 'string') {
                 const content = await invoke<string>('decode_qr', { path: selected });
-                if (content) {
-                    onImport(content);
+                if (content && content.trim()) {
+                    onImport(content.trim());
                     onClose();
                 }
             }

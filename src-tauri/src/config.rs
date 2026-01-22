@@ -606,18 +606,21 @@ impl SingBoxConfig {
     ) -> Self {
         let mut transport_config = None;
         if let Some(t_type) = transport {
-            let mut headers = None;
-            if let Some(ref h) = host {
-                let mut map = HashMap::new();
-                map.insert("Host".to_string(), h.clone());
-                headers = Some(map);
-            }
+            let t_type_lower = t_type.trim().to_lowercase();
+            if !t_type_lower.is_empty() && t_type_lower != "tcp" {
+                let mut headers = None;
+                if let Some(ref h) = host {
+                    let mut map = HashMap::new();
+                    map.insert("Host".to_string(), h.clone());
+                    headers = Some(map);
+                }
 
-            transport_config = Some(TransportConfig {
-                transport_type: t_type,
-                path,
-                headers,
-            });
+                transport_config = Some(TransportConfig {
+                    transport_type: t_type,
+                    path,
+                    headers,
+                });
+            }
         }
 
         self.outbounds.push(Outbound {
@@ -685,18 +688,21 @@ impl SingBoxConfig {
     ) -> Self {
         let mut transport_config = None;
         if let Some(t_type) = transport {
-            let mut headers = None;
-            if let Some(ref h) = host {
-                let mut map = HashMap::new();
-                map.insert("Host".to_string(), h.clone());
-                headers = Some(map);
-            }
+            let t_type_lower = t_type.trim().to_lowercase();
+            if !t_type_lower.is_empty() && t_type_lower != "tcp" {
+                let mut headers = None;
+                if let Some(ref h) = host {
+                    let mut map = HashMap::new();
+                    map.insert("Host".to_string(), h.clone());
+                    headers = Some(map);
+                }
 
-            transport_config = Some(TransportConfig {
-                transport_type: t_type,
-                path,
-                headers,
-            });
+                transport_config = Some(TransportConfig {
+                    transport_type: t_type,
+                    path,
+                    headers,
+                });
+            }
         }
 
         self.outbounds.push(Outbound {
@@ -960,18 +966,21 @@ impl SingBoxConfig {
     ) -> Self {
         let mut transport_config = None;
         if let Some(t_type) = transport {
-            let mut headers = None;
-            if let Some(ref h) = host {
-                let mut map = HashMap::new();
-                map.insert("Host".to_string(), h.clone());
-                headers = Some(map);
-            }
+            let t_type_lower = t_type.trim().to_lowercase();
+            if !t_type_lower.is_empty() && t_type_lower != "tcp" {
+                let mut headers = None;
+                if let Some(ref h) = host {
+                    let mut map = HashMap::new();
+                    map.insert("Host".to_string(), h.clone());
+                    headers = Some(map);
+                }
 
-            transport_config = Some(TransportConfig {
-                transport_type: t_type,
-                path,
-                headers,
-            });
+                transport_config = Some(TransportConfig {
+                    transport_type: t_type,
+                    path,
+                    headers,
+                });
+            }
         }
 
         self.outbounds.push(Outbound {

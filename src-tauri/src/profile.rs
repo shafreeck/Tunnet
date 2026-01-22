@@ -634,6 +634,8 @@ pub mod parser {
                         .and_then(|p| p.as_u64())
                         .unwrap_or(0) as u16;
 
+                    let protocol = protocol.to_lowercase();
+
                     if protocol.is_empty()
                         || protocol == "direct"
                         || protocol == "block"
@@ -675,7 +677,8 @@ pub mod parser {
                             .get("transport")
                             .and_then(|t| t.get("type"))
                             .and_then(|t| t.as_str())
-                            .map(|s| s.to_string()),
+                            .map(|s| s.to_string())
+                            .filter(|s| s != "tcp"),
                         path: o
                             .get("transport")
                             .and_then(|t| t.get("path"))

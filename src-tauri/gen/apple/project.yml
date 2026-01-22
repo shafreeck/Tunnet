@@ -91,7 +91,7 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: 0.1.3
+        CFBundleShortVersionString: 0.1.4
         CFBundleVersion: "1"
     entitlements:
       path: tunnet_iOS/tunnet_iOS.entitlements

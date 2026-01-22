@@ -2201,21 +2201,12 @@ impl<R: Runtime> ProxyService<R> {
         // Remove existing profile with same URL or ID if logic requires,
         // but for now we just append. Maybe check for duplicate URL?
         // Let's allow duplicates for now to be safe, user can delete.
-        // Trigger location probe for new nodes
-        let node_ids: Vec<String> = new_profile.nodes.iter().map(|n| n.id.clone()).collect();
         profiles.push(new_profile);
         info!("Imported subscription. Total profiles: {}", profiles.len());
         self.manager.save_profiles(&profiles)?;
 
-        let handle = self.app.clone();
-        tokio::spawn(async move {
-            if let Some(service) = handle.try_state::<ProxyService<R>>() {
-                let ids_latency = node_ids.clone();
-                // Trigger both location and latency probes
-                let _ = service.probe_nodes_location(node_ids).await;
-                let _ = service.probe_nodes_latency(ids_latency).await;
-            }
-        });
+        // Probes are now triggered by the frontend to ensure UI consistency and avoid race conditions
+
 
         Ok(id_clone)
     }
@@ -2291,21 +2282,11 @@ impl<R: Runtime> ProxyService<R> {
                 // p.header_update_interval is already set by fetch_subscription
 
                 let node_ids: Vec<String> = p.nodes.iter().map(|n| n.id.clone()).collect();
-                let return_ids = node_ids.clone(); // Clone for return
                 
                 profiles[pos] = p;
                 self.manager.save_profiles(&profiles)?;
-
-                let handle = self.app.clone();
-                tokio::spawn(async move {
-                    if let Some(service) = handle.try_state::<ProxyService<R>>() {
-                        let ids_latency = node_ids.clone();
-                        let _ = service.probe_nodes_location(node_ids).await;
-                        let _ = service.probe_nodes_latency(ids_latency).await;
-                    }
-                });
-
-                return Ok(return_ids);
+                
+                return Ok(node_ids);
             }
         }
         Err("Profile not found or has no URL".to_string())
