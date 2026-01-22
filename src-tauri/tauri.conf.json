@@ -75,10 +75,14 @@
       "resources/geoip-cn.srs",
       "resources/geosite-cn.srs",
       "resources/geosite-category-ads-all.srs",
-      "resources/tunnet-helper",
-      "resources/libbox.dll",
-      "resources/wintun.dll"
+      "resources/tunnet-helper"
     ],
+    "windows": {
+      "resources": [
+        "resources/libbox.dll",
+        "resources/wintun.dll"
+      ]
+    },
     "macOS": {
       "infoPlist": "Info.plist"
     },
