@@ -2,7 +2,8 @@
 # will have compiled files and executables
 /target/
 /gen/schemas
-/resources/bin/
+/resources/bin/*
+!/resources/bin/.gitkeep
 
 # Generated assets for mobile
 /gen/android/app/src/main/assets/resources/sing-box
