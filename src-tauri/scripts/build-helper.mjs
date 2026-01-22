@@ -12,14 +12,6 @@ const arch = process.arch;
 
 if (platform === 'win32') {
     console.log('Skipping tunnet-helper build on Windows (not needed)');
-    const resourcesDir = join(srcTauriDir, 'resources');
-    if (!existsSync(resourcesDir)) {
-        mkdirSync(resourcesDir, { recursive: true });
-    }
-    const placeholderPath = join(resourcesDir, 'tunnet-helper');
-    if (!existsSync(placeholderPath)) {
-        writeFileSync(placeholderPath, '');
-    }
     process.exit(0);
 }
 
@@ -35,7 +27,7 @@ if (platform === 'darwin') {
     target = arch === 'arm64' ? 'aarch64-unknown-linux-gnu' : 'x86_64-unknown-linux-gnu';
 }
 
-const resourcesDir = join(srcTauriDir, 'resources');
+const resourcesDir = join(srcTauriDir, 'resources', 'bin');
 const targetPath = join(resourcesDir, 'tunnet-helper');
 
 // Function to get the latest modification time of a directory recursively
@@ -76,18 +68,6 @@ console.log(`Building ${binaryName} for ${target}...`);
 // Ensure resources directory exists
 if (!existsSync(resourcesDir)) {
     mkdirSync(resourcesDir, { recursive: true });
-}
-
-// Create a placeholder file to satisfy tauri_build check
-const placeholderPath = join(resourcesDir, 'tunnet-helper');
-if (!existsSync(placeholderPath)) {
-    writeFileSync(placeholderPath, '');
-}
-
-// Create a placeholder for libbox.dll to prevent Tauri build error on non-Windows platforms
-const libboxPath = join(resourcesDir, 'libbox.dll');
-if (!existsSync(libboxPath)) {
-    writeFileSync(libboxPath, '');
 }
 
 // Build the helper binary

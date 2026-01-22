@@ -74,7 +74,8 @@
     "resources": [
       "resources/geoip-cn.srs",
       "resources/geosite-cn.srs",
-      "resources/geosite-category-ads-all.srs"
+      "resources/geosite-category-ads-all.srs",
+      "resources/bin/*"
     ],
     "macOS": {
       "infoPlist": "Info.plist"

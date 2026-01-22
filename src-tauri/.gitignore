@@ -2,8 +2,7 @@
 # will have compiled files and executables
 /target/
 /gen/schemas
-/resources/tunnet-helper
-/resources/*.dll
+/resources/bin/
 
 # Generated assets for mobile
 /gen/android/app/src/main/assets/resources/sing-box

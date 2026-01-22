@@ -41,6 +41,7 @@ impl HelperInstaller {
             .path()
             .resource_dir()?
             .join("resources")
+            .join("bin")
             .join(HELPER_BIN_NAME);
 
         if cfg!(debug_assertions) {
@@ -54,7 +55,7 @@ impl HelperInstaller {
                     .parent() // debug
                     .and_then(|p| p.parent()) // target
                     .and_then(|p| p.parent()) // src-tauri
-                    .map(|p| p.join("resources").join(HELPER_BIN_NAME));
+                    .map(|p| p.join("resources").join("bin").join(HELPER_BIN_NAME));
 
                 if let Some(res_path) = project_resource_path {
                     if res_path.exists() {
@@ -176,6 +177,7 @@ impl HelperInstaller {
             .path()
             .resource_dir()?
             .join("resources")
+            .join("bin")
             .join(HELPER_BIN_NAME);
 
         if cfg!(debug_assertions) {
@@ -184,7 +186,7 @@ impl HelperInstaller {
                     .parent()
                     .and_then(|p| p.parent())
                     .and_then(|p| p.parent())
-                    .map(|p| p.join("resources").join(HELPER_BIN_NAME));
+                    .map(|p| p.join("resources").join("bin").join(HELPER_BIN_NAME));
 
                 if let Some(res_path) = project_resource_path {
                     if res_path.exists() {

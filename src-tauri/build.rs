@@ -365,18 +365,18 @@ fn main() {
 
         let _ = std::fs::copy(libbox_dir.join("libbox.dll"), target_dir.join("libbox.dll"));
 
-        // Copy libbox.dll to resources so it can be bundled (this overwrites any placeholder)
-        let resources_dir = Path::new(&manifest_dir).join("resources");
-        if !resources_dir.exists() {
-            let _ = std::fs::create_dir_all(&resources_dir);
+        // Copy libbox.dll to resources/bin so it can be bundled
+        let resources_bin_dir = Path::new(&manifest_dir).join("resources").join("bin");
+        if !resources_bin_dir.exists() {
+            let _ = std::fs::create_dir_all(&resources_bin_dir);
         }
         let _ = std::fs::copy(
             libbox_dir.join("libbox.dll"),
-            resources_dir.join("libbox.dll"),
+            resources_bin_dir.join("libbox.dll"),
         );
 
-        // Ensure wintun.dll exists in resources
-        let wintun_path = resources_dir.join("wintun.dll");
+        // Ensure wintun.dll exists in resources/bin
+        let wintun_path = resources_bin_dir.join("wintun.dll");
         if !wintun_path.exists() {
             println!("cargo:warning=Downloading wintun.dll...");
             let download_script = r#"
@@ -385,7 +385,7 @@ fn main() {
                 $extract = "wintun_dist"
                 Invoke-WebRequest -Uri $url -OutFile $zip
                 Expand-Archive -Path $zip -DestinationPath $extract -Force
-                Copy-Item -Path "$extract/wintun/bin/amd64/wintun.dll" -Destination "resources/wintun.dll"
+                Copy-Item -Path "$extract/wintun/bin/amd64/wintun.dll" -Destination "resources/bin/wintun.dll"
                 Remove-Item -Path $zip
                 Remove-Item -Path $extract -Recurse
             "#;
