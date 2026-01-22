@@ -226,15 +226,13 @@ WantedBy=multi-user.target
         let install_script = format!(
             r#"#!/bin/sh
 set -e
-cp "{}" "/usr/local/bin/{}"
-chmod 755 "/usr/local/bin/{}"
-cp "{}" "/etc/systemd/system/{}.service"
+install -D -m 755 "{}" "/usr/local/bin/{}"
+install -D -m 644 "{}" "/etc/systemd/system/{}.service"
 systemctl daemon-reload
 systemctl enable {}.service
 systemctl restart {}.service
 "#,
             resource_path.to_string_lossy(),
-            HELPER_BIN_NAME,
             HELPER_BIN_NAME,
             temp_service_path.to_string_lossy(),
             HELPER_BIN_NAME,
