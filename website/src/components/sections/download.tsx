@@ -5,29 +5,29 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Apple, Monitor, Terminal } from "lucide-react";
 
-const RELEASE_BASE_URL = "https://github.com/shafreeck/Tunnet/releases/download/v0.1.3";
+const RELEASE_BASE_URL = "https://github.com/shafreeck/Tunnet/releases/download/v0.1.4";
 
 const platformConfig = {
     macos: {
         icon: Apple,
-        version: "v0.1.3",
+        version: "v0.1.4",
         links: [
-            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.3_aarch64.dmg` },
+            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.4_aarch64.dmg` },
         ],
     },
     windows: {
         icon: Monitor,
-        version: "v0.1.3",
+        version: "v0.1.4",
         links: [
-            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.3_x64_en-US.msi` },
+            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.4_x64_en-US.msi` },
         ],
     },
     linux: {
         icon: Terminal,
-        version: "v0.1.3",
+        version: "v0.1.4",
         links: [
-            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.3_amd64.deb` },
-            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.3_arm64.deb` },
+            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.4_amd64.deb` },
+            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.4_arm64.deb` },
         ],
     },
 };
