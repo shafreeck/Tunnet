@@ -608,7 +608,7 @@ export default function Home() {
 
   const [testingNodeIds, setTestingNodeIds] = useState<string[]>([])
 
-  const checkLatency = async (nodes: any[], checkLocations = false) => {
+  const checkLatency = useCallback(async (nodes: any[], checkLocations = false) => {
     const ids = nodes.map((n: any) => n.id)
     if (ids.length === 0) return
 
@@ -629,7 +629,7 @@ export default function Home() {
     } finally {
       setTestingNodeIds(prev => prev.filter(id => !ids.includes(id)))
     }
-  }
+  }, [fetchProfiles])
 
   // Helper to map backend nodes to UI servers
   const updateServersState = useCallback((nodes: any[]) => {
@@ -702,14 +702,9 @@ export default function Home() {
         // 4. Find the NEW profile and probe its nodes
         const targetProfile = postProfiles.find(p => p.id === newProfileId)
         if (targetProfile && targetProfile.nodes) {
-          const ids = targetProfile.nodes.map((n: any) => n.id)
-          if (ids.length > 0) {
-            // Run in background, refresh UI when done
-            // NO AWAIT here to ensure UI is unblocked
-            invoke("check_node_locations", { nodeIds: ids }).then(() => {
-              // Re-fetch profiles to get the updated location data
-              fetchProfiles()
-            }).catch(e => console.error("Background probe failed:", e))
+          if (targetProfile.nodes.length > 0) {
+            // Run in background, checkLatency handles UI refresh
+            checkLatency(targetProfile.nodes, true)
           }
         }
       } catch (e: any) {
@@ -723,7 +718,7 @@ export default function Home() {
         setIsImporting(false)
       }
     }
-  }, [t, fetchProfiles, updateServersState]) // All dependencies are now stable
+  }, [t, fetchProfiles, updateServersState, checkLatency]) // All dependencies are now stable
 
   const handleImportRef = useRef(handleImport)
   useEffect(() => {
@@ -836,13 +831,11 @@ export default function Home() {
     const promise = async () => {
       const updatedIds = await invoke("update_subscription_profile", { id }) as string[]
       if (updatedIds && updatedIds.length > 0) {
-        setTestingNodeIds(prev => {
-          const s = new Set(prev)
-          updatedIds.forEach(uid => s.add(uid))
-          return Array.from(s)
-        })
+        // Trigger IP and Latency probes for updated nodes
+        checkLatency(updatedIds.map(uid => ({ id: uid })), true)
+      } else {
+        fetchProfiles()
       }
-      fetchProfiles()
     }
 
     toast.promise(promise(), {
@@ -877,10 +870,21 @@ export default function Home() {
     try {
       // Execute all updates
       const promises = profiles.map(p => invoke("update_subscription_profile", { id: p.id }))
-      await Promise.allSettled(promises)
+      const results = await Promise.allSettled(promises)
 
-      // Refresh list
-      fetchProfiles()
+      const allUpdatedIds: string[] = []
+      results.forEach(r => {
+        if (r.status === 'fulfilled') {
+          allUpdatedIds.push(...(r.value as string[]))
+        }
+      })
+
+      if (allUpdatedIds.length > 0) {
+        // Trigger IP and Latency probes for updated nodes
+        checkLatency(allUpdatedIds.map(uid => ({ id: uid })), true)
+      } else {
+        fetchProfiles()
+      }
       toast.success(t('toast.update_completed'))
     } catch (e: any) {
       console.error(e)
