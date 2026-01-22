@@ -420,7 +420,7 @@ fn main() {
 
             let status = Command::new("powershell")
                 .current_dir(&manifest_dir)
-                .args(&["-Command", download_script])
+                .args(&["-Command", &download_script])
                 .status()
                 .expect("Failed to execute PowerShell to download wintun.dll");
 
