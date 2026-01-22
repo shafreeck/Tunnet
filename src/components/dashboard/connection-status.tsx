@@ -62,14 +62,20 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
         return isConnected ? t('status.active') : t('status.stopped')
     }
 
-    const [imgError, setImgError] = React.useState(false)
+    const [failedUrls, setFailedUrls] = React.useState<Set<string>>(new Set())
 
-    // Reset error state when desired flag URL changes
+    // Reset failed URLs when primary source changes
     React.useEffect(() => {
-        setImgError(false)
-    }, [displayFlag])
+        setFailedUrls(new Set())
+    }, [displayFlag, flagUrl])
 
-    const finalFlag = imgError ? flagUrl : displayFlag
+    const getFinalFlag = () => {
+        if (displayFlag && !failedUrls.has(displayFlag)) return displayFlag
+        if (flagUrl && !failedUrls.has(flagUrl)) return flagUrl
+        return null
+    }
+
+    const finalFlag = getFinalFlag()
 
     return (
         <div className="flex flex-col items-center justify-center py-6 md:py-10 relative">
@@ -82,12 +88,14 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                         </div>
                     ) : (
                         <>
-                            {finalFlag && !imgError ? (
+                            {finalFlag ? (
                                 <img
                                     className={`w-full h-full object-cover transition-all duration-700 ${isConnected ? 'opacity-60 scale-110' : 'opacity-20 grayscale scale-100'}`}
                                     alt="Country Flag"
                                     src={finalFlag}
-                                    onError={() => setImgError(true)}
+                                    onError={() => {
+                                        setFailedUrls(prev => new Set([...prev, finalFlag]))
+                                    }}
                                 />
                             ) : (
                                 <Globe className={`w-1/2 h-1/2 transition-colors duration-500 ${isConnected ? 'text-accent-green opacity-60' : 'text-gray-500 opacity-20'}`} />

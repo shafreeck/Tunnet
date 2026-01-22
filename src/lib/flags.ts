@@ -130,11 +130,21 @@ export const getCountryCode = (nodeName: string): string => {
     return "un"
 }
 
+const LOCAL_FLAGS = new Set([
+    "au", "br", "ca", "ch", "cl", "de", "es", "fr", "gb", "hk", "in", "it", "jp", "kr", "nl", "ru", "se", "sg", "th", "tr", "tw", "us", "vn", "za"
+])
+
 export const getFlagUrlFromCode = (code: string): string => {
     const lower = code.toLowerCase()
     if (lower === "un" || !lower) return ""
-    // Return local path; consumer must handle 404 fallback
-    return `/flags/${lower}.png`
+
+    // Try local first if known
+    if (LOCAL_FLAGS.has(lower)) {
+        return `/flags/${lower}.png`
+    }
+
+    // Fallback to CDN for others (including 'cn' which is currently missing locally)
+    return getCdnFlagUrl(lower)
 }
 
 export const getCdnFlagUrl = (code: string): string => {
