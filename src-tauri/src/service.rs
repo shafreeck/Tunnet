@@ -1741,7 +1741,7 @@ impl<R: Runtime> ProxyService<R> {
             if path.exists() {
                 let _ = std::fs::remove_file(&path);
             }
-            let tmp_path = std::path::Path::new("/tmp").join(db);
+            let tmp_path = std::env::temp_dir().join(db);
             if tmp_path.exists() {
                 let _ = std::fs::remove_file(&tmp_path);
             }
@@ -1760,15 +1760,15 @@ impl<R: Runtime> ProxyService<R> {
 
     fn stage_databases(&self) -> Result<(), String> {
         let app_local_data = self.app.path().app_local_data_dir().unwrap();
-        // Stage databases to /tmp to ensure root/helper can read them (macOS TCC bypass)
+        // Stage databases to temp dir to ensure root/helper can read them (macOS TCC bypass)
         for db in &[
             "cache.db",
         ] {
             let src = app_local_data.join(db);
-            let dst = std::path::Path::new("/tmp").join(db);
+            let dst = std::env::temp_dir().join(db);
             if src.exists() {
                 if let Err(e) = std::fs::copy(&src, &dst) {
-                    warn!("Failed to stage {} to /tmp: {}", db, e);
+                    warn!("Failed to stage {} to temp dir: {}", db, e);
                 } else {
                     #[cfg(unix)]
                     {
