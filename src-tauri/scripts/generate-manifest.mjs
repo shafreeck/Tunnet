@@ -32,10 +32,11 @@ async function run() {
     };
 
     const platformsMapping = {
-        'darwin-aarch64': ['aarch64-apple-darwin.app.tar.gz', 'aarch64-apple-darwin.dmg'],
-        'darwin-x86_64': ['x86_64-apple-darwin.app.tar.gz', 'x86_64-apple-darwin.dmg'],
-        'linux-x86_64': ['x86_64-unknown-linux-gnu.AppImage.tar.gz', 'amd64.AppImage.tar.gz'],
-        'windows-x86_64': ['x64-setup.exe.zip', 'x64_en-US.msi.zip'],
+        'darwin-aarch64': ['aarch64.app.tar.gz', 'aarch64-apple-darwin.app.tar.gz', 'aarch64-apple-darwin.dmg'],
+        'darwin-x86_64': ['x86_64.app.tar.gz', 'x86_64-apple-darwin.app.tar.gz', 'x86_64-apple-darwin.dmg'],
+        'linux-x86_64': ['amd64.AppImage.tar.gz', 'amd64.AppImage', 'x86_64-unknown-linux-gnu.AppImage.tar.gz'],
+        'linux-aarch64': ['aarch64.AppImage.tar.gz', 'aarch64.AppImage'],
+        'windows-x86_64': ['x64-setup.exe.zip', 'x64-setup.exe', 'x64_en-US.msi.zip', 'x64_en-US.msi'],
     };
 
     for (const [platform, patterns] of Object.entries(platformsMapping)) {
