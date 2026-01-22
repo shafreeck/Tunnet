@@ -400,6 +400,9 @@ fn main() {
                 panic!("Failed to download wintun.dll");
             }
         }
+
+        // Also copy wintun.dll to target_dir so it's available for cargo run
+        let _ = std::fs::copy(wintun_path, target_dir.join("wintun.dll"));
     }
 
     let mut windows = tauri_build::WindowsAttributes::new();

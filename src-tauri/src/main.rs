@@ -13,10 +13,10 @@ fn main() {
 
         if let Ok(exe_path) = std::env::current_exe() {
             if let Some(exe_dir) = exe_path.parent() {
-                // Tauri bundles resources in a 'resources' subdirectory next to the executable
-                let resources_dir = exe_dir.join("resources");
-                if resources_dir.exists() {
-                    let mut path_u16: Vec<u16> = resources_dir.as_os_str().encode_wide().collect();
+                // Tauri bundles resources in a 'resources/bin' subdirectory next to the executable
+                let bin_dir = exe_dir.join("resources").join("bin");
+                if bin_dir.exists() {
+                    let mut path_u16: Vec<u16> = bin_dir.as_os_str().encode_wide().collect();
                     path_u16.push(0); // null terminator
                     SetDllDirectoryW(path_u16.as_ptr());
                 }
