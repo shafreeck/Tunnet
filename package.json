@@ -1,6 +1,6 @@
 {
   "name": "tunnet",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "scripts": {
     "dev": "npm run copy:logo && next dev -p 4000 -H 127.0.0.1",
