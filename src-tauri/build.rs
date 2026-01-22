@@ -253,6 +253,18 @@ fn main() {
             libbox_dir.join("main.go").display()
         );
 
+        let target_triple = env::var("TARGET").unwrap_or_default();
+        let goarch = if target_triple.contains("aarch64") {
+            "arm64"
+        } else {
+            "amd64"
+        };
+
+        println!(
+            "cargo:warning=Building libbox for Windows target: {}, goarch: {}",
+            target_triple, goarch
+        );
+
         // Build Go library as DLL (c-shared)
         let status = Command::new("go")
             .current_dir(&libbox_dir)
@@ -267,6 +279,7 @@ fn main() {
                 "main.go",
             ])
             .env("CGO_ENABLED", "1")
+            .env("GOARCH", goarch)
             .status()
             .expect("Failed to execute go build");
 
@@ -329,15 +342,23 @@ fn main() {
             }
         }
 
+        let machine = if goarch == "arm64" { "ARM64" } else { "X64" };
+
         let status = Command::new(&lib_exe)
             .current_dir(&libbox_dir)
-            .args(&["/DEF:libbox.def", "/OUT:box.lib", "/MACHINE:X64", "/NOLOGO"])
+            .args(&[
+                "/DEF:libbox.def",
+                "/OUT:box.lib",
+                "/MACHINE",
+                machine,
+                "/NOLOGO",
+            ])
             .status();
 
         let success = status.map(|s| s.success()).unwrap_or(false);
 
         if !success {
-            panic!("Failed to execute lib.exe. Ensure you have MSVC Build Tools installed and available in PATH. Tried: {:?}", lib_exe);
+            panic!("Failed to execute lib.exe. Ensure you have MSVC Build Tools installed and available in PATH. Tried: {:?} with machine: {}", lib_exe, machine);
         }
 
         // Link instructions
@@ -378,17 +399,24 @@ fn main() {
         // Ensure wintun.dll exists in resources/bin
         let wintun_path = resources_bin_dir.join("wintun.dll");
         if !wintun_path.exists() {
-            println!("cargo:warning=Downloading wintun.dll...");
-            let download_script = r#"
+            let wintun_arch = if goarch == "arm64" { "arm64" } else { "amd64" };
+            println!(
+                "cargo:warning=Downloading wintun.dll for {}...",
+                wintun_arch
+            );
+            let download_script = format!(
+                r#"
                 $url = "https://www.wintun.net/builds/wintun-0.14.1.zip"
                 $zip = "wintun.zip"
                 $extract = "wintun_dist"
                 Invoke-WebRequest -Uri $url -OutFile $zip
                 Expand-Archive -Path $zip -DestinationPath $extract -Force
-                Copy-Item -Path "$extract/wintun/bin/amd64/wintun.dll" -Destination "resources/bin/wintun.dll"
+                Copy-Item -Path "$extract/wintun/bin/{}/wintun.dll" -Destination "resources/bin/wintun.dll"
                 Remove-Item -Path $zip
                 Remove-Item -Path $extract -Recurse
-            "#;
+            "#,
+                wintun_arch
+            );
 
             let status = Command::new("powershell")
                 .current_dir(&manifest_dir)
