@@ -262,7 +262,7 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
             <div className={cn(
-                "border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-5 md:pl-8 md:pb-6 shrink-0 relative z-20",
+                "border-b border-black/2 dark:border-white/2 bg-transparent p-5 md:pl-8 md:pb-6 shrink-0 relative z-20",
                 isMac ? "md:pt-8" : "md:pt-8"
             )}>
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
@@ -397,7 +397,7 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
 
             {/* Dialog */}
             {isDialogOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-xl bg-black/60 animate-in fade-in duration-300">
+                <div className="fixed inset-0 z-100 flex items-center justify-center p-6 backdrop-blur-xl bg-black/60 animate-in fade-in duration-300">
                     <div className="fixed inset-0" onClick={() => setIsDialogOpen(false)} />
                     <div className="relative w-full max-w-2xl glass-card border border-border-color rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh]">
                         <div className="px-8 py-6 border-b border-border-color bg-sidebar-bg shrink-0">
@@ -419,15 +419,15 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-text-tertiary uppercase tracking-widest">{t('groups.type')}</label>
                                     <div className="flex bg-card-bg p-1 rounded-xl border border-border-color">
-                                        <button onClick={() => setDialogType("Selector")} className={cn("flex-1 py-2 rounded-lg text-xs font-bold transition-all", dialogType === "Selector" ? "bg-white/10 text-white shadow" : "text-text-secondary hover:text-text-primary")}>Selector</button>
-                                        <button onClick={() => setDialogType("UrlTest")} className={cn("flex-1 py-2 rounded-lg text-xs font-bold transition-all", dialogType === "UrlTest" ? "bg-white/10 text-white shadow" : "text-text-secondary hover:text-text-primary")}>URL Test</button>
+                                        <button onClick={() => setDialogType("Selector")} className={cn("flex-1 py-2 rounded-lg text-xs font-bold transition-all", dialogType === "Selector" ? "bg-white dark:bg-white/10 text-text-primary dark:text-white shadow" : "text-text-secondary hover:text-text-primary")}>Selector</button>
+                                        <button onClick={() => setDialogType("UrlTest")} className={cn("flex-1 py-2 rounded-lg text-xs font-bold transition-all", dialogType === "UrlTest" ? "bg-white dark:bg-white/10 text-text-primary dark:text-white shadow" : "text-text-secondary hover:text-text-primary")}>URL Test</button>
                                     </div>
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-text-tertiary uppercase tracking-widest">{t('groups.source')}</label>
                                     <div className="flex bg-card-bg p-1 rounded-xl border border-border-color">
-                                        <button onClick={() => setDialogSourceType("Static")} className={cn("flex-1 py-2 rounded-lg text-xs font-bold transition-all", dialogSourceType === "Static" ? "bg-white/10 text-white shadow" : "text-text-secondary hover:text-text-primary")}>Static</button>
-                                        <button onClick={() => setDialogSourceType("Filter")} className={cn("flex-1 py-2 rounded-lg text-xs font-bold transition-all", dialogSourceType === "Filter" ? "bg-white/10 text-white shadow" : "text-text-secondary hover:text-text-primary")}>Filter</button>
+                                        <button onClick={() => setDialogSourceType("Static")} className={cn("flex-1 py-2 rounded-lg text-xs font-bold transition-all", dialogSourceType === "Static" ? "bg-white dark:bg-white/10 text-text-primary dark:text-white shadow" : "text-text-secondary hover:text-text-primary")}>Static</button>
+                                        <button onClick={() => setDialogSourceType("Filter")} className={cn("flex-1 py-2 rounded-lg text-xs font-bold transition-all", dialogSourceType === "Filter" ? "bg-white dark:bg-white/10 text-text-primary dark:text-white shadow" : "text-text-secondary hover:text-text-primary")}>Filter</button>
                                     </div>
                                 </div>
                             </div>
@@ -485,7 +485,7 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
 
             {/* Selection Dialog */}
             {selectionDialogOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-xl bg-black/60 animate-in fade-in duration-300">
+                <div className="fixed inset-0 z-100 flex items-center justify-center p-6 backdrop-blur-xl bg-black/60 animate-in fade-in duration-300">
                     <div className="fixed inset-0" onClick={() => setSelectionDialogOpen(false)} />
                     <div className="relative w-full max-w-lg glass-card border border-border-color rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[80vh]">
                         <div className="px-8 py-6 border-b border-border-color bg-sidebar-bg shrink-0 flex justify-between items-center">
