@@ -7,6 +7,7 @@ import { Tooltip } from "react-tooltip"
 import 'react-tooltip/dist/react-tooltip.css'
 import { getLatencyColor, formatLatency } from "@/lib/latency"
 import { getFlagUrlFromCode } from "@/lib/flags"
+import { useModifierKey } from "@/hooks/use-modifier-key"
 
 interface ConnectionStatusProps {
     isConnected: boolean;
@@ -15,7 +16,7 @@ interface ConnectionStatusProps {
     // realIp?: string; // Removed in favor of connectionDetails tooltip
     latency?: number;
     onLatencyClick?: () => void;
-    onMainToggle?: () => void;
+    onMainToggle?: (restart?: boolean) => void;
     connectionDetails?: { ip: string; country: string; countryCode?: string; isp?: string };
     mode: 'global' | 'rule' | 'direct';
     onModeChange: (mode: 'global' | 'rule' | 'direct') => void;
@@ -31,10 +32,14 @@ interface ConnectionStatusProps {
     isLatencyLoading?: boolean;
     connectionState?: "idle" | "connecting" | "disconnecting";
     hasNoServers?: boolean;
+    isAltPressed?: boolean;
 }
 
 export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, onLatencyClick, onMainToggle, connectionDetails, mode, onModeChange, tunEnabled, onTunToggle, systemProxyEnabled, onSystemProxyToggle, isLoading, targetType, groupIcon, targetId, activeNodeName, isLatencyLoading, connectionState, hasNoServers }: ConnectionStatusProps) {
     const { t } = useTranslation()
+    const isAltPressed = useModifierKey('Alt')
+    const isReconnectMode = isConnected && isAltPressed
+
     const realFlagUrl = connectionDetails?.countryCode ? getFlagUrlFromCode(connectionDetails.countryCode) : null
     const displayFlag = (isConnected && realFlagUrl) ? realFlagUrl : flagUrl
 
@@ -59,6 +64,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
             return t('status.switching', { defaultValue: 'SWITCHING' })
         }
         if (hasNoServers) return t('status.setup_needed')
+        if (isReconnectMode) return t('status.reconnect')
         return isConnected ? t('status.active') : t('status.stopped')
     }
 
@@ -79,8 +85,8 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
 
     return (
         <div className="flex flex-col items-center justify-center py-6 md:py-10 relative">
-            <div className="relative mb-6 group cursor-pointer" onClick={isLoading ? undefined : onMainToggle}>
-                <span className={`animate-ping absolute inset-0 inline-flex h-full w-full rounded-full ${hasNoServers ? 'bg-primary' : (isConnected ? 'bg-accent-green' : 'bg-red-500')} opacity-20 duration-1000 ${isLoading ? 'hidden' : ''}`}></span>
+            <div className="relative mb-6 group cursor-pointer" onClick={isLoading ? undefined : () => onMainToggle?.(isReconnectMode)}>
+                <span className={`animate-ping absolute inset-0 inline-flex h-full w-full rounded-full ${hasNoServers ? 'bg-primary' : (isReconnectMode ? 'bg-yellow-500' : (isConnected ? 'bg-accent-green' : 'bg-red-500'))} opacity-20 duration-1000 ${isLoading ? 'hidden' : ''}`}></span>
                 <div className={`relative size-28 rounded-full border border-white/10 bg-black/40 backdrop-blur-xl glow-effect flex items-center justify-center overflow-hidden shadow-2xl transition-transform duration-300 ${isLoading ? 'scale-100 cursor-not-allowed' : 'group-hover:scale-105'}`}>
                     {hasNoServers ? (
                         <div className="flex flex-col items-center justify-center">
@@ -110,6 +116,8 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                     <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent"></div>
                     {!isLoading && (hasNoServers ? (
                         null
+                    ) : isReconnectMode ? (
+                        <RefreshCw className="absolute text-white drop-shadow-lg size-9 animate-spin-slow" />
                     ) : isConnected ? (
                         <CheckCircle2 className="absolute text-white drop-shadow-lg size-9 fill-white/10" />
                     ) : (
@@ -117,8 +125,8 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                     ))}
                 </div>
                 <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-card-bg backdrop-blur-md border border-border-color pl-1 pr-2 py-0.5 rounded-full shadow-lg flex items-center gap-1">
-                    <span className={`size-2 rounded-full ${getStatusColor()} ${isLoading ? 'animate-bounce' : 'animate-pulse'}`}></span>
-                    <span className={`${isLoading ? (connectionState === "disconnecting" ? 'text-red-500' : 'text-yellow-500') : (isConnected ? 'text-accent-green' : 'text-red-500')} text-[10px] font-bold tracking-wider uppercase whitespace-nowrap`}>
+                    <span className={`size-2 rounded-full ${isReconnectMode ? 'bg-yellow-500' : getStatusColor()} ${isLoading ? 'animate-bounce' : 'animate-pulse'}`}></span>
+                    <span className={`${isLoading ? (connectionState === "disconnecting" ? 'text-red-500' : 'text-yellow-500') : (isReconnectMode ? 'text-yellow-500' : (isConnected ? 'text-accent-green' : 'text-red-500'))} text-[10px] font-bold tracking-wider uppercase whitespace-nowrap`}>
                         {getStatusText()}
                     </span>
                 </div>
@@ -241,25 +249,27 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
 
 interface HeaderProps {
     isConnected: boolean;
-    onToggle: () => void;
+    onToggle: (restart?: boolean) => void;
     isLoading?: boolean;
 }
 
 export function Header({ isConnected, onToggle, isLoading }: HeaderProps) {
     const { t } = useTranslation()
+    const isAltPressed = useModifierKey('Alt')
+    const isReconnectMode = isConnected && isAltPressed
 
     return (
         <header className="flex items-center justify-between pl-8 py-5 z-30 pr-6">
             <div data-tauri-drag-region className="flex-1 h-full cursor-default"></div>
             <div className="flex items-center gap-4">
                 <button
-                    onClick={onToggle}
+                    onClick={() => onToggle(isReconnectMode)}
                     disabled={isLoading}
                     className={`bg-primary text-white hover:brightness-110 hover:shadow-xl hover:shadow-primary/30 active:scale-95 border border-transparent px-5 py-1.5 rounded-lg shadow-lg flex items-center gap-2 transition-all group ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                    <Power className={`size-4 ${isConnected ? 'text-red-200' : 'text-emerald-200'} group-hover:scale-110 transition-transform`} />
+                    <Power className={`size-4 ${isReconnectMode ? 'text-yellow-200 animate-spin-slow' : (isConnected ? 'text-red-200' : 'text-emerald-200')} group-hover:scale-110 transition-transform`} />
                     <span className="font-semibold text-xs tracking-wide">
-                        {isLoading ? t('status.wait') : (isConnected ? t('status.disconnect') : t('status.connect'))}
+                        {isLoading ? t('status.wait') : (isReconnectMode ? t('status.reconnect') : (isConnected ? t('status.disconnect') : t('status.connect')))}
                     </span>
                 </button>
             </div>

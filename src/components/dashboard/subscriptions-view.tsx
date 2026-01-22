@@ -33,7 +33,7 @@ interface SubscriptionsViewProps {
     onSelect?: (id: string) => void
     onUpdateAll?: () => void
     isImporting?: boolean
-    onNodeSelect?: (id: string, selectOnly?: boolean) => void
+    onNodeSelect?: (id: string, restart?: boolean, selectOnly?: boolean) => void
     isConnected?: boolean
     activeServerId?: string
     activeAutoNodeId?: string | null

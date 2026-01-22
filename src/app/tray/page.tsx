@@ -11,6 +11,7 @@ import { useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import { getLatencyColor, formatLatency } from "@/lib/latency"
 import { getVersion } from "@tauri-apps/api/app"
+import { useModifierKey } from "@/hooks/use-modifier-key"
 
 const formatSpeed = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B/s`
@@ -39,6 +40,9 @@ export default function TrayPage() {
     const ipInfoRef = useRef(ipInfo)
 
     useEffect(() => { ipInfoRef.current = ipInfo }, [ipInfo])
+
+    const isAltPressed = useModifierKey('Alt')
+    const isReconnectMode = status.is_running && isAltPressed
 
     useEffect(() => {
         setMounted(true)
@@ -259,10 +263,42 @@ export default function TrayPage() {
         manualActionRef.current = true
         setIsTransitioning(true)
 
+        const isRestart = isReconnectMode
+
         try {
             if (status.is_running) {
                 const res: any = await invoke("stop_proxy")
                 setStatus(res)
+
+                if (isRestart) {
+                    // Capture current modes BEFORE stopping, as status might be reset after stop
+                    const currentTun = status.tun_mode
+                    const currentRouting = status.routing_mode
+
+                    // Start it again after a short delay
+                    setTimeout(async () => {
+                        const nodeId = settings.active_target_id
+                        const node = nodes.find(n => n.id === nodeId) || nodes[0]
+                        if (node) {
+                            try {
+                                const startRes: any = await invoke("start_proxy", {
+                                    node,
+                                    tun: currentTun,
+                                    routing: currentRouting
+                                })
+                                setStatus(startRes)
+                            } catch (e) {
+                                console.error("Tray: Restart failed", e)
+                            } finally {
+                                setIsTransitioning(false)
+                            }
+                        } else {
+                            setIsTransitioning(false)
+                        }
+                    }, 800)
+                } else {
+                    setIsTransitioning(false)
+                }
             } else {
                 const nodeId = settings.active_target_id
                 const node = nodes.find(n => n.id === nodeId) || nodes[0]
@@ -279,11 +315,12 @@ export default function TrayPage() {
                     routing: status.routing_mode
                 })
                 setStatus(res)
+                setIsTransitioning(false)
             }
         } catch (e) {
             console.error("Tray: Operation failed", e)
-        } finally {
             setIsTransitioning(false)
+        } finally {
             setTimeout(() => { manualActionRef.current = false }, 1000)
         }
     }
@@ -362,7 +399,7 @@ export default function TrayPage() {
                         isTransitioning ? "bg-blue-400 animate-pulse" : (status.is_running ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-yellow-500")
                     )} />
                     <span className="text-xs font-bold tracking-wider opacity-80 uppercase">
-                        {isTransitioning ? t('tray.processing') : (status.is_running ? `${t('tray.on')} (${status.tun_mode ? t('tray.mode_short.tun') : (settings.system_proxy ? t('tray.mode_short.system') : t('tray.mode_short.port'))})` : t('tray.off'))}
+                        {isTransitioning ? t('tray.processing') : (isReconnectMode ? t('status.reconnect') : (status.is_running ? `${t('tray.on')} (${status.tun_mode ? t('tray.mode_short.tun') : (settings.system_proxy ? t('tray.mode_short.system') : t('tray.mode_short.port'))})` : t('tray.off')))}
                     </span>
                 </div>
                 <button
@@ -381,43 +418,45 @@ export default function TrayPage() {
                     className={cn(
                         "group relative h-18 w-full rounded-[28px] flex items-center px-5 gap-4 transition-all duration-500 border shrink-0",
                         isTransitioning ? "opacity-90 cursor-wait bg-black/5 dark:bg-white/5 border-transparent" :
-                            (status.is_running
-                                ? "bg-primary/10 border-primary/30 shadow-[0_12px_32px_-12px_rgba(0,122,255,0.3)]"
-                                : "glass-card hover:bg-white/5 border-white/3")
+                            (isReconnectMode ? "bg-yellow-500/10 border-yellow-500/30 shadow-[0_12px_32px_-12px_rgba(234,179,8,0.3)]" :
+                                (status.is_running
+                                    ? "bg-primary/10 border-primary/30 shadow-[0_12px_32px_-12px_rgba(0,122,255,0.3)]"
+                                    : "glass-card hover:bg-white/5 border-white/3"))
                     )}
                 >
                     <div className={cn(
                         "size-12 rounded-[18px] flex items-center justify-center transition-all duration-500 shadow-lg",
                         status.is_running && !isTransitioning
-                            ? "bg-primary text-white shadow-primary/20 scale-105"
+                            ? (isReconnectMode ? "bg-yellow-500 text-white shadow-yellow-500/20 scale-105" : "bg-primary text-white shadow-primary/20 scale-105")
                             : "bg-black/10 dark:bg-white/5 text-text-secondary group-hover:bg-black/20 dark:group-hover:bg-white/10"
                     )}>
                         <Power size={20} className={cn(
                             "transition-all duration-500",
-                            status.is_running && !isTransitioning ? "drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]" : "",
-                            isTransitioning && "animate-spin text-primary"
+                            (status.is_running && !isTransitioning) ? "drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]" : "",
+                            (isTransitioning || isReconnectMode) && "animate-spin-slow",
+                            isReconnectMode && "text-white"
                         )} />
                     </div>
                     <div className="flex flex-col items-start gap-1">
                         <span className={cn(
                             "text-lg font-bold tracking-tight transition-colors duration-500",
-                            (status.is_running && !isTransitioning) ? "text-text-primary" : "text-text-secondary"
+                            isReconnectMode ? "text-yellow-600 dark:text-yellow-500" : ((status.is_running && !isTransitioning) ? "text-text-primary" : "text-text-secondary")
                         )}>
                             {isTransitioning
                                 ? (status.is_running ? t('tray.stopping') : t('tray.connecting'))
-                                : (status.tun_mode
+                                : (isReconnectMode ? t('status.reconnect') : (status.tun_mode
                                     ? t('tray.mode.tun')
-                                    : (settings.system_proxy ? t('tray.mode.system') : t('tray.mode.port')))}
+                                    : (settings.system_proxy ? t('tray.mode.system') : t('tray.mode.port'))))}
                         </span>
                         <span className={cn(
                             "text-xs transition-colors duration-500",
-                            (status.is_running && !isTransitioning) ? "text-primary/80 font-medium" : "text-text-tertiary"
+                            isReconnectMode ? "text-yellow-600/80 dark:text-yellow-500/80 font-medium" : ((status.is_running && !isTransitioning) ? "text-primary/80 font-medium" : "text-text-tertiary")
                         )}>
                             {isTransitioning
                                 ? t('tray.wait')
-                                : (status.is_running
+                                : (isReconnectMode ? t('status.reconnecting', { defaultValue: 'RECONNECTING...' }) : (status.is_running
                                     ? (status.tun_mode ? t('tray.desc.global') : (settings.system_proxy ? t('tray.desc.system') : t('tray.desc.port', { port: settings.mixed_port })))
-                                    : t('tray.click_to_connect'))}
+                                    : t('tray.click_to_connect')))}
                         </span>
                     </div>
 

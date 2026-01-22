@@ -983,7 +983,7 @@ export default function Home() {
     toast.success(t(nextState ? 'toast.tun_mode_enabled' : 'toast.tun_mode_disabled'))
   }
 
-  const toggleProxy = async () => {
+  const toggleProxy = async (restart?: boolean) => {
     if (isLoading) return
     if (servers.length === 0) {
       setShowAddModal(true)
@@ -997,6 +997,15 @@ export default function Home() {
         // Just update state, the useEffect takes care of the backend
         setConnectionState("disconnecting")
         setIsConnected(false)
+
+        if (restart) {
+          // Clear current config ref to force a re-sync even if settings are identical
+          lastAppliedConfigRef.current = null
+          // Trigger reconnect after short delay to allow cleanup to start
+          setTimeout(() => {
+            setIsConnected(true)
+          }, 800)
+        }
       } else {
         // Find active service node
         const node = servers.find(s => s.id === activeServerId)
@@ -1078,14 +1087,14 @@ export default function Home() {
     }
   }
 
-  const handleServerToggle = async (id: string, shouldConnect = true) => {
+  const handleServerToggle = async (id: string, restart = false, shouldConnect = true) => {
     if (isLoading) return
     manualActionRef.current = true
 
 
     // If clicking the currently connected server -> Stop
     if (isConnected && activeServerId === id) {
-      await toggleProxy()
+      await toggleProxy(restart)
       return
     }
 

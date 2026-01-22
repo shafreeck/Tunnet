@@ -219,8 +219,10 @@
         "wait": "WAIT...",
         "switching": "SWITCHING...",
         "disconnect": "DISCONNECT",
+        "reconnect": "RECONNECT",
         "connect": "CONNECT",
         "connecting": "Connecting...",
+        "reconnecting": "Reconnecting...",
         "disconnecting": "Disconnecting...",
         "mode": {
             "global": "Global",

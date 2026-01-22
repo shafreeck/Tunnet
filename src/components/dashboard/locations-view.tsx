@@ -19,7 +19,7 @@ interface LocationsViewProps {
     activeServerId: string | null
     isConnected: boolean
     onSelect: (id: string) => void
-    onToggle: (id: string) => void
+    onToggle: (id: string, restart?: boolean, shouldConnect?: boolean) => void
     onEdit: (node: any) => void
     onDelete: (id: string) => void
     onImport: (url: string, name?: string) => Promise<void>

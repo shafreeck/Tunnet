@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { getLatencyColor, formatLatency } from "@/lib/latency"
+import { useModifierKey } from "@/hooks/use-modifier-key"
 
 interface Server {
     id: string
@@ -42,7 +43,7 @@ interface ServerListProps {
     activeServerId: string | null
     isConnected: boolean
     onSelect: (id: string) => void
-    onToggle: (id: string) => void
+    onToggle: (id: string, restart?: boolean) => void
     onImport: (url: string, name?: string) => Promise<void>
     onEdit: (node: Server | null) => void // null means add new
     onDelete: (id: string) => void
@@ -97,6 +98,7 @@ export function ServerList({
     const [logFilter, setLogFilter] = useState("")
     const [autoScroll, setAutoScroll] = useState(true)
     const [logSource, setLogSource] = useState<"local" | "helper">("local")
+    const isAltPressed = useModifierKey('Alt')
 
     // Deferred Pinning Logic
     // We only change the "visual" pinned ID when the user scrolls to the top.
@@ -518,7 +520,7 @@ export function ServerList({
                                     isRunning={isRunning}
                                     isLoading={isLoading && isSelected}
                                     onClick={() => onSelect(server.id)}
-                                    onToggle={() => onToggle(server.id)}
+                                    onToggle={(restart?: boolean) => onToggle(server.id, restart)}
                                     onEdit={onEdit}
                                     onDelete={onDelete}
                                     onPing={onPing}
@@ -527,6 +529,7 @@ export function ServerList({
                                     t={t}
                                     connectionState={connectionState}
                                     isTestingLatency={isPinging || testingNodeIds.includes(server.id)}
+                                    isAltPressed={isAltPressed}
                                 />
                             )
                         })}
@@ -546,17 +549,19 @@ interface ServerItemProps {
     isLoading?: boolean
     connectionState?: "idle" | "connecting" | "disconnecting"
     onClick: () => void
-    onToggle: () => void
+    onToggle: (restart?: boolean) => void
     onEdit: (server: Server) => void
     onDelete: (id: string) => void
     onExport?: (server: Server) => void
     onPing?: (id: string) => void
     isAutoSelected?: boolean
+    isAltPressed?: boolean
     t: any
     isTestingLatency?: boolean
 }
 
-function ServerItem({ server, isSelected, isRunning, isLoading, connectionState, onClick, onToggle, onEdit, onDelete, onExport, onPing, isAutoSelected, t, isTestingLatency }: ServerItemProps) {
+function ServerItem({ server, isSelected, isRunning, isLoading, connectionState, onClick, onToggle, onEdit, onDelete, onExport, onPing, isAutoSelected, t, isTestingLatency, isAltPressed }: ServerItemProps) {
+    const isReconnectMode = isRunning && isAltPressed
     // Debug log for missing export button
     // console.log("ServerItem render:", server.name, "Has onExport:", !!onExport);
     return (
@@ -622,6 +627,10 @@ function ServerItem({ server, isSelected, isRunning, isLoading, connectionState,
                                 : "bg-yellow-500/20 text-yellow-500 border-yellow-500/20"
                         )}>
                             {connectionState === "disconnecting" ? t('status.disconnecting') : t('status.connecting')}
+                        </span>
+                    ) : isReconnectMode ? (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold border bg-yellow-500/20 text-yellow-500 border-yellow-500/20 animate-pulse">
+                            {t('status.reconnect')}
                         </span>
                     ) : isRunning ? (
                         <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold border bg-accent-green/20 text-accent-green border-accent-green/20 animate-pulse">
@@ -705,7 +714,7 @@ function ServerItem({ server, isSelected, isRunning, isLoading, connectionState,
                     className="size-8 flex items-center justify-center rounded-full transition-all hover:scale-110 active:scale-95 z-10"
                     onClick={(e) => {
                         e.stopPropagation()
-                        onToggle()
+                        onToggle(isReconnectMode)
                     }}
                 >
                     {/* Icon Logic:
@@ -713,7 +722,11 @@ function ServerItem({ server, isSelected, isRunning, isLoading, connectionState,
                         - If Selected (but not running): Show Play (Ready).
                         - If Idle: Show Play (Opacity 0 -> 1 on hover).
                      */}
-                    {isRunning ? (
+                    {isReconnectMode ? (
+                        <div className="bg-yellow-500 text-white p-1.5 rounded-full shadow-[0_0_15px_rgba(234,179,8,0.6)]">
+                            <RotateCw size={12} className="animate-spin-slow" />
+                        </div>
+                    ) : isRunning ? (
                         <div className="bg-accent-green text-black p-1.5 rounded-full shadow-[0_0_15px_rgba(34,197,94,0.6)]">
                             <Square size={12} fill="black" />
                         </div>

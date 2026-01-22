@@ -221,8 +221,10 @@
         "wait": "请稍候...",
         "switching": "切换中...",
         "disconnect": "断开连接",
+        "reconnect": "重新连接",
         "connect": "连接",
         "connecting": "正在连接...",
+        "reconnecting": "正在重新连接...",
         "disconnecting": "正在断开...",
         "mode": {
             "global": "全局",

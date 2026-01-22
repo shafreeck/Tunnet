@@ -16,7 +16,7 @@ interface ProxiesViewProps {
     // Locations/Server Props
     servers: any[]
     onSelect: (id: string) => void
-    onToggle: (id: string, shouldConnect?: boolean) => void
+    onToggle: (id: string, restart?: boolean, shouldConnect?: boolean) => void
     onImport: (url: string, name?: string) => Promise<void>
     onEdit: (node: any) => void
     onDelete: (id: string) => void
