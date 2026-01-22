@@ -111,6 +111,19 @@ export default function TrayPage() {
     }, [])
 
     useEffect(() => {
+        const unlistenTransition = listen<any>("proxy-transition", (event) => {
+            if (manualActionRef.current) return;
+            const { state } = event.payload
+            if (state === "connecting" || state === "disconnecting") {
+                setIsTransitioning(true)
+            } else if (state === "idle") {
+                setIsTransitioning(false)
+            }
+        })
+        return () => { unlistenTransition.then(f => f()) }
+    }, [])
+
+    useEffect(() => {
         getVersion().then(setVersion)
     }, [])
 
@@ -261,9 +274,11 @@ export default function TrayPage() {
     const toggleConnection = async () => {
         if (isTransitioning) return
         manualActionRef.current = true
-        setIsTransitioning(true)
 
         const isRestart = isReconnectMode
+        const transitState = status.is_running && !isRestart ? "disconnecting" : "connecting"
+        emit("proxy-transition", { state: transitState })
+        setIsTransitioning(true)
 
         try {
             if (status.is_running) {
@@ -298,6 +313,7 @@ export default function TrayPage() {
                     }, 800)
                 } else {
                     setIsTransitioning(false)
+                    emit("proxy-transition", { state: "idle" })
                 }
             } else {
                 const nodeId = settings.active_target_id
@@ -316,10 +332,12 @@ export default function TrayPage() {
                 })
                 setStatus(res)
                 setIsTransitioning(false)
+                emit("proxy-transition", { state: "idle" })
             }
         } catch (e) {
             console.error("Tray: Operation failed", e)
             setIsTransitioning(false)
+            emit("proxy-transition", { state: "idle" })
         } finally {
             setTimeout(() => { manualActionRef.current = false }, 1000)
         }
@@ -327,11 +345,15 @@ export default function TrayPage() {
 
     const setMode = async (mode: "rule" | "global" | "direct") => {
         if (isTransitioning) return
+        const isRestart = isReconnectMode
+        const transitState = status.is_running && !isRestart ? "disconnecting" : "connecting"
+        emit("proxy-transition", { state: transitState })
         setIsTransitioning(true)
         try {
             await invoke("set_routing_mode_command", { mode })
         } catch (e) {
             setIsTransitioning(false)
+            emit("proxy-transition", { state: "idle" })
         }
     }
 
@@ -348,9 +370,10 @@ export default function TrayPage() {
     const toggleTunMode = async () => {
         if (isTransitioning) return
         manualActionRef.current = true
+        const newTunMode = !status.tun_mode
+        emit("proxy-transition", { state: "connecting" }) // Tun toggle usually involves restart
         setIsTransitioning(true)
 
-        const newTunMode = !status.tun_mode
         try {
             if (status.is_running) {
                 const activeNode = nodes.find(n => n.id === settings.active_target_id) || nodes[0]
@@ -369,8 +392,10 @@ export default function TrayPage() {
             if (!status.is_running) {
                 setStatus({ ...status, tun_mode: !newTunMode })
             }
+            emit("proxy-transition", { state: "idle" })
         } finally {
             setIsTransitioning(false)
+            emit("proxy-transition", { state: "idle" })
             setTimeout(() => { manualActionRef.current = false }, 1000)
         }
     }

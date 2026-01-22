@@ -232,7 +232,10 @@ export default function Home() {
       if (!isConnected) {
         if (lastAppliedConfigRef.current) {
           const pulseId = ++lastPulseIdRef.current
-          // Silently cleanup without UI flash
+          // Manual action or tray sync both need visual feedback
+          emit("proxy-transition", { state: "disconnecting" })
+          setIsLoading(true)
+          setConnectionState("disconnecting")
           try {
             const result: any = await invoke("stop_proxy")
             if (pulseId !== lastPulseIdRef.current) return
@@ -242,6 +245,8 @@ export default function Home() {
           } finally {
             lastAppliedConfigRef.current = null
             setConnectionState("idle")
+            setIsLoading(false)
+            emit("proxy-transition", { state: "idle" })
             manualActionRef.current = false
           }
         }
@@ -254,7 +259,7 @@ export default function Home() {
       const currentConfigKey = `${activeServerIdRef.current}:${proxyMode}:${tunEnabled}`
 
       if (currentConfigKey === lastAppliedConfigRef.current) return
-      if (isLoading) return
+      // if (isLoading) return // REMOVED: This blocked processing because handleServerToggle sets loading=true optimistically
 
       let node = serversRef.current.find(s => s.id === activeServerIdRef.current)
 
@@ -281,7 +286,10 @@ export default function Home() {
       const pulseId = ++lastPulseIdRef.current
 
       setIsLoading(true)
+      const transitState = isConnected ? "connecting" : "disconnecting"; // If starting from connected, it's likely a restart or mode change which feels like 'connecting' to a new state. Actually, syncProxy handles both. 
+      // If we are already connected and syncProxy is called, it's usually a mode/tun change.
       setConnectionState("connecting")
+      emit("proxy-transition", { state: "connecting" })
       // console.log("Syncing proxy config...", { proxyMode, tunEnabled, node: node.name })
 
       const isOnlyTunUpdate = lastAppliedConfigRef.current &&
@@ -344,6 +352,7 @@ export default function Home() {
       } finally {
         setIsLoading(false)
         setConnectionState("idle")
+        emit("proxy-transition", { state: "idle" })
         setTimeout(() => { manualActionRef.current = false }, 1000)
       }
     }
@@ -418,10 +427,9 @@ export default function Home() {
 
     // Listen for proxy status change from other windows (e.g. tray)
     const unlistenStatus = listen<any>("proxy-status-change", (event) => {
-      // If we are currently loading a local change, ignore background events
-      // to avoid race conditions with intermediate status changes (e.g. during restart)
-      if (isLoadingRef.current || manualActionRef.current) return;
-
+      // Always accept backend status as truth.
+      // If we are currently performing a LOCAL manual action, this event confirms the result.
+      // if (manualActionRef.current) return; // REMOVED: Caused stuck loading state because final event was ignored
 
       const status = event.payload
 
@@ -444,9 +452,27 @@ export default function Home() {
         lastAppliedConfigRef.current = `${status.target_id}:${status.routing_mode}:${status.tun_mode}`
       }
 
+      // Sync loading state when finished in another window
+      setIsLoading(false)
+      setConnectionState("idle")
+
       // Trigger IP refresh on status change if running
       if (status.is_running) {
         setIpRefreshKey(prev => prev + 1)
+      }
+    })
+
+    // Listen for proxy transition from other windows (e.g. tray)
+    const unlistenTransition = listen<any>("proxy-transition", (event) => {
+      // Only process external transitions if we are not busy with our own local action
+      if (manualActionRef.current) return;
+      const { state } = event.payload
+      if (state === "connecting" || state === "disconnecting") {
+        setIsLoading(true)
+        setConnectionState(state)
+      } else if (state === "idle") {
+        setIsLoading(false)
+        setConnectionState("idle")
       }
     })
 
@@ -478,6 +504,7 @@ export default function Home() {
       unlistenIpRequest.then(f => f())
       unlistenSettings.then(f => f())
       unlistenProfiles.then(f => f())
+      unlistenTransition.then(f => f())
     }
   }, [])
 
@@ -1005,7 +1032,11 @@ export default function Home() {
       }
     }
 
-    // Just update the preference state. The reactive useEffect will handle the rest.
+    if (isConnected) {
+      setIsLoading(true)
+      setConnectionState("connecting")
+      emit("proxy-transition", { state: "connecting" })
+    }
     setTunEnabled(nextState)
     // Persist to backend settings to sync with Tray and other components
     saveAppSettings({ ...settings, tun_mode: nextState }).catch(console.error)
@@ -1029,6 +1060,7 @@ export default function Home() {
       if (isConnected) {
         // Just update state, the useEffect takes care of the backend
         setConnectionState("disconnecting")
+        emit("proxy-transition", { state: "disconnecting" })
         setIsConnected(false)
 
         if (restart) {
@@ -1069,8 +1101,11 @@ export default function Home() {
       console.error(error)
       toast.error(t('toast.action_failed', { error: error.message || "Failed to toggle proxy" }))
       setConnectionState("idle")
-    } finally {
       setIsLoading(false)
+    } finally {
+      // Don't clear isLoading here if we triggered a state change, 
+      // the syncProxy logic will handle it after the backend responds.
+      // setIsLoading(false)
     }
   }
 
@@ -1134,6 +1169,7 @@ export default function Home() {
     // Otherwise -> Connect to this server (Switching or Starting)
     setIsLoading(true)
     setConnectionState("connecting")
+    emit("proxy-transition", { state: "connecting" })
     try {
       setActiveServerId(id) // Update selection UI immediately
 
@@ -1209,11 +1245,17 @@ export default function Home() {
       } else {
         console.error("Node or Group not found for ID:", id)
         toast.error("Target not found")
+        setIsLoading(false)
+        setConnectionState("idle")
       }
     } catch (e: any) {
       toast.error(t('toast.connection_failed', { error: e }))
-    } finally {
       setIsLoading(false)
+      setConnectionState("idle")
+    } finally {
+      // Don't clear isLoading here if we triggered a state change, 
+      // the syncProxy logic will handle it after the backend responds.
+      // setIsLoading(false)
     }
   }
 
@@ -1690,10 +1732,18 @@ export default function Home() {
                 connectionDetails={connectionDetails || undefined}
                 mode={proxyMode}
                 onModeChange={(m) => {
+                  if (isConnected) {
+                    setIsLoading(true)
+                    setConnectionState("connecting")
+                  }
+                  emit("proxy-transition", { state: isConnected ? "connecting" : "idle" });
                   setProxyMode(m)
                 }}
                 tunEnabled={tunEnabled}
-                onTunToggle={handleTunToggle}
+                onTunToggle={() => {
+                  emit("proxy-transition", { state: isConnected ? "connecting" : "idle" });
+                  handleTunToggle();
+                }}
                 systemProxyEnabled={systemProxyEnabled}
                 onSystemProxyToggle={toggleSystemProxy}
                 isLoading={isLoading}
