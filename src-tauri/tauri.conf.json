@@ -76,7 +76,8 @@
       "resources/geosite-cn.srs",
       "resources/geosite-category-ads-all.srs",
       "resources/tunnet-helper",
-      "resources/libbox.dll"
+      "resources/libbox.dll",
+      "resources/wintun.dll"
     ],
     "macOS": {
       "infoPlist": "Info.plist"

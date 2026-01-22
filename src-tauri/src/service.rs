@@ -9,6 +9,9 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use crate::libbox;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 #[derive(serde::Serialize, Clone, Debug)]
 pub struct ProxyStatus {
     pub is_running: bool,
@@ -2000,6 +2003,7 @@ impl<R: Runtime> ProxyService<R> {
         {
             info!("Disabling system proxy on Windows...");
             let _ = std::process::Command::new("reg")
+                .creation_flags(0x08000000)
                 .args([
                     "add",
                     r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings",
@@ -2100,6 +2104,7 @@ impl<R: Runtime> ProxyService<R> {
             info!("Enabling system proxy on Windows port {}...", port);
             let proxy_server = format!("127.0.0.1:{}", port);
             let _ = std::process::Command::new("reg")
+                .creation_flags(0x08000000)
                 .args([
                     "add",
                     r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings",
@@ -2113,6 +2118,7 @@ impl<R: Runtime> ProxyService<R> {
                 ])
                 .output();
             let _ = std::process::Command::new("reg")
+                .creation_flags(0x08000000)
                 .args([
                     "add",
                     r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings",

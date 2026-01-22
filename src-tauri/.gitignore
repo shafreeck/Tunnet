@@ -3,6 +3,7 @@
 /target/
 /gen/schemas
 /resources/tunnet-helper
+/resources/*.dll
 
 # Generated assets for mobile
 /gen/android/app/src/main/assets/resources/sing-box

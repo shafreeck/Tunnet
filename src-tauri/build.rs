@@ -374,6 +374,32 @@ fn main() {
             libbox_dir.join("libbox.dll"),
             resources_dir.join("libbox.dll"),
         );
+
+        // Ensure wintun.dll exists in resources
+        let wintun_path = resources_dir.join("wintun.dll");
+        if !wintun_path.exists() {
+            println!("cargo:warning=Downloading wintun.dll...");
+            let download_script = r#"
+                $url = "https://www.wintun.net/builds/wintun-0.14.1.zip"
+                $zip = "wintun.zip"
+                $extract = "wintun_dist"
+                Invoke-WebRequest -Uri $url -OutFile $zip
+                Expand-Archive -Path $zip -DestinationPath $extract -Force
+                Copy-Item -Path "$extract/wintun/bin/amd64/wintun.dll" -Destination "resources/wintun.dll"
+                Remove-Item -Path $zip
+                Remove-Item -Path $extract -Recurse
+            "#;
+
+            let status = Command::new("powershell")
+                .current_dir(&manifest_dir)
+                .args(&["-Command", download_script])
+                .status()
+                .expect("Failed to execute PowerShell to download wintun.dll");
+
+            if !status.success() {
+                panic!("Failed to download wintun.dll");
+            }
+        }
     }
 
     let mut windows = tauri_build::WindowsAttributes::new();
