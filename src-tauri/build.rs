@@ -367,7 +367,7 @@ fn main() {
 
         // Link Windows system libraries required by Go / Sing-box
         println!("cargo:rustc-link-lib=ws2_32");
-        println!("cargo:rustc-link-lib=delayimp"); // Required for /DELAYLOAD
+        println!("cargo:rustc-link-arg=delayimp.lib"); // Required for /DELAYLOAD
         println!("cargo:rustc-link-lib=iphlpapi");
         println!("cargo:rustc-link-lib=dnsapi");
         println!("cargo:rustc-link-lib=ntdll");
