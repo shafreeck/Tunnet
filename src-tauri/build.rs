@@ -383,7 +383,8 @@ fn main() {
             let _ = std::fs::create_dir_all(&target_dir);
         }
 
-        let _ = std::fs::copy(libbox_dir.join("libbox.dll"), target_dir.join("libbox.dll"));
+        // NOT copying to target_dir to simulate release environment behavior
+        // let _ = std::fs::copy(libbox_dir.join("libbox.dll"), target_dir.join("libbox.dll"));
 
         // Copy libbox.dll to resources/bin so it can be bundled
         let resources_bin_dir = Path::new(&manifest_dir).join("resources").join("bin");
@@ -428,8 +429,7 @@ fn main() {
             }
         }
 
-        // Also copy wintun.dll to target_dir so it's available for cargo run
-        let _ = std::fs::copy(wintun_path, target_dir.join("wintun.dll"));
+        // let _ = std::fs::copy(wintun_path, target_dir.join("wintun.dll"));
     }
 
     let mut windows = tauri_build::WindowsAttributes::new();
