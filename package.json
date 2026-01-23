@@ -1,6 +1,6 @@
 {
   "name": "tunnet",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "scripts": {
     "dev": "npm run copy:logo && next dev -p 4000 -H 127.0.0.1",
@@ -19,12 +19,11 @@
     "@tauri-apps/cli": "^2.9.6",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
     "@tauri-apps/plugin-deep-link": "^2.4.5",
+    "@tauri-apps/plugin-dialog": "^2.2.0",
+    "@tauri-apps/plugin-fs": "^2.2.0",
     "@tauri-apps/plugin-os": "^2.3.2",
     "@tauri-apps/plugin-shell": "^2.3.3",
     "@tauri-apps/plugin-updater": "^2.9.0",
-    "@tauri-apps/plugin-dialog": "^2.2.0",
-    "@tauri-apps/plugin-fs": "^2.2.0",
-    "qrcode.react": "^4.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -34,6 +33,7 @@
     "lucide-react": "^0.562.0",
     "next": "16.1.1",
     "next-themes": "^0.4.4",
+    "qrcode.react": "^4.0.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-i18next": "^16.5.1",
@@ -43,6 +43,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@actions/github": "^7.0.0",
     "@tailwindcss/postcss": "^4.1.18",
     "@types/d3-geo": "^3.1.0",
     "@types/node": "^20",

@@ -70,6 +70,16 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
+      - name: Upload updater artifacts
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            src-tauri/target/release/bundle/**/*.tar.gz
+            src-tauri/target/release/bundle/**/*.zip
+            src-tauri/target/release/bundle/**/*.sig
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   updater-manifest:
     needs: build-tauri
     runs-on: ubuntu-latest
