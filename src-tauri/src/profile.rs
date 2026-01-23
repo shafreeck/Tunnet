@@ -631,7 +631,10 @@ pub mod parser {
                     let port = o
                         .get("server_port")
                         .or(o.get("port"))
-                        .and_then(|p| p.as_u64())
+                        .and_then(|p| {
+                            p.as_u64()
+                                .or_else(|| p.as_str().and_then(|s| s.parse().ok()))
+                        })
                         .unwrap_or(0) as u16;
 
                     let protocol = protocol.to_lowercase();
@@ -876,12 +879,11 @@ pub mod parser {
                         port: v
                             .get("port")
                             .and_then(|v| {
-                                v.as_str().or(match v.as_u64() {
-                                    Some(_) => Some("0"),
-                                    None => None,
-                                })
+                                v.as_u64()
+                                    .map(|u| u.to_string())
+                                    .or_else(|| v.as_str().map(|s| s.to_string()))
                             })
-                            .unwrap_or("0")
+                            .unwrap_or_else(|| "0".to_string())
                             .parse()
                             .unwrap_or(0),
                         uuid: v.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()),
