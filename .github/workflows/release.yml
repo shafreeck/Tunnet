@@ -70,42 +70,6 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
-      - name: Compress and Sign Linux AppImage
-        if: startsWith(matrix.platform, 'ubuntu')
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            echo "Skipping signing: TAURI_SIGNING_PRIVATE_KEY not set"
-            exit 0
-          fi
-
-          # Write private key to file for tauri signer
-          echo "$TAURI_SIGNING_PRIVATE_KEY" > tauri.key
-
-          # Sign .deb files
-          find src-tauri/target/release/bundle/deb -name "*.deb" | while read deb; do
-            echo "Signing ${deb}..."
-            npm run tauri -- signer sign -f tauri.key --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "${deb}"
-          done
-
-          # Sign .rpm files
-          find src-tauri/target/release/bundle/rpm -name "*.rpm" | while read rpm; do
-            echo "Signing ${rpm}..."
-            npm run tauri -- signer sign -f tauri.key --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "${rpm}"
-          done
-
-          # Sign AppImage (if not already signed by tauri, but usually we need .sig file)
-          # Tauri might sign the AppImage automatically if configured, but let's ensure we have detached sigs for all
-          find src-tauri/target/release/bundle/appimage -name "*.AppImage" | while read img; do
-             echo "Signing ${img}..."
-             npm run tauri -- signer sign -f tauri.key --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "${img}"
-          done
-
-          # Clean up key
-          rm tauri.key
-
       - name: Upload updater artifacts
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
