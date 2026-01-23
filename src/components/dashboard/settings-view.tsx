@@ -325,11 +325,14 @@ function GeneralSettings({ settings, update }: CommonProps) {
 
 function CheckUpdateBtn() {
     const { t } = useTranslation()
-    const [status, setStatus] = useState<'idle' | 'checking' | 'downloading' | 'ready'>('idle')
+    const [status, setStatus] = useState<'idle' | 'checking' | 'found' | 'downloading' | 'ready'>('idle')
     const [progress, setProgress] = useState(0)
+    const [updateObj, setUpdateObj] = useState<any>(null)
+    const [updateVersion, setUpdateVersion] = useState<string>("")
     const [isSimulation, setIsSimulation] = useState(false)
 
     const checkUpdate = async (e: React.MouseEvent) => {
+        // Step 3: Restart (Ready)
         if (status === 'ready') {
             if (isSimulation) {
                 toast.info("This is a simulation. App would restart now.")
@@ -343,56 +346,79 @@ function CheckUpdateBtn() {
             return
         }
 
-        // SIMULATION MODE
-        if (e.altKey) {
+        // Step 2: Download & Install (Found)
+        if (status === 'found') {
+            setStatus('downloading')
+            try {
+                if (isSimulation) {
+                    // Sim download
+                    let p = 0
+                    const interval = setInterval(() => {
+                        p += 10
+                        setProgress(p)
+                        if (p >= 100) {
+                            clearInterval(interval)
+                            setStatus('ready')
+                            toast.success(t('update.ready_title', { defaultValue: 'Update Ready' }), {
+                                description: t('update.restart_desc', { defaultValue: 'Restart to apply update.' })
+                            })
+                        }
+                    }, 200)
+                    return
+                }
+
+                // Real download
+                if (updateObj) {
+                    let downloaded = 0
+                    let total = 0
+                    await updateObj.downloadAndInstall((event: any) => {
+                        switch (event.event) {
+                            case 'Started':
+                                total = event.data.contentLength || 0
+                                break
+                            case 'Progress':
+                                downloaded += event.data.chunkLength
+                                if (total > 0) {
+                                    setProgress(Math.round((downloaded / total) * 100))
+                                }
+                                break
+                        }
+                    })
+                    setStatus('ready')
+                    toast.success(t('update.ready_title', { defaultValue: 'Update Ready' }), {
+                        description: t('update.restart_desc', { defaultValue: 'Restart to apply update.' })
+                    })
+                }
+            } catch (e) {
+                console.error(e)
+                toast.error(t('settings.advanced.core.error'), { description: String(e) })
+                setStatus('idle')
+            }
+            return
+        }
+
+        // SIMULATION MODE TRIGGER (Alt + Click)
+        if (e.altKey && status === 'idle') {
             setIsSimulation(true)
             setStatus('checking')
             setTimeout(() => {
-                setStatus('downloading')
-                let p = 0
-                const interval = setInterval(() => {
-                    p += 10
-                    setProgress(p)
-                    if (p >= 100) {
-                        clearInterval(interval)
-                        setStatus('ready')
-                        toast.success(t('update.ready_title', { defaultValue: 'Update Ready' }), {
-                            description: t('update.restart_desc', { defaultValue: 'Restart to apply update.' })
-                        })
-                    }
-                }, 200)
+                setUpdateVersion("TEST-2.0.0")
+                setStatus('found')
+                toast.info("Update found: vTEST-2.0.0 (Simulation)")
             }, 1000)
             return
         }
 
+        // Step 1: Check (Idle)
         setStatus('checking')
         try {
             const { check } = await import("@tauri-apps/plugin-updater")
             const update = await check()
-            if (update) {
-                // Found update, start downloading
-                setStatus('downloading')
-                let downloaded = 0
-                let total = 0
-
-                await update.downloadAndInstall((event) => {
-                    switch (event.event) {
-                        case 'Started':
-                            total = event.data.contentLength || 0
-                            break
-                        case 'Progress':
-                            downloaded += event.data.chunkLength
-                            if (total > 0) {
-                                setProgress(Math.round((downloaded / total) * 100))
-                            }
-                            break
-                    }
-                })
-
-                setStatus('ready')
-                toast.success(t('update.ready_title', { defaultValue: 'Update Ready' }), {
-                    description: t('update.restart_desc', { defaultValue: 'Restart to apply update.' })
-                })
+            if (update && update.available) {
+                setUpdateObj(update)
+                setUpdateVersion(update.version)
+                setStatus('found')
+                toast.success(t('update.found', { version: update.version, defaultValue: `New version v${update.version} available` }))
             } else {
                 toast.info(t('settings.advanced.core.latest'))
                 setStatus('idle')
@@ -414,12 +440,15 @@ function CheckUpdateBtn() {
                 "flex items-center gap-2 px-4 py-2 rounded-xl transition-all text-xs font-bold disabled:opacity-50 min-w-[120px] justify-center overflow-hidden",
                 status === 'ready'
                     ? "bg-green-500/10 text-green-500 hover:bg-green-500/20"
-                    : "bg-primary/10 text-primary hover:bg-primary/20"
+                    : status === 'found'
+                        ? "bg-primary text-white shadow-lg shadow-primary/20 hover:bg-primary/90"
+                        : "bg-primary/10 text-primary hover:bg-primary/20"
             )}
         >
             <RefreshCw size={14} className={status === 'checking' || status === 'downloading' ? "animate-spin shrink-0" : "shrink-0"} />
             <span className="truncate">
                 {status === 'checking' && t('settings.advanced.core.checking')}
+                {status === 'found' && (t('update.install_now', { version: updateVersion, defaultValue: `Install v${updateVersion}` }))}
                 {status === 'downloading' && `${t('settings.advanced.core.downloading', { defaultValue: 'Downloading' })} ${progress}%`}
                 {status === 'ready' && t('settings.advanced.core.restart', { defaultValue: 'Restart to Apply' })}
                 {status === 'idle' && t('settings.advanced.core.check_update')}
