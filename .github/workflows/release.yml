@@ -70,6 +70,39 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
+      - name: Compress and Sign Linux AppImage
+        if: startsWith(matrix.platform, 'ubuntu')
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "Skipping signing: TAURI_SIGNING_PRIVATE_KEY not set"
+            exit 0
+          fi
+
+          # Write private key to file for tauri signer
+          echo "$TAURI_SIGNING_PRIVATE_KEY" > tauri.key
+
+          # Find AppImage files and process
+          find src-tauri/target/release/bundle/appimage -name "*.AppImage" | while read img; do
+            if [ ! -f "${img}.tar.gz" ]; then
+              echo "Processing ${img}..."
+              
+              # Compress
+              tar -czf "${img}.tar.gz" -C "$(dirname "$img")" "$(basename "$img")"
+              echo "Compressed to ${img}.tar.gz"
+              
+              # Sign
+              # We use the updated tauri cli interface if possible, or fallback
+              # Assuming 'npm run tauri' works
+              npm run tauri -- signer sign -k tauri.key --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "${img}.tar.gz"
+            fi
+          done
+
+          # Clean up key
+          rm tauri.key
+
       - name: Upload updater artifacts
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
