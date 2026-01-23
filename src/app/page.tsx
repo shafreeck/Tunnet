@@ -448,8 +448,10 @@ export default function Home() {
       setTunEnabled(status.tun_mode)
       setClashApiPort(status.clash_api_port)
       // Sync ref to avoid restart loop
-      if (status.target_id) {
+      if (status.is_running && status.target_id) {
         lastAppliedConfigRef.current = `${status.target_id}:${status.routing_mode}:${status.tun_mode}`
+      } else if (!status.is_running) {
+        lastAppliedConfigRef.current = null
       }
 
       // Sync loading state when finished in another window
