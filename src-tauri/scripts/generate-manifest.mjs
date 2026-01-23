@@ -60,6 +60,8 @@ async function run() {
         'linux-x86_64-appimage': ['amd64.AppImage.tar.gz', 'amd64.AppImage'],
         'linux-aarch64': ['aarch64.AppImage.tar.gz', 'arm64.AppImage.tar.gz', 'aarch64.AppImage', 'arm64.AppImage'],
         'windows-x86_64': ['x64-setup.exe.zip', 'x64-setup.exe', 'x64_en-US.msi.zip', 'x64_en-US.msi'],
+        'windows-x86_64-msi': ['x64_en-US.msi.zip', 'x64_en-US.msi'],
+        'windows-x86_64-nsis': ['x64-setup.exe.zip', 'x64-setup.exe'],
     };
 
     for (const [platform, patterns] of Object.entries(platformsMapping)) {
