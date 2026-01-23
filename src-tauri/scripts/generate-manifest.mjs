@@ -55,6 +55,9 @@ async function run() {
         'darwin-aarch64': ['aarch64.app.tar.gz', 'aarch64-apple-darwin.app.tar.gz', 'aarch64-apple-darwin.dmg'],
         'darwin-x86_64': ['x86_64.app.tar.gz', 'x86_64-apple-darwin.app.tar.gz', 'x86_64-apple-darwin.dmg'],
         'linux-x86_64': ['amd64.AppImage.tar.gz', 'x86_64-unknown-linux-gnu.AppImage.tar.gz', 'amd64.AppImage'],
+        'linux-x86_64-deb': ['amd64.deb'],
+        'linux-x86_64-rpm': ['x86_64.rpm'],
+        'linux-x86_64-appimage': ['amd64.AppImage.tar.gz', 'amd64.AppImage'],
         'linux-aarch64': ['aarch64.AppImage.tar.gz', 'arm64.AppImage.tar.gz', 'aarch64.AppImage', 'arm64.AppImage'],
         'windows-x86_64': ['x64-setup.exe.zip', 'x64-setup.exe', 'x64_en-US.msi.zip', 'x64_en-US.msi'],
     };
@@ -87,9 +90,11 @@ async function run() {
                     url: asset.browser_download_url,
                 };
             } else {
-                console.warn(`No signature found for ${asset.name}, skipping ${platform}`);
+                console.warn(`No signature found for ${asset.name} (platform: ${platform})`);
             }
         } else {
+            // Optional: Don't warn for every missing specific linux format if generic one exists, 
+            // but here we want visibility.
             console.warn(`No matching asset found for ${platform}`);
         }
     }
