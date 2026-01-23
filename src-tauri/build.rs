@@ -273,7 +273,7 @@ fn main() {
                 "-tags",
                 "with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls,with_wintun",
                 "-buildmode=c-shared",
-                "-ldflags=-s -w",
+                "-ldflags=-s -w -extldflags '-static'",
                 "-o",
                 "libbox.dll",
                 "main.go",
