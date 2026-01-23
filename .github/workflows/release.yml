@@ -75,9 +75,12 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            src-tauri/target/release/bundle/**/*.tar.gz
+            src-tauri/target/release/bundle/**/*.AppImage.tar.gz
+            src-tauri/target/release/bundle/**/*.AppImage.tar.gz.sig
+            src-tauri/target/release/bundle/**/*.app.tar.gz
+            src-tauri/target/release/bundle/**/*.app.tar.gz.sig
             src-tauri/target/release/bundle/**/*.zip
-            src-tauri/target/release/bundle/**/*.sig
+            src-tauri/target/release/bundle/**/*.zip.sig
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   updater-manifest:
