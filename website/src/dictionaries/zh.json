@@ -79,22 +79,18 @@
                 "links": {
                     "x64": [
                         {
-                            "label": "Deb (x64)",
-                            "url": "Tunnet_0.1.4_amd64.deb"
+                            "label": "Deb (x64)"
                         },
                         {
-                            "label": "RPM (x64)",
-                            "url": "tunnet-0.1.4-1.x86_64.rpm"
+                            "label": "RPM (x64)"
                         }
                     ],
                     "arm64": [
                         {
-                            "label": "Deb (ARM64)",
-                            "url": "Tunnet_0.1.4_arm64.deb"
+                            "label": "Deb (ARM64)"
                         },
                         {
-                            "label": "RPM (ARM64)",
-                            "url": "tunnet-0.1.4-1.aarch64.rpm"
+                            "label": "RPM (ARM64)"
                         }
                     ]
                 }

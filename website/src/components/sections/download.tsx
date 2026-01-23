@@ -5,30 +5,37 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Apple, Monitor, Terminal } from "lucide-react";
 
-const RELEASE_BASE_URL = "https://github.com/shafreeck/Tunnet/releases/download/v0.1.5";
+const CURRENT_VERSION = "0.1.5";
+const RELEASE_BASE_URL = `https://github.com/shafreeck/Tunnet/releases/download/v${CURRENT_VERSION}`;
 
 const platformConfig = {
     macos: {
         icon: Apple,
-        version: "v0.1.5",
+        version: `v${CURRENT_VERSION}`,
         links: [
-            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.5_aarch64.dmg` },
+            { url: `${RELEASE_BASE_URL}/Tunnet_${CURRENT_VERSION}_aarch64.dmg` },
         ],
     },
     windows: {
         icon: Monitor,
-        version: "v0.1.5",
+        version: `v${CURRENT_VERSION}`,
         links: [
-            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.5_x64_en-US.msi` },
+            { url: `${RELEASE_BASE_URL}/Tunnet_${CURRENT_VERSION}_x64_en-US.msi` },
         ],
     },
     linux: {
         icon: Terminal,
-        version: "v0.1.5",
-        links: [
-            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.5_amd64.deb` },
-            { url: `${RELEASE_BASE_URL}/Tunnet_0.1.5_arm64.deb` },
-        ],
+        version: `v${CURRENT_VERSION}`,
+        architectures: {
+            x64: [
+                { url: `${RELEASE_BASE_URL}/Tunnet_${CURRENT_VERSION}_amd64.deb` },
+                { url: `${RELEASE_BASE_URL}/Tunnet-${CURRENT_VERSION}-1.x86_64.rpm` },
+            ],
+            arm64: [
+                { url: `${RELEASE_BASE_URL}/Tunnet_${CURRENT_VERSION}_arm64.deb` },
+                { url: `${RELEASE_BASE_URL}/Tunnet-${CURRENT_VERSION}-1.aarch64.rpm` },
+            ]
+        }
     },
 };
 
@@ -41,19 +48,22 @@ export function Download({ dict }: { dict: any }) {
         const dictPlatform = dict.platforms[platformKey];
         const configPlatform = platformConfig[platformKey];
 
-        let links = [];
+        let links: { label: string; url: string }[] = [];
 
         if (platformKey === 'linux') {
             // Special handling for Linux to support architecture toggle
-            links = dictPlatform.links[linuxArch].map((link: { label: string, url: string }) => ({
+            // Map labels from dict to urls from config by index
+            const archLinks = (configPlatform as any).architectures[linuxArch];
+            links = dictPlatform.links[linuxArch].map((link: { label: string }, index: number) => ({
                 label: link.label,
-                url: `${RELEASE_BASE_URL}/${link.url}`,
+                url: archLinks[index].url,
             }));
         } else {
             // Standard handling for macOS and Windows
+            // Map labels from dict to urls from config by index
             links = dictPlatform.links.map((link: { label: string }, index: number) => ({
                 label: link.label,
-                url: (configPlatform.links[index] as { url: string }).url,
+                url: (configPlatform as any).links[index].url,
             }));
         }
 
