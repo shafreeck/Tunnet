@@ -365,6 +365,7 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin({
+            #[allow(unused_mut)]
             let mut updater = tauri_plugin_updater::Builder::new();
             #[cfg(target_os = "linux")]
             {
