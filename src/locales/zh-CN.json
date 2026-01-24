@@ -49,6 +49,7 @@
         "search_no_results": "未找到结果。",
         "navigation": "导航",
         "server_groups": "节点组",
+        "connections": "连接管理",
         "servers": "服务器"
     },
     "dashboard": {
@@ -525,5 +526,32 @@
         "ready_desc": "新版本已下载。重启以应用。",
         "restart": "重启",
         "downloading": "下载中"
+    },
+    "connections": {
+        "title": "连接管理",
+        "search_placeholder": "搜索进程、域名或 IP...",
+        "active": "活跃",
+        "label": "个连接",
+        "close_all": "断开所有",
+        "close": "断开连接",
+        "no_results": "未找到匹配连接",
+        "empty": "暂无活跃连接",
+        "process": "进程",
+        "host": "域名/IP",
+        "network": "网络",
+        "chains": "链路",
+        "rule": "规则",
+        "speed": "速率",
+        "time": "时长",
+        "download": "下载",
+        "upload": "上传",
+        "total_download": "总下载流量",
+        "total_upload": "总上传流量",
+        "toast": {
+            "closed": "连接已断开",
+            "close_failed": "断开连接失败: {{error}}",
+            "closed_all": "已断开所有连接",
+            "close_all_failed": "断开所有连接失败: {{error}}"
+        }
     }
 }

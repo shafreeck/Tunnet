@@ -29,6 +29,8 @@ import { ConfirmationModal } from "@/components/ui/confirmation-modal"
 import { AddNodeModal } from "@/components/dashboard/add-node-modal"
 import { TrafficMonitor } from "@/components/dashboard/traffic-monitor"
 import { SearchDialog } from "@/components/dashboard/search-dialog"
+import { ConnectionsView } from "@/components/dashboard/connections-view"
+
 
 export default function Home() {
   const { t } = useTranslation()
@@ -1681,7 +1683,10 @@ export default function Home() {
 
         )
       case "rules":
+
         return <RulesView />
+      case "connections":
+        return <ConnectionsView />
       case "settings":
         return <SettingsView key={currentView} clashApiPort={clashApiPort} tunEnabled={tunEnabled} onTunToggle={handleTunToggle} />
       case "dashboard":
@@ -1831,7 +1836,7 @@ export default function Home() {
         onNavigate={(view) => setCurrentView(view)}
       />
       <main className="flex-1 flex flex-col h-full relative overflow-hidden md:rounded-xl bg-black/10 backdrop-blur-sm md:border border-white/5 pb-16 md:pb-0">
-        {currentView !== "proxies" && currentView !== "rules" && currentView !== "settings" && currentView !== "locations" && currentView !== "groups" && (currentView as any) !== "subscription_detail" && (
+        {currentView !== "proxies" && currentView !== "rules" && currentView !== "settings" && currentView !== "locations" && currentView !== "groups" && currentView !== "connections" && (currentView as any) !== "subscription_detail" && (
           <Header
             isConnected={isConnected}
             onToggle={toggleProxy}

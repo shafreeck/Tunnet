@@ -299,6 +299,28 @@ async fn select_group_node(
 }
 
 #[tauri::command]
+async fn get_connections(
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<service::ConnectionsResponse, String> {
+    service.get_connections().await
+}
+
+#[tauri::command]
+async fn close_connection(
+    id: String,
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<(), String> {
+    service.close_connection(&id).await
+}
+
+#[tauri::command]
+async fn close_all_connections(
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<(), String> {
+    service.close_all_connections().await
+}
+
+#[tauri::command]
 async fn open_main_window(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(desktop)]
     if let Some(window) = app.get_webview_window("main") {
@@ -729,7 +751,10 @@ pub fn run() {
             export_node_content,
             export_profile_content,
             export_group_content,
-            decode_qr
+            decode_qr,
+            get_connections,
+            close_connection,
+            close_all_connections
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
