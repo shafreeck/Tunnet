@@ -364,7 +364,24 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin({
+            let mut updater = tauri_plugin_updater::Builder::new();
+            #[cfg(target_os = "linux")]
+            {
+                // Verify if we are running inside an AppImage.
+                // If NOT (meaning we are likely installed via Deb/Rpm),
+                // force the updater to look for the `-deb` target.
+                if std::env::var("APPIMAGE").is_err() {
+                    let target = format!("{}-deb", std::env::consts::ARCH);
+                    log::info!(
+                        "Not running in AppImage. Forcing updater target to: linux-{}",
+                        target
+                    );
+                    updater = updater.target(format!("linux-{}", target));
+                }
+            }
+            updater.build()
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init());
 
