@@ -55,3 +55,8 @@ image = { version = "0.24", default-features = false, features = ["png", "jpeg"]
 [[bin]]
 name = "tunnet-helper"
 path = "src/bin/helper.rs"
+
+[profile.release]
+strip = false # Do not strip symbols, required for __TAURI_BUNDLE_TYPE__ patching
+codegen-units = 1
+lto = true
