@@ -41,6 +41,47 @@ pub struct LogEvent {
     pub message: String,
 }
 
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct ConnectionMetadata {
+    pub network: String,
+    #[serde(rename = "type")]
+    pub c_type: String,
+    #[serde(rename = "sourceIP")]
+    pub source_ip: String,
+    #[serde(rename = "destinationIP")]
+    pub destination_ip: String,
+    #[serde(rename = "sourcePort")]
+    pub source_port: String,
+    #[serde(rename = "destinationPort")]
+    pub destination_port: String,
+    pub host: String,
+    pub process: Option<String>,
+    #[serde(rename = "processPath")]
+    pub process_path: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct Connection {
+    pub id: String,
+    pub metadata: ConnectionMetadata,
+    pub upload: u64,
+    pub download: u64,
+    pub start: String,
+    pub chains: Vec<String>,
+    pub rule: String,
+    #[serde(rename = "rulePayload")]
+    pub rule_payload: String,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct ConnectionsResponse {
+    #[serde(rename = "downloadTotal")]
+    pub download_total: u64,
+    #[serde(rename = "uploadTotal")]
+    pub upload_total: u64,
+    pub connections: Vec<Connection>,
+}
+
 pub struct ProxyService<R: Runtime> {
     app: AppHandle<R>,
     manager: CoreManager<R>,
@@ -50,6 +91,7 @@ pub struct ProxyService<R: Runtime> {
     latest_node: Mutex<Option<crate::profile::Node>>,
     latest_routing_mode: Mutex<String>,
     clash_api_port: Mutex<Option<u16>>,
+    helper_api_port: Mutex<Option<u16>>,
     start_lock: tokio::sync::Mutex<()>, // Ensure serialized start operations
     internal_client: reqwest::Client,
     active_network_services: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
@@ -75,6 +117,7 @@ impl<R: Runtime> ProxyService<R> {
             latest_node: Mutex::new(None),
             latest_routing_mode: Mutex::new("rule".to_string()),
             clash_api_port: Mutex::new(None),
+            helper_api_port: Mutex::new(None),
             start_lock: tokio::sync::Mutex::new(()),
             manager,
             internal_client,
@@ -268,7 +311,7 @@ impl<R: Runtime> ProxyService<R> {
                 // CRITICAL FIX: In TUN mode, the frontend needs to connect to the HELPER's API port
                 // to see traffic stats. We must update the shared state to reflect this.
                 if let Some(hp) = helper_port {
-                    *self.clash_api_port.lock().unwrap() = Some(hp);
+                    *self.helper_api_port.lock().unwrap() = Some(hp);
                 }
 
                 self.write_config(
@@ -995,6 +1038,177 @@ impl<R: Runtime> ProxyService<R> {
                  serde_json::to_string_pretty(&nodes).map_err(|e| e.to_string())
             }
             _ => Err("Unknown format".to_string())
+        }
+    }
+
+    pub async fn get_connections(&self) -> Result<ConnectionsResponse, String> {
+        let _lock = self.start_lock.lock().await; // Ensure we don't query while restarting
+        if !self.is_proxy_running() {
+            return Err("Proxy is not running".to_string());
+        }
+
+        let mut ports = Vec::new();
+        // 1. Main Local Port
+        if let Some(port) = *self.clash_api_port.lock().unwrap() {
+            ports.push(port);
+        }
+        // 2. Helper Port
+        if let Some(port) = *self.helper_api_port.lock().unwrap() {
+            ports.push(port);
+        }
+
+        if ports.is_empty() {
+             return Err("Clash API port not available".to_string());
+        }
+
+        let mut combined_connections = Vec::new();
+        let mut total_upload = 0;
+        let mut total_download = 0;
+
+        for port in ports {
+            let url = format!("http://127.0.0.1:{}/connections", port);
+            match self.internal_client.get(&url).send().await {
+                Ok(resp) => {
+                    if resp.status().is_success() {
+                        if let Ok(mut data) = resp.json::<ConnectionsResponse>().await {
+                            total_upload += data.upload_total;
+                            total_download += data.download_total;
+                            
+                            // Mark them to identify source if needed, or just append
+                            combined_connections.append(&mut data.connections);
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to fetch connections from port {}: {}", port, e);
+                }
+            }
+        }
+
+        let mut final_response = ConnectionsResponse {
+            upload_total: total_upload,
+            download_total: total_download,
+            connections: combined_connections,
+        };
+        
+        // Enhance chains with node names
+        // 1. Build a map of ID -> Name from profiles and groups
+        let mut id_map = std::collections::HashMap::new();
+        if let Ok(profiles) = self.manager.load_profiles() {
+            for profile in profiles {
+                 for node in profile.nodes {
+                     id_map.insert(node.id, node.name);
+                 }
+            }
+        }
+        if let Ok(groups) = self.manager.load_groups() {
+            for group in groups {
+                id_map.insert(group.id, group.name);
+            }
+        }
+
+        // 2. Replace IDs in chains
+        for conn in &mut final_response.connections {
+            for chain_item in &mut conn.chains {
+                if let Some(name) = id_map.get(chain_item) {
+                     *chain_item = name.clone();
+                }
+            }
+        }
+        
+        Ok(final_response)
+    }
+
+    pub async fn close_connection(&self, id: &str) -> Result<(), String> {
+        let _lock = self.start_lock.lock().await;
+
+        if !self.is_proxy_running() {
+             return Err("Proxy is not running".to_string());
+        }
+
+        let mut ports = Vec::new();
+        if let Some(port) = *self.clash_api_port.lock().unwrap() {
+            ports.push(port);
+        }
+        if let Some(port) = *self.helper_api_port.lock().unwrap() {
+            ports.push(port);
+        }
+
+        if ports.is_empty() {
+            return Err("Clash API port not available".to_string());
+        }
+
+        let mut last_error = String::from("Connection not found");
+        let mut closed = false;
+
+        for port in ports {
+            let url = format!("http://127.0.0.1:{}/connections/{}", port, id);
+            match self.internal_client.delete(&url).send().await {
+                Ok(resp) => {
+                    if resp.status().is_success() || resp.status() == reqwest::StatusCode::NO_CONTENT {
+                        closed = true;
+                        // Don't break immediately? IDs might collide in theory but unlikely.
+                        // Actually if we closed it, we're good.
+                        break;
+                    } else if resp.status() == reqwest::StatusCode::NOT_FOUND {
+                        // Not here, try next
+                        continue;
+                    } else {
+                        last_error = format!("API Error {}: {}", port, resp.status());
+                    }
+                }
+                Err(e) => {
+                    last_error = format!("Request failed {}: {}", port, e);
+                }
+            }
+        }
+
+        if closed {
+            Ok(())
+        } else {
+            Err(last_error)
+        }
+    }
+
+    pub async fn close_all_connections(&self) -> Result<(), String> {
+        let _lock = self.start_lock.lock().await;
+
+        if !self.is_proxy_running() {
+             return Err("Proxy is not running".to_string());
+        }
+
+        let mut ports = Vec::new();
+        if let Some(port) = *self.clash_api_port.lock().unwrap() {
+            ports.push(port);
+        }
+        if let Some(port) = *self.helper_api_port.lock().unwrap() {
+            ports.push(port);
+        }
+
+        if ports.is_empty() {
+             return Err("Clash API port not available".to_string());
+        }
+
+        let mut combined_error = String::new();
+
+        for port in ports {
+            let url = format!("http://127.0.0.1:{}/connections", port);
+            match self.internal_client.delete(&url).send().await {
+                Ok(resp) => {
+                    if !resp.status().is_success() && resp.status() != reqwest::StatusCode::NO_CONTENT {
+                         combined_error.push_str(&format!("Port {}: API Error {}; ", port, resp.status()));
+                    }
+                }
+                Err(e) => {
+                    combined_error.push_str(&format!("Port {}: {}; ", port, e));
+                }
+            }
+        }
+        
+        if combined_error.is_empty() {
+            Ok(())
+        } else {
+            Err(combined_error)
         }
     }
 

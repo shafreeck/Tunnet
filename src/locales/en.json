@@ -49,6 +49,7 @@
         "search_no_results": "No results found.",
         "navigation": "Navigation",
         "server_groups": "Groups",
+        "connections": "Connections",
         "servers": "Servers"
     },
     "dashboard": {
@@ -514,5 +515,32 @@
         "type_json_desc": "Sing-box JSON outbound config, ideal for experts and manual setups.",
         "filter_links": "Subscription Links",
         "filter_json": "Sing-box Config"
+    },
+    "connections": {
+        "title": "Connections",
+        "search_placeholder": "Search process, host, or IP...",
+        "active": "Active",
+        "label": "connections",
+        "close_all": "Close All",
+        "close": "Close Connection",
+        "no_results": "No matching connections",
+        "empty": "No active connections",
+        "process": "Process",
+        "host": "Host/IP",
+        "network": "Network",
+        "chains": "Chains",
+        "rule": "Rule",
+        "speed": "Speed",
+        "time": "Time",
+        "download": "Download",
+        "upload": "Upload",
+        "total_download": "Total Download",
+        "total_upload": "Total Upload",
+        "toast": {
+            "closed": "Connection closed",
+            "close_failed": "Failed to close connection: {{error}}",
+            "closed_all": "All connections closed",
+            "close_all_failed": "Failed to close all: {{error}}"
+        }
     }
 }

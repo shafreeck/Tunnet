@@ -1,12 +1,12 @@
 "use client"
 
 import React from "react"
-import { Search, Rocket, Globe, Settings, Sliders, Info, Server, Zap, LayoutGrid } from "lucide-react"
+import { Search, Rocket, Globe, Settings, Sliders, Info, Server, Zap, LayoutGrid, Activity } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { type } from '@tauri-apps/plugin-os'
 
-export type ViewType = "dashboard" | "locations" | "rules" | "settings" | "proxies" | "groups"
+export type ViewType = "dashboard" | "locations" | "rules" | "settings" | "proxies" | "groups" | "connections"
 
 interface SidebarProps {
     currentView: ViewType
@@ -60,7 +60,7 @@ export function Sidebar({ currentView, onViewChange, subscription, onSearchClick
     const percent = total > 0 ? Math.min(100, (used / total) * 100) : 0
 
     return (
-        <aside className="w-[280px] glass-sidebar flex flex-col shrink-0 h-full z-40 transition-all duration-300 relative rounded-xl overflow-hidden shadow-floating md:flex hidden">
+        <aside className="w-[280px] glass-sidebar flex-col shrink-0 h-full z-40 transition-all duration-300 relative rounded-xl overflow-hidden shadow-floating md:flex hidden">
             {/* Window Controls Spacer / Drag Region */}
             <div data-tauri-drag-region className="h-12 w-full cursor-default shrink-0" />
 
@@ -85,13 +85,20 @@ export function Sidebar({ currentView, onViewChange, subscription, onSearchClick
             </div>
 
             <nav className="flex flex-col gap-1 w-full px-3 flex-1 overflow-y-auto sidebar-scroll">
-                <div className="text-[10px] font-bold text-tertiary px-3 mb-2 mt-2 tracking-wider uppercase tracking-[0.1em]">{t('sidebar.network', { defaultValue: 'Network' })}</div>
+                <div className="text-[10px] font-bold text-tertiary px-3 mb-2 mt-2 tracking-widest uppercase">{t('sidebar.network', { defaultValue: 'Network' })}</div>
 
                 <NavItem
                     icon={<Rocket size={20} />}
                     label={t('sidebar.dashboard')}
                     active={currentView === "dashboard"}
                     onClick={() => onViewChange("dashboard")}
+                />
+
+                <NavItem
+                    icon={<Activity size={20} />}
+                    label={t('sidebar.connections', { defaultValue: 'Connections' })}
+                    active={currentView === "connections"}
+                    onClick={() => onViewChange("connections")}
                 />
                 <NavItem
                     icon={<Globe size={20} />}
@@ -114,7 +121,7 @@ export function Sidebar({ currentView, onViewChange, subscription, onSearchClick
                     onClick={() => onViewChange("rules")}
                 />
 
-                <div className="text-[10px] font-bold text-tertiary px-3 mb-2 mt-6 tracking-wider uppercase tracking-[0.1em]">{t('sidebar.system')}</div>
+                <div className="text-[10px] font-bold text-tertiary px-3 mb-2 mt-6 tracking-widest uppercase">{t('sidebar.system')}</div>
 
                 <NavItem
                     icon={<Settings size={20} />}
