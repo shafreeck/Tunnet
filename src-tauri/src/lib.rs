@@ -368,16 +368,31 @@ pub fn run() {
             let mut updater = tauri_plugin_updater::Builder::new();
             #[cfg(target_os = "linux")]
             {
-                // Verify if we are running inside an AppImage.
-                // If NOT (meaning we are likely installed via Deb/Rpm),
-                // force the updater to look for the `-deb` target.
-                if std::env::var("APPIMAGE").is_err() {
-                    let target = format!("{}-deb", std::env::consts::ARCH);
-                    log::info!(
-                        "Not running in AppImage. Forcing updater target to: linux-{}",
-                        target
-                    );
-                    updater = updater.target(format!("linux-{}", target));
+                // Intelligent target detection for Linux usage
+                // 1. AppImage Check (Standard Runtime Environment)
+                if std::env::var("APPIMAGE").is_ok() {
+                    // Running correctly as AppImage, rely on default behavior
+                } else {
+                    let arch = std::env::consts::ARCH;
+                    let mut target = None;
+
+                    // 2. Deb Detection (Debian, Ubuntu, Kali, Mint, Pop!_OS)
+                    if std::path::Path::new("/etc/debian_version").exists() 
+                       || std::path::Path::new("/var/lib/dpkg").exists() {
+                        target = Some(format!("linux-{}-deb", arch));
+                    }
+                    // 3. Rpm Detection (Fedora, RHEL, CentOS, OpenSUSE)
+                    else if std::path::Path::new("/etc/redhat-release").exists() 
+                            || std::path::Path::new("/var/lib/rpm").exists() {
+                        target = Some(format!("linux-{}-rpm", arch));
+                    }
+                    
+                    if let Some(t) = target {
+                        log::info!("Detected native package manager environment. Forcing updater target to: {}", t);
+                        updater = updater.target(t);
+                    } else {
+                        log::warn!("Could not detect specific package manager (Deb/Rpm). Falling back to default updater behavior.");
+                    }
                 }
             }
             updater.build()
