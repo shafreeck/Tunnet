@@ -119,6 +119,7 @@ export default function Home() {
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [exportTarget, setExportTarget] = useState<{ id: string, name: string, type: "node" | "profile" | "group" } | null>(null)
   const [isWindowDragging, setIsWindowDragging] = useState(false)
+  const [isInitialized, setIsInitialized] = useState(false)
 
 
 
@@ -141,6 +142,22 @@ export default function Home() {
     setSystemProxyEnabled(settings.system_proxy)
   }, [settings.system_proxy])
 
+
+  // Auto-clear active target if it's gone
+  useEffect(() => {
+    if (!isInitialized) return
+    if (activeServerId) {
+      const exists = servers.some(s => s.id === activeServerId) ||
+        groups.some(g => g.id === activeServerId) ||
+        activeServerId.startsWith("system:") ||
+        activeServerId.startsWith("auto_");
+
+      // If we have finished loading profiles at least once, and the target is missing
+      if (!exists) {
+        setActiveServerId(null)
+      }
+    }
+  }, [servers, groups, activeServerId, isInitialized])
 
   const activeTarget = useMemo(() => {
     if (!activeServerId) return null
@@ -382,16 +399,16 @@ export default function Home() {
 
   // Watch and persist active node ID
   useEffect(() => {
-    if (activeServerId) {
-      invoke("get_app_settings").then((settings: any) => {
-        if (settings.active_target_id !== activeServerId) {
-          invoke("save_app_settings", {
-            settings: { ...settings, active_target_id: activeServerId }
-          }).catch(console.error)
-        }
-      }).catch(console.error)
-    }
-  }, [activeServerId])
+    if (!isInitialized) return
+
+    invoke("get_app_settings").then((settings: any) => {
+      if (settings.active_target_id !== activeServerId) {
+        invoke("save_app_settings", {
+          settings: { ...settings, active_target_id: activeServerId }
+        }).catch(console.error)
+      }
+    }).catch(console.error)
+  }, [activeServerId, isInitialized])
 
   useEffect(() => {
     // Init: Load logs listener
@@ -444,6 +461,9 @@ export default function Home() {
         }).catch(console.error)
       }
     }).catch(console.error)
+      .finally(() => {
+        setIsInitialized(true)
+      })
 
     // Listen for proxy status change from other windows (e.g. tray)
     const unlistenStatus = listen<any>("proxy-status-change", (event) => {
@@ -979,7 +999,11 @@ export default function Home() {
       fetchProfiles()
       toast.success(t('toast.sub_deleted'))
     } catch (e: any) {
-      toast.error(t('toast.delete_failed', { error: e }))
+      if (e === "delete_active_error") {
+        toast.error(t('toast.delete_active_error'))
+      } else {
+        toast.error(t('toast.delete_failed', { error: e }))
+      }
     }
   }
 
@@ -1021,10 +1045,13 @@ export default function Home() {
       toast.success(t('toast.node_deleted'))
       if (activeServerId === id) {
         setActiveServerId(null)
-        if (isConnected) toggleProxy() // Stop if deleted active
       }
     } catch (e: any) {
-      toast.error(t('toast.delete_failed', { error: e }))
+      if (e === "delete_active_error") {
+        toast.error(t('toast.delete_active_error'))
+      } else {
+        toast.error(t('toast.delete_failed', { error: e }))
+      }
       console.error(e)
     } finally {
       setNodeToDelete(null)

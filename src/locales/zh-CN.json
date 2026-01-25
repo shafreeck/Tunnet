@@ -50,7 +50,10 @@
         "navigation": "导航",
         "server_groups": "节点组",
         "connections": "连接管理",
-        "servers": "服务器"
+        "servers": "服务器",
+        "no_subscription": "无订阅",
+        "click_to_manage": "点击管理订阅",
+        "total": "总量"
     },
     "dashboard": {
         "node_info": "节点信息",
@@ -256,6 +259,7 @@
         "select_server": "请先选择一个服务器",
         "save_failed": "保存失败: {{error}}",
         "delete_failed": "删除失败: {{error}}",
+        "delete_active_error": "无法删除：该目标正在运行中，请先关闭代理",
         "connection_failed": "连接失败: {{error}}",
         "connecting_to": "正在连接到 {{server}}...",
         "updating_to": "正在更新为 {{mode}}...",

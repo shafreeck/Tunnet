@@ -50,7 +50,10 @@
         "navigation": "Navigation",
         "server_groups": "Groups",
         "connections": "Connections",
-        "servers": "Servers"
+        "servers": "Servers",
+        "no_subscription": "No Subscription",
+        "click_to_manage": "Click to manage subscriptions",
+        "total": "Total"
     },
     "dashboard": {
         "node_info": "Node Info",
@@ -254,6 +257,7 @@
         "select_server": "Please select a server first",
         "save_failed": "Save failed: {{error}}",
         "delete_failed": "Delete failed: {{error}}",
+        "delete_active_error": "Cannot delete: This target is currently active, please stop the proxy first",
         "connection_failed": "Connection failed: {{error}}",
         "connecting_to": "Connecting to {{server}}...",
         "updating_to": "Updating to {{mode}}...",

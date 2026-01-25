@@ -2442,9 +2442,42 @@ impl<R: Runtime> ProxyService<R> {
     }
 
     pub fn delete_profile(&self, profile_id: &str) -> Result<(), String> {
+        let is_running = self.is_proxy_running();
         let mut profiles = self.manager.load_profiles()?;
+
+        // Block if active and proxy is running
+        if is_running {
+            if let Some(p) = profiles.iter().find(|p| p.id == profile_id) {
+                let latest = self.latest_node.lock().unwrap();
+                if let Some(n) = latest.as_ref() {
+                    if p.nodes.iter().any(|node| node.id == n.id) {
+                        return Err("delete_active_error".to_string());
+                    }
+                }
+            }
+        }
+
+        // If not running, or not the active node, we can delete.
+        // We still want to clear latest_node reference if it was part of this profile.
+        let mut cleared = false;
+        if let Some(p) = profiles.iter().find(|p| p.id == profile_id) {
+            let mut latest = self.latest_node.lock().unwrap();
+            if let Some(n) = latest.as_ref() {
+                if p.nodes.iter().any(|node| node.id == n.id) {
+                    *latest = None;
+                    cleared = true;
+                }
+            }
+        }
+
         profiles.retain(|p| p.id != profile_id);
-        self.manager.save_profiles(&profiles)
+        self.manager.save_profiles(&profiles)?;
+
+        if cleared {
+            let _ = self.app.emit("proxy-status-change", self.get_status());
+        }
+
+        Ok(())
     }
 
     // Refetch/Update a profile
@@ -2907,13 +2940,31 @@ impl<R: Runtime> ProxyService<R> {
             // Update runtime mutex to match settings if stopped, ensuring consistent state for get_status
             *self.tun_mode.lock().unwrap() = settings.tun_mode;
 
+            // Update mem cached node to match settings
+            {
+                let mut latest = self.latest_node.lock().unwrap();
+                if let Some(id) = &settings.active_target_id {
+                    // Try to resolve this node from disk
+                    if let Ok(nodes) = self.get_nodes() {
+                        if let Some(n) = nodes.into_iter().find(|n| n.id == *id) {
+                            *latest = Some(n);
+                        } else {
+                            // If it's a group, we might want to resolve it too, 
+                            // but usually Node is enough for display.
+                            // If we can't find it, we keep it as is or clear it?
+                            // Let's clear if it's genuinely missing from nodes.
+                            *latest = None;
+                        }
+                    }
+                } else {
+                    *latest = None;
+                }
+            }
+
             // Just emit update if not running
             let _ = self.app.emit("settings-update", &settings);
             
-            // Fix: Propagate the active target ID from settings to the status event
-            // This prevents the frontend from reverting to the old stale state held in memory
-            let mut status = self.get_status();
-            status.target_id = settings.active_target_id.clone();
+            let status = self.get_status();
             let _ = self.app.emit("proxy-status-change", status);
             return Ok(());
         }
@@ -3021,14 +3072,38 @@ impl<R: Runtime> ProxyService<R> {
     }
 
     pub fn delete_node(&self, id: &str) -> Result<(), String> {
-        let mut profiles = self.manager.load_profiles()?;
+        if self.is_proxy_running() {
+            let latest = self.latest_node.lock().unwrap();
+            if let Some(n) = latest.as_ref() {
+                if n.id == id {
+                    return Err("delete_active_error".to_string());
+                }
+            }
+        }
 
+        let mut profiles = self.manager.load_profiles()?;
         for p in &mut profiles {
             p.nodes.retain(|n| n.id != id);
         }
+        self.manager.save_profiles(&profiles)?;
 
-        // Optional: Clean up empty profiles? No, keep them.
-        self.manager.save_profiles(&profiles)
+        // Clear latest_node if it was this node (even if not currently running)
+        let mut cleared = false;
+        {
+            let mut latest = self.latest_node.lock().unwrap();
+            if let Some(n) = latest.as_ref() {
+                if n.id == id {
+                    *latest = None;
+                    cleared = true;
+                }
+            }
+        }
+
+        if cleared {
+            let _ = self.app.emit("proxy-status-change", self.get_status());
+        }
+
+        Ok(())
     }
 
     pub fn is_tun_mode(&self) -> bool {
