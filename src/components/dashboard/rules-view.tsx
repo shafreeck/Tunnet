@@ -69,6 +69,25 @@ const getPresetName = (name: string, t: any) => {
     }
 }
 
+// Robust comparison for rule sets (ignores field order)
+const areRuleSetsEqual = (a: Rule[], b: Rule[]) => {
+    if (a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+        const r1 = a[i]
+        const r2 = b[i]
+        const equal = (
+            r1.id === r2.id &&
+            r1.type === r2.type &&
+            String(r1.value) === String(r2.value) &&
+            r1.policy === r2.policy &&
+            r1.enabled === r2.enabled &&
+            (r1.description || "") === (r2.description || "")
+        )
+        if (!equal) return false
+    }
+    return true
+}
+
 export function RulesView() {
     const { t } = useTranslation()
     const [rules, setRules] = useState<Rule[]>([])
@@ -82,6 +101,7 @@ export function RulesView() {
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingRule, setEditingRule] = useState<Rule | null>(null)
     const [currentlyApplying, setCurrentlyApplying] = useState(false)
+    const [isLoading, setIsLoading] = useState(true)
     const [loadingRuleId, setLoadingRuleId] = useState<string | null>(null)
     const [loadingDefaultPolicy, setLoadingDefaultPolicy] = useState(false)
     const [isSavingRule, setIsSavingRule] = useState(false)
@@ -105,12 +125,11 @@ export function RulesView() {
 
     // Check if the current rules/policy deviate from the current preset's template
     const isModified = React.useMemo(() => {
-        if (currentPreset === "Custom") return false // Custom is always "correct" for itself
+        if (currentPreset === "Custom") return false
         const template = PRESETS[currentPreset as keyof typeof PRESETS]
         if (!template) return false
 
-        // Simple comparison: stringify is enough for our Rule objects
-        const isRulesDifferent = JSON.stringify(rules) !== JSON.stringify(template.rules)
+        const isRulesDifferent = !areRuleSetsEqual(rules, template.rules)
         const isPolicyDifferent = defaultPolicy !== template.defaultPolicy
         return isRulesDifferent || isPolicyDifferent
     }, [rules, defaultPolicy, currentPreset])
@@ -123,14 +142,7 @@ export function RulesView() {
     }, [])
 
     useEffect(() => {
-        const savedPreset = localStorage.getItem("tunnet_rules_preset")
-        if (savedPreset) {
-            setCurrentPreset(savedPreset)
-            fetchRules()
-        } else {
-            // First run: apply Smart Connect preset
-            handleApplyPreset("Smart Connect")
-        }
+        fetchRules()
         fetchGroups()
         fetchProxyStatus()
 
@@ -163,6 +175,7 @@ export function RulesView() {
 
     const fetchRules = async () => {
         try {
+            setIsLoading(true)
             const allRules = await invoke<Rule[]>("get_rules")
             const finalRule = allRules.find(r => r.type === "FINAL")
             let normalRules = allRules.filter(r => r.type !== "FINAL")
@@ -182,7 +195,6 @@ export function RulesView() {
                 const payload = [...normalRules]
                 if (finalRule) payload.push(finalRule)
                 await invoke("save_rules", { rules: payload })
-                // No need to refetch, we have the updated rules
             }
 
             setRules(normalRules)
@@ -192,13 +204,29 @@ export function RulesView() {
                 setInitialDefaultPolicy(finalRule.policy)
             }
 
-            // Revert current preset selection to the last applied one
-            const savedPreset = localStorage.getItem("tunnet_rules_preset") || "Smart Connect"
-            setCurrentPreset(savedPreset)
+            // Sync preset selection based on current content
+            const currentPolicy = finalRule ? finalRule.policy : "PROXY"
+            const matchedPresetName = Object.keys(PRESETS).find(key => {
+                const p = PRESETS[key as keyof typeof PRESETS]
+                return p.defaultPolicy === currentPolicy && areRuleSetsEqual(p.rules, normalRules)
+            })
+
+            if (matchedPresetName) {
+                setCurrentPreset(matchedPresetName)
+                localStorage.setItem("tunnet_rules_preset", matchedPresetName)
+            } else {
+                // No exact match found, treat as custom
+                setCurrentPreset("Custom")
+                localStorage.setItem("tunnet_rules_preset", "Custom")
+            }
 
             setHasPendingChanges(false)
         } catch (error) {
             console.error("Failed to fetch rules:", error)
+            // Fallback: hide loader even on error
+            setIsLoading(false)
+        } finally {
+            setIsLoading(false)
         }
     }
 
@@ -231,9 +259,16 @@ export function RulesView() {
 
     const handleApplyChanges = async () => {
         if (!proxyStatus?.is_running) {
-            // If proxy not running, just save is enough (backend already did it, but we can call it again to be sure)
-            setHasPendingChanges(false)
-            toast.success(t('rules.toast.saved_only'))
+            // Persist rules to disk first
+            try {
+                await saveRulesToBackend(rules, defaultPolicy)
+                setInitialRules([...rules])
+                setInitialDefaultPolicy(defaultPolicy)
+                setHasPendingChanges(false)
+                toast.success(t('rules.toast.saved_only'))
+            } catch (e) {
+                toast.error(t('rules.toast.save_failed'))
+            }
             return
         }
 
@@ -241,6 +276,9 @@ export function RulesView() {
         emit("proxy-transition", { state: "connecting" })
 
         try {
+            // Ensure rules are saved before restarting
+            await saveRulesToBackend(rules, defaultPolicy)
+
             // Fetch current active node
             const settings: any = await invoke("get_app_settings")
             const nodes: any[] = await invoke("get_nodes")
@@ -284,7 +322,7 @@ export function RulesView() {
         switchToCustom(items, defaultPolicy)
     }
 
-    const handleApplyPreset = (name: string) => {
+    const handleApplyPreset = (name: string, isSilent = false) => {
         let preset: { rules: Rule[], defaultPolicy: string } | undefined
         if (name === "Custom") {
             const saved = localStorage.getItem("tunnet_rules_custom")
@@ -303,6 +341,11 @@ export function RulesView() {
             preset = PRESETS[name as keyof typeof PRESETS]
         }
 
+        if (!preset) {
+            console.warn(`Preset ${name} not found!`);
+            return;
+        }
+
         if (preset) {
             const newRules = [...preset.rules]
             const newPolicy = preset.defaultPolicy
@@ -315,7 +358,9 @@ export function RulesView() {
             // Check if this new state differs from what's currently on the server
             checkPendingChanges(newRules, newPolicy)
 
-            toast.success(t('rules.toast.applied_preset', { name: getPresetName(name, t) }))
+            if (!isSilent) {
+                toast.success(t('rules.toast.applied_preset', { name: getPresetName(name, t) }))
+            }
         }
     }
 
@@ -618,7 +663,12 @@ export function RulesView() {
                         </div>
                     )}
 
-                    {filteredRules.length === 0 ? (
+                    {isLoading ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                            <Loader2 size={40} className="mb-4 animate-spin opacity-20" />
+                            <p className="text-sm font-medium">{t('common.loading', { defaultValue: 'Loading...' })}</p>
+                        </div>
+                    ) : filteredRules.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-gray-600">
                             <AlertCircle size={40} className="mb-4 opacity-20" />
                             <p className="text-sm font-medium">{t('rules.no_rules_found')}</p>

@@ -17,11 +17,21 @@ impl<R: Runtime> CoreManager<R> {
     }
 
     pub async fn ensure_databases(&self) -> Result<(), String> {
-        let app_local_data = self
+        let mut app_local_data = self
             .app
             .path()
             .app_local_data_dir()
             .map_err(|e| e.to_string())?;
+
+        // Isolate dev data from production data to avoid version conflicts
+        if cfg!(debug_assertions) {
+            let mut name = app_local_data
+                .file_name()
+                .unwrap_or_default()
+                .to_os_string();
+            name.push("_dev");
+            app_local_data.set_file_name(name);
+        }
 
         let geoip_path = app_local_data.join("geoip-cn.srs");
         let geosite_path = app_local_data.join("geosite-cn.srs");
@@ -210,11 +220,17 @@ impl<R: Runtime> CoreManager<R> {
     }
 
     pub fn get_profiles_path(&self) -> PathBuf {
-        self.app
+        let mut base = self
+            .app
             .path()
             .app_local_data_dir()
-            .expect("failed to resolve app local data dir")
-            .join("profiles_v2.json") // v2 to avoid conflict/ensure clean slate
+            .expect("failed to resolve app local data dir");
+        if cfg!(debug_assertions) {
+            let mut name = base.file_name().unwrap_or_default().to_os_string();
+            name.push("_dev");
+            base.set_file_name(name);
+        }
+        base.join("profiles_v2.json")
     }
 
     pub fn save_profiles(&self, profiles: &[crate::profile::Profile]) -> Result<(), String> {
@@ -235,17 +251,30 @@ impl<R: Runtime> CoreManager<R> {
             return Ok(vec![]);
         }
         let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let profiles: Vec<crate::profile::Profile> =
-            serde_json::from_str(&content).map_err(|e| e.to_string())?;
-        Ok(profiles)
+        match serde_json::from_str::<Vec<crate::profile::Profile>>(&content) {
+            Ok(profiles) => Ok(profiles),
+            Err(e) => {
+                log::error!(
+                    "Failed to parse profiles_v2.json: {}. Falling back to empty.",
+                    e
+                );
+                Ok(vec![])
+            }
+        }
     }
 
     pub fn get_rules_path(&self) -> PathBuf {
-        self.app
+        let mut base = self
+            .app
             .path()
             .app_local_data_dir()
-            .expect("failed to resolve app local data dir")
-            .join("rules.json")
+            .expect("failed to resolve app local data dir");
+        if cfg!(debug_assertions) {
+            let mut name = base.file_name().unwrap_or_default().to_os_string();
+            name.push("_dev");
+            base.set_file_name(name);
+        }
+        base.join("rules.json")
     }
 
     pub fn save_rules(&self, rules: &[crate::profile::Rule]) -> Result<(), String> {
@@ -263,62 +292,79 @@ impl<R: Runtime> CoreManager<R> {
     pub fn load_rules(&self) -> Result<Vec<crate::profile::Rule>, String> {
         let path = self.get_rules_path();
         if !path.exists() {
-            // Provide "Smart Connect" as default if no rules file exists
-            return Ok(vec![
-                crate::profile::Rule {
-                    id: "private-rule".to_string(),
-                    description: Some("rules.description.private_network".to_string()),
-                    rule_type: "IP_IS_PRIVATE".to_string(),
-                    value: "true".to_string(),
-                    policy: "DIRECT".to_string(),
-                    enabled: true,
-                },
-                crate::profile::Rule {
-                    id: "ads-1".to_string(),
-                    description: Some("rules.description.ads_blocking".to_string()),
-                    rule_type: "DOMAIN".to_string(),
-                    value: "geosite:geosite-ads".to_string(),
-                    policy: "REJECT".to_string(),
-                    enabled: true,
-                },
-                crate::profile::Rule {
-                    id: "cn-1".to_string(),
-                    description: Some("rules.description.china_all".to_string()),
-                    rule_type: "DOMAIN".to_string(),
-                    value: "geosite:geosite-cn".to_string(),
-                    policy: "DIRECT".to_string(),
-                    enabled: true,
-                },
-                crate::profile::Rule {
-                    id: "cn-2".to_string(),
-                    description: Some("rules.description.china_all".to_string()),
-                    rule_type: "GEOIP".to_string(),
-                    value: "geoip-cn".to_string(),
-                    policy: "DIRECT".to_string(),
-                    enabled: true,
-                },
-                crate::profile::Rule {
-                    id: "final-policy".to_string(),
-                    description: Some("rules.description.final_proxy".to_string()),
-                    rule_type: "FINAL".to_string(),
-                    value: "default".to_string(),
-                    policy: "PROXY".to_string(),
-                    enabled: true,
-                },
-            ]);
+            return Ok(self.default_rules());
         }
         let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let rules: Vec<crate::profile::Rule> =
-            serde_json::from_str(&content).map_err(|e| e.to_string())?;
-        Ok(rules)
+        match serde_json::from_str::<Vec<crate::profile::Rule>>(&content) {
+            Ok(rules) => Ok(rules),
+            Err(e) => {
+                log::error!(
+                    "Failed to parse rules.json: {}. Falling back to default rules.",
+                    e
+                );
+                // Important: return default rules instead of erroring out to ensure app stability
+                Ok(self.default_rules())
+            }
+        }
+    }
+
+    fn default_rules(&self) -> Vec<crate::profile::Rule> {
+        vec![
+            crate::profile::Rule {
+                id: "private-rule".to_string(),
+                description: Some("rules.description.private_network".to_string()),
+                rule_type: "IP_IS_PRIVATE".to_string(),
+                value: "true".to_string(),
+                policy: "DIRECT".to_string(),
+                enabled: true,
+            },
+            crate::profile::Rule {
+                id: "ads-1".to_string(),
+                description: Some("rules.description.ads_blocking".to_string()),
+                rule_type: "DOMAIN".to_string(),
+                value: "geosite:geosite-ads".to_string(),
+                policy: "REJECT".to_string(),
+                enabled: true,
+            },
+            crate::profile::Rule {
+                id: "cn-1".to_string(),
+                description: Some("rules.description.china_all".to_string()),
+                rule_type: "DOMAIN".to_string(),
+                value: "geosite:geosite-cn".to_string(),
+                policy: "DIRECT".to_string(),
+                enabled: true,
+            },
+            crate::profile::Rule {
+                id: "cn-2".to_string(),
+                description: Some("rules.description.china_all".to_string()),
+                rule_type: "GEOIP".to_string(),
+                value: "geoip-cn".to_string(),
+                policy: "DIRECT".to_string(),
+                enabled: true,
+            },
+            crate::profile::Rule {
+                id: "final-policy".to_string(),
+                description: Some("rules.description.final_proxy".to_string()),
+                rule_type: "FINAL".to_string(),
+                value: "default".to_string(),
+                policy: "PROXY".to_string(),
+                enabled: true,
+            },
+        ]
     }
 
     pub fn get_groups_path(&self) -> PathBuf {
-        self.app
+        let mut base = self
+            .app
             .path()
             .app_local_data_dir()
-            .expect("failed to resolve app local data dir")
-            .join("groups.json")
+            .expect("failed to resolve app local data dir");
+        if cfg!(debug_assertions) {
+            let mut name = base.file_name().unwrap_or_default().to_os_string();
+            name.push("_dev");
+            base.set_file_name(name);
+        }
+        base.join("groups.json")
     }
 
     pub fn save_groups(&self, groups: &[crate::profile::Group]) -> Result<(), String> {
@@ -339,17 +385,27 @@ impl<R: Runtime> CoreManager<R> {
             return Ok(vec![]);
         }
         let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let groups: Vec<crate::profile::Group> =
-            serde_json::from_str(&content).map_err(|e| e.to_string())?;
-        Ok(groups)
+        match serde_json::from_str::<Vec<crate::profile::Group>>(&content) {
+            Ok(groups) => Ok(groups),
+            Err(e) => {
+                log::error!("Failed to parse groups.json: {}. Falling back to empty.", e);
+                Ok(vec![])
+            }
+        }
     }
 
     pub fn get_settings_path(&self) -> PathBuf {
-        self.app
+        let mut base = self
+            .app
             .path()
             .app_local_data_dir()
-            .expect("failed to resolve app local data dir")
-            .join(SETTINGS_FILENAME)
+            .unwrap_or_else(|_| PathBuf::from("."));
+        if cfg!(debug_assertions) {
+            let mut name = base.file_name().unwrap_or_default().to_os_string();
+            name.push("_dev");
+            base.set_file_name(name);
+        }
+        base.join(SETTINGS_FILENAME)
     }
 
     pub fn save_settings(&self, settings: &crate::settings::AppSettings) -> Result<(), String> {
@@ -370,8 +426,15 @@ impl<R: Runtime> CoreManager<R> {
             return Ok(crate::settings::AppSettings::default());
         }
         let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let settings: crate::settings::AppSettings =
-            serde_json::from_str(&content).map_err(|e| e.to_string())?;
-        Ok(settings)
+        match serde_json::from_str::<crate::settings::AppSettings>(&content) {
+            Ok(settings) => Ok(settings),
+            Err(e) => {
+                log::error!(
+                    "Failed to parse settings.json: {}. Falling back to default.",
+                    e
+                );
+                Ok(crate::settings::AppSettings::default())
+            }
+        }
     }
 }

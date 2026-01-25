@@ -144,7 +144,11 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         // Ensure helper cleans up too (in case of previous crash/TUN mode residue)
-        crate::helper_client::HelperClient::new().stop_proxy().ok();
+        // Spawn a thread to avoid blocking the main UI thread if the helper is hung
+        std::thread::spawn(|| {
+            crate::helper_client::HelperClient::new().stop_proxy().ok();
+        });
+        
         self.warmup_network_cache();
     }
 

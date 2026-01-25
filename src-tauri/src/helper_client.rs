@@ -56,7 +56,12 @@ impl HelperClient {
     fn attempt_send(&self, req_str: &str) -> Result<Response, Box<dyn Error>> {
         use std::io::{Read, Write};
         use std::os::unix::net::UnixStream;
+        use std::time::Duration;
+
         let mut stream = UnixStream::connect(SOCKET_PATH)?;
+        stream.set_read_timeout(Some(Duration::from_millis(1500)))?;
+        stream.set_write_timeout(Some(Duration::from_millis(1500)))?;
+
         stream.write_all(req_str.as_bytes())?;
         stream.shutdown(std::net::Shutdown::Write)?;
 
