@@ -552,7 +552,7 @@
     },
     "connections": {
         "title": "连接管理",
-        "search_placeholder": "搜索进程、域名或 IP...",
+        "search_placeholder": "搜索域名、节点或规则...",
         "active": "活跃",
         "label": "个连接",
         "close_all": "断开所有",

@@ -11,7 +11,7 @@ import {
     CommandSeparator,
     CommandShortcut,
 } from "@/components/ui/command"
-import { Rocket, Globe, Settings, Sliders, LayoutGrid, Zap, Server as ServerIcon, Network } from "lucide-react"
+import { Rocket, Globe, Settings, Sliders, LayoutGrid, Zap, Server as ServerIcon, Network, Activity } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { ViewType } from "@/components/dashboard/sidebar"
 import { Group } from "@/components/dashboard/groups-view"
@@ -97,6 +97,10 @@ export function SearchDialog({
                     <CommandItem onSelect={() => runCommand(() => onNavigate("dashboard"))}>
                         <Rocket className="mr-2 size-4" />
                         <span>{t('sidebar.dashboard')}</span>
+                    </CommandItem>
+                    <CommandItem onSelect={() => runCommand(() => onNavigate("connections"))}>
+                        <Activity className="mr-2 size-4" />
+                        <span>{t('sidebar.connections')}</span>
                     </CommandItem>
                     <CommandItem onSelect={() => runCommand(() => onNavigate("locations"))}>
                         <Globe className="mr-2 size-4" />

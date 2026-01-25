@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react"
 import { Search, X, Network, Wifi, Activity, ArrowUp, ArrowDown, Clock, AlertCircle, Monitor, Globe, Unplug } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
 
@@ -62,12 +63,17 @@ const formatDuration = (startDate: string) => {
 export function ConnectionsView() {
     const { t } = useTranslation()
     const [connections, setConnections] = useState<Connection[]>([])
+    const [totalTraffic, setTotalTraffic] = useState({ up: 0, down: 0 })
     const [totalSpeed, setTotalSpeed] = useState({ up: 0, down: 0 })
+    const [connectionSpeeds, setConnectionSpeeds] = useState<Record<string, { up: number, down: number }>>({})
     const [searchQuery, setSearchQuery] = useState("")
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [isMac, setIsMac] = useState(false)
     const scrollRef = useRef<HTMLDivElement>(null)
+
+    const lastFetchTimeRef = useRef<number>(Date.now())
+    const lastConnectionsRef = useRef<Record<string, { up: number, down: number }>>({})
 
     useEffect(() => {
         if (typeof navigator !== 'undefined') {
@@ -78,25 +84,56 @@ export function ConnectionsView() {
     const fetchConnections = async () => {
         try {
             const data = await invoke<ConnectionsResponse>("get_connections")
+            const now = Date.now()
+            const deltaT = (now - lastFetchTimeRef.current) / 1000 // seconds
+
+            if (deltaT > 0) {
+                const newSpeeds: Record<string, { up: number, down: number }> = {}
+                const currentTraffic: Record<string, { up: number, down: number }> = {}
+
+                data.connections.forEach(conn => {
+                    const prev = lastConnectionsRef.current[conn.id]
+                    if (prev) {
+                        newSpeeds[conn.id] = {
+                            up: Math.max(0, (conn.upload - prev.up) / deltaT),
+                            down: Math.max(0, (conn.download - prev.down) / deltaT)
+                        }
+                    } else {
+                        newSpeeds[conn.id] = { up: 0, down: 0 }
+                    }
+                    currentTraffic[conn.id] = { up: conn.upload, down: conn.download }
+                })
+
+                setConnectionSpeeds(newSpeeds)
+                lastConnectionsRef.current = currentTraffic
+                lastFetchTimeRef.current = now
+            }
+
             setConnections(data.connections)
-            setTotalSpeed({ up: data.uploadTotal, down: data.downloadTotal })
+            setTotalTraffic({ up: data.uploadTotal, down: data.downloadTotal })
             setIsLoading(false)
             setError(null)
         } catch (e: any) {
-            // Only show error if it persists or strictly failed (ignore minor network glitches if previously succeeded?)
-            // Actually, if proxy is stopped, this will fail.
             const errStr = String(e)
             if (errStr.includes("Proxy is not running")) {
                 setError("Proxy is not running")
                 setConnections([])
+                setTotalTraffic({ up: 0, down: 0 })
                 setTotalSpeed({ up: 0, down: 0 })
+                setConnectionSpeeds({})
             } else {
                 console.error("Failed to fetch connections", e)
-                // Don't wipe connections immediately to prevent flickering
             }
             setIsLoading(false)
         }
     }
+
+    useEffect(() => {
+        const unlisten = listen<{ up: number, down: number }>("traffic-update", (event) => {
+            setTotalSpeed(event.payload)
+        })
+        return () => { unlisten.then(f => f()) }
+    }, [])
 
     useEffect(() => {
         // Initial fetch
@@ -134,9 +171,11 @@ export function ConnectionsView() {
         const lowerQ = searchQuery.toLowerCase();
         return connections.filter(c =>
             c.metadata.host.toLowerCase().includes(lowerQ) ||
-            c.metadata.process?.toLowerCase().includes(lowerQ) ||
             c.metadata.destinationIP.includes(lowerQ) ||
-            c.rulePayload.toLowerCase().includes(lowerQ)
+            c.rulePayload.toLowerCase().includes(lowerQ) ||
+            c.rule.toLowerCase().includes(lowerQ) ||
+            c.source?.toLowerCase().includes(lowerQ) ||
+            c.chains.some(chain => chain.toLowerCase().includes(lowerQ))
         );
     }, [connections, searchQuery]);
 
@@ -163,18 +202,28 @@ export function ConnectionsView() {
                     <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4">
                         <div>
                             <h2 className="text-xl md:text-2xl font-bold text-text-primary mb-1 tracking-tight">{t('connections.title', 'Connections')}</h2>
-                            <div className="flex items-center gap-3 text-xs md:text-sm text-text-secondary font-medium">
-                                <div className="flex items-center gap-1.5" title={t('connections.total_download', 'Total Download')}>
-                                    <ArrowDown size={14} className="text-accent-green" />
-                                    <span>{formatBytes(totalSpeed.down)}</span>
+                            <div className="flex items-center gap-3 text-xs md:text-sm text-text-secondary font-medium tabular-nums">
+                                <div className="flex items-center gap-2" title={t('connections.total_upload')}>
+                                    <div className="flex items-center gap-1 min-w-[70px]">
+                                        <ArrowUp size={14} className="text-accent-green" />
+                                        <span>{formatBytes(totalTraffic.up)}</span>
+                                    </div>
+                                    <span className="text-[10px] bg-accent-green/10 text-accent-green px-1.5 py-0.5 rounded-md font-bold w-[72px] text-center">
+                                        {formatSpeed(totalSpeed.up)}
+                                    </span>
                                 </div>
                                 <div className="h-3 w-px bg-border-color" />
-                                <div className="flex items-center gap-1.5" title={t('connections.total_upload', 'Total Upload')}>
-                                    <ArrowUp size={14} className="text-primary" />
-                                    <span>{formatBytes(totalSpeed.up)}</span>
+                                <div className="flex items-center gap-2" title={t('connections.total_download')}>
+                                    <div className="flex items-center gap-1 min-w-[70px]">
+                                        <ArrowDown size={14} className="text-primary" />
+                                        <span>{formatBytes(totalTraffic.down)}</span>
+                                    </div>
+                                    <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-md font-bold w-[72px] text-center">
+                                        {formatSpeed(totalSpeed.down)}
+                                    </span>
                                 </div>
                                 <div className="h-3 w-px bg-border-color" />
-                                <span>{filteredConnections.length} / {connections.length} {t('connections.label', 'Active')}</span>
+                                <span className="min-w-[100px]">{filteredConnections.length} / {connections.length} {t('connections.label', 'Active')}</span>
                             </div>
                         </div>
 
@@ -194,9 +243,12 @@ export function ConnectionsView() {
                         <div className="relative flex-1 group">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-text-primary transition-colors" size={16} />
                             <input
-                                placeholder={t('connections.search_placeholder', 'Search process, host, IP...')}
+                                placeholder={t('connections.search_placeholder', 'Search host, node or rule...')}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellCheck="false"
                                 className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/20 rounded-xl py-2.5 pl-10 pr-4 text-sm text-text-primary focus:outline-none transition-all font-medium placeholder:text-text-tertiary"
                             />
                         </div>
@@ -266,12 +318,18 @@ export function ConnectionsView() {
 
                                 {/* Stats & Actions */}
                                 <div className="flex items-center gap-4 md:gap-8 shrink-0">
-                                    <div className="flex flex-col items-end min-w-[80px]">
-                                        <div className="flex items-center gap-1 text-[10px] text-text-secondary">
-                                            <ArrowDown size={10} /> {formatBytes(conn.download)}
+                                    <div className="flex flex-col items-end min-w-[100px] gap-0.5 tabular-nums">
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-[9px] text-text-tertiary w-14 text-right">{formatBytes(conn.upload)}</span>
+                                            <span className="text-[10px] text-accent-green font-bold flex items-center gap-0.5 min-w-[65px] justify-end">
+                                                <ArrowUp size={10} /> {formatSpeed(connectionSpeeds[conn.id]?.up || 0)}
+                                            </span>
                                         </div>
-                                        <div className="flex items-center gap-1 text-[10px] text-text-secondary">
-                                            <ArrowUp size={10} /> {formatBytes(conn.upload)}
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-[9px] text-text-tertiary w-14 text-right">{formatBytes(conn.download)}</span>
+                                            <span className="text-[10px] text-primary font-bold flex items-center gap-0.5 min-w-[65px] justify-end">
+                                                <ArrowDown size={10} /> {formatSpeed(connectionSpeeds[conn.id]?.down || 0)}
+                                            </span>
                                         </div>
                                     </div>
 
@@ -293,6 +351,6 @@ export function ConnectionsView() {
                     ))}
                 </div>
             </div>
-        </div>
+        </div >
     )
 }
