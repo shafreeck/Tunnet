@@ -22,6 +22,7 @@ pub struct ProxyStatus {
     pub tun_mode: bool,
     pub routing_mode: String,
     pub clash_api_port: Option<u16>,
+    pub helper_api_port: Option<u16>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct ProxyNodeStatus {
@@ -71,6 +72,7 @@ pub struct Connection {
     pub rule: String,
     #[serde(rename = "rulePayload")]
     pub rule_payload: String,
+    pub source: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -97,6 +99,7 @@ pub struct ProxyService<R: Runtime> {
     active_network_services: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     local_log_fd: Mutex<Option<i64>>,
     log_running: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    traffic_running: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl<R: Runtime> ProxyService<R> {
@@ -124,6 +127,7 @@ impl<R: Runtime> ProxyService<R> {
             active_network_services: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             local_log_fd: Mutex::new(None),
             log_running: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            traffic_running: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -588,7 +592,10 @@ impl<R: Runtime> ProxyService<R> {
             .await;
 
             match startup_result {
-                Ok(_) => return Ok(()),
+                Ok(_) => {
+                    self.start_traffic_monitor();
+                    return Ok(());
+                }
                 Err(e) => {
                     last_error = e.clone();
                     if e.contains("address already in use")
@@ -1050,11 +1057,11 @@ impl<R: Runtime> ProxyService<R> {
         let mut ports = Vec::new();
         // 1. Main Local Port
         if let Some(port) = *self.clash_api_port.lock().unwrap() {
-            ports.push(port);
+            ports.push((port, "System Proxy"));
         }
         // 2. Helper Port
         if let Some(port) = *self.helper_api_port.lock().unwrap() {
-            ports.push(port);
+            ports.push((port, "TUN"));
         }
 
         if ports.is_empty() {
@@ -1065,7 +1072,7 @@ impl<R: Runtime> ProxyService<R> {
         let mut total_upload = 0;
         let mut total_download = 0;
 
-        for port in ports {
+        for (port, label) in ports {
             let url = format!("http://127.0.0.1:{}/connections", port);
             match self.internal_client.get(&url).send().await {
                 Ok(resp) => {
@@ -1074,13 +1081,16 @@ impl<R: Runtime> ProxyService<R> {
                             total_upload += data.upload_total;
                             total_download += data.download_total;
                             
-                            // Mark them to identify source if needed, or just append
+                            // Mark them to identify source
+                            for conn in &mut data.connections {
+                                conn.source = Some(label.to_string());
+                            }
                             combined_connections.append(&mut data.connections);
                         }
                     }
                 }
                 Err(e) => {
-                    log::warn!("Failed to fetch connections from port {}: {}", port, e);
+                    log::warn!("Failed to fetch connections from port {} ({}): {}", port, label, e);
                 }
             }
         }
@@ -2016,7 +2026,6 @@ impl<R: Runtime> ProxyService<R> {
 
     pub fn get_status(&self) -> ProxyStatus {
         let is_running = self.is_proxy_running();
-
         let current_tun = *self.tun_mode.lock().unwrap();
 
         let node = self.latest_node.lock().unwrap().clone();
@@ -2042,7 +2051,8 @@ impl<R: Runtime> ProxyService<R> {
             target_type,
             tun_mode: current_tun,
             routing_mode: self.latest_routing_mode.lock().unwrap().clone(),
-            clash_api_port: self.ensure_clash_port(), // Use recovered port
+            clash_api_port: self.ensure_clash_port(),
+            helper_api_port: *self.helper_api_port.lock().unwrap(),
         }
     }
 
@@ -2144,6 +2154,8 @@ impl<R: Runtime> ProxyService<R> {
 
         *self.clash_api_port.lock().unwrap() = None;
         self.log_running
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        self.traffic_running
             .store(false, std::sync::atomic::Ordering::SeqCst);
         *self.local_log_fd.lock().unwrap() = None;
         if broadcast {
@@ -3496,6 +3508,81 @@ impl<R: Runtime> ProxyService<R> {
         };
         log::set_max_level(level);
         info!("Global log level applied: {:?}", level);
+    }
+
+    pub fn start_traffic_monitor(&self) {
+        let running = self.traffic_running.clone();
+        if running.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        running.store(true, std::sync::atomic::Ordering::SeqCst);
+
+        let app_handle = self.app.clone();
+        let client = self.internal_client.clone();
+        
+        // We need an AppHandle that implements Runtime, but spawned task is 'static.
+        // AppHandle<R> is Clone + Send + Sync + 'static if R is 'static.
+        // R is restricted on impl block `impl<R: Runtime> ProxyService<R>`.
+        // We can pass `app_handle` to the task.
+        let app_handle_task = app_handle.clone();
+        
+        tokio::spawn(async move {
+            let mut prev_main = (0u64, 0u64); // (up, down)
+            let mut prev_helper = (0u64, 0u64);
+
+            loop {
+                if !running.load(std::sync::atomic::Ordering::SeqCst) {
+                    break;
+                }
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+                // Access state dynamically to get fresh ports
+                // state() returns State<T>, which derefs to T (ProxyService)
+                // We need to access the Service from the AppHandle to get current port values.
+                let service_state = app_handle_task.state::<ProxyService<R>>();
+                
+                let main_port = *service_state.clash_api_port.lock().unwrap();
+                let helper_port = *service_state.helper_api_port.lock().unwrap();
+
+                // Function to fetch and calc delta
+                async fn fetch_delta(client: &reqwest::Client, port: Option<u16>, prev: &mut (u64, u64)) -> (u64, u64) {
+                    if let Some(p) = port {
+                        let url = format!("http://127.0.0.1:{}/connections", p);
+                        // Timeout short to avoid overlapping ticks
+                         let resp_res = client.get(&url)
+                             .timeout(std::time::Duration::from_millis(800))
+                             .send().await;
+
+                         if let Ok(resp) = resp_res {
+                             if let Ok(json) = resp.json::<serde_json::Value>().await {
+                                 let up_total = json.get("uploadTotal").and_then(|v| v.as_u64()).unwrap_or(0);
+                                 let down_total = json.get("downloadTotal").and_then(|v| v.as_u64()).unwrap_or(0);
+                                 
+                                 // Calculate Delta
+                                 let delta_up = if up_total >= prev.0 { up_total - prev.0 } else { up_total };
+                                 let delta_down = if down_total >= prev.1 { down_total - prev.1 } else { down_total };
+                                 
+                                 *prev = (up_total, down_total);
+                                 return (delta_up, delta_down);
+                             }
+                        }
+                    }
+                    *prev = (0, 0); 
+                    (0, 0)
+                }
+
+                let (m_up, m_down) = fetch_delta(&client, main_port, &mut prev_main).await;
+                let (h_up, h_down) = fetch_delta(&client, helper_port, &mut prev_helper).await;
+
+                let current_up = m_up + h_up;
+                let current_down = m_down + h_down;
+
+                let _ = app_handle_task.emit("traffic-update", serde_json::json!({
+                    "up": current_up,
+                    "down": current_down
+                }));
+            }
+        });
     }
 }
 
