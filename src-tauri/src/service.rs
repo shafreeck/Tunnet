@@ -3038,7 +3038,19 @@ impl<R: Runtime> ProxyService<R> {
                 self.disable_system_proxy();
             }
         }
+
+        // If running, sync to running_settings so frontend applied-check stays correct
+        if is_running {
+            let mut running = self.running_settings.lock().unwrap();
+            if let Some(r) = running.as_mut() {
+                *r = settings.clone();
+            }
+        }
+
         let _ = self.app.emit("settings-update", &settings);
+        let status = self.get_status();
+        let _ = self.app.emit("proxy-status-change", status);
+
         Ok(())
     }
 

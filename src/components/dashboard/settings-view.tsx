@@ -81,9 +81,9 @@ export function SettingsView({
 
     // List of settings that require a proxy restart to apply
     const criticalKeys: (keyof AppSettings)[] = [
-        "mixed_port", "allow_lan", "tun_mode", "tun_stack", "tun_mtu",
+        "mixed_port", "allow_lan", "tun_stack", "tun_mtu",
         "strict_route", "dns_hijack", "dns_strategy", "dns_servers",
-        "log_level", "system_proxy"
+        "log_level"
     ]
 
     const modifiedKeys = React.useMemo(() => {
@@ -203,7 +203,7 @@ export function SettingsView({
                             <span className="hidden sm:inline">{cat.label}</span>
                             <span className="sm:hidden">{cat.label.slice(0, 2)}</span>
                             {/* Tab Indicator */}
-                            {isConnected && cat.id === "connection" && modifiedKeys.some(k => ["mixed_port", "allow_lan", "tun_mode", "tun_stack", "tun_mtu", "strict_route", "system_proxy"].includes(k as any)) && (
+                            {isConnected && cat.id === "connection" && modifiedKeys.some(k => ["mixed_port", "allow_lan", "tun_stack", "tun_mtu", "strict_route"].includes(k as any)) && (
                                 <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                             )}
                             {isConnected && cat.id === "dns" && modifiedKeys.some(k => ["dns_hijack", "dns_strategy", "dns_servers"].includes(k as any)) && (
