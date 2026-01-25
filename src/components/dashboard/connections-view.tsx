@@ -26,6 +26,7 @@ interface Connection {
     chains: string[]
     rule: string
     rulePayload: string
+    source?: string
 }
 
 interface ConnectionsResponse {
@@ -230,8 +231,19 @@ export function ConnectionsView() {
                                             <Globe size={20} />
                                         )}
                                     </div>
-                                    <div className="flex flex-col min-w-0 flex-1 gap-0.5">
+                                    <div className="flex flex-col min-w-0 flex-1 gap-1">
                                         <div className="flex items-center gap-2">
+                                            {conn.source && (
+                                                <span
+                                                    className={cn(
+                                                        "w-9 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 text-center flex justify-center",
+                                                        conn.source === "TUN" ? "bg-purple-500/10 text-purple-500" : "bg-blue-500/10 text-blue-500"
+                                                    )}
+                                                    title={conn.source}
+                                                >
+                                                    {conn.source.includes("System") ? "SYS" : conn.source}
+                                                </span>
+                                            )}
                                             <span className="text-sm font-bold text-text-primary truncate max-w-[200px] md:max-w-[300px]" title={conn.metadata.host || conn.metadata.destinationIP}>
                                                 {conn.metadata.host || conn.metadata.destinationIP}:{conn.metadata.destinationPort}
                                             </span>
