@@ -228,48 +228,25 @@ export default function TrayPage() {
     }, [checkLatency])
 
     useEffect(() => {
-        if (!status.is_running || !status.clash_api_port) {
+        if (!status.is_running) {
             setTraffic({ up: 0, down: 0 })
-            setTrafficHistory(new Array(30).fill({ up: 0, down: 0 }))
             return
         }
 
-        let ws: WebSocket | null = null
-        let retryTimeout: NodeJS.Timeout
-
-        const connect = () => {
-            ws = new WebSocket(`ws://127.0.0.1:${status.clash_api_port}/traffic`)
-
-            ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data)
-                    const total = data.up + data.down
-                    setTraffic({ up: data.up, down: data.down })
-                    setTrafficHistory(prev => {
-                        const next = [...prev, { up: data.up, down: data.down }]
-                        if (next.length > 30) next.shift()
-                        return next
-                    })
-                } catch (e) {
-                }
-            }
-
-            ws.onerror = () => {
-                ws?.close()
-            }
-
-            ws.onclose = () => {
-                retryTimeout = setTimeout(connect, 2000)
-            }
-        }
-
-        setTimeout(connect, 1000)
+        const unlistenPromise = listen<any>("traffic-update", (event) => {
+            const { up, down } = event.payload
+            setTraffic({ up, down })
+            setTrafficHistory(prev => {
+                const next = [...prev, { up, down }]
+                if (next.length > 30) next.shift()
+                return next
+            })
+        })
 
         return () => {
-            clearTimeout(retryTimeout)
-            ws?.close()
+            unlistenPromise.then(f => f())
         }
-    }, [status.is_running, status.clash_api_port])
+    }, [status.is_running])
 
     const toggleConnection = async () => {
         if (isTransitioning) return
