@@ -88,19 +88,35 @@ export function SettingsView({ initialCategory = "general", clashApiPort, helper
     }, [])
 
     useEffect(() => {
-        refreshSettings()
+        let active = true;
+        let unlistenFn: (() => void) | undefined;
 
-        // Listen for backend updates (e.g. from System Tray)
-        import("@tauri-apps/api/event").then(({ listen }) => {
-            const unlisten = listen<AppSettings>("settings-update", (event) => {
-                console.log("Settings updated from backend:", event.payload)
-                setSettings(event.payload)
-            })
+        async function setupListener() {
+            try {
+                const { listen } = await import("@tauri-apps/api/event");
+                const f = await listen<AppSettings>("settings-update", (event) => {
+                    if (!active) return;
+                    console.log("Settings updated from backend:", event.payload)
+                    setSettings(event.payload)
+                });
 
-            return () => {
-                unlisten.then(f => f())
+                if (!active) {
+                    f(); // Component unmounted while waiting, clean up immediately
+                } else {
+                    unlistenFn = f;
+                }
+            } catch (e) {
+                console.error("Failed to setup settings listener:", e);
             }
-        })
+        }
+
+        refreshSettings()
+        setupListener()
+
+        return () => {
+            active = false;
+            if (unlistenFn) unlistenFn();
+        }
     }, [refreshSettings])
 
     const updateSetting = async (key: keyof AppSettings, value: any) => {

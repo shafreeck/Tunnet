@@ -127,14 +127,26 @@ export default function Home() {
   const [traffic, setTraffic] = useState({ up: 0, down: 0 })
 
   useEffect(() => {
+    let active = true
+    let unlistenFn: (() => void) | undefined
+
     if (!isConnected) {
       setTraffic({ up: 0, down: 0 })
       return
     }
-    const unlistenPromise = listen<any>("traffic-update", (event) => {
+
+    listen<any>("traffic-update", (event) => {
+      if (!active) return
       setTraffic(event.payload)
+    }).then(f => {
+      if (active) unlistenFn = f
+      else f()
     })
-    return () => { unlistenPromise.then(f => f()) }
+
+    return () => {
+      active = false
+      if (unlistenFn) unlistenFn()
+    }
   }, [isConnected])
 
   // Sync derived state
@@ -417,24 +429,93 @@ export default function Home() {
   }, [activeServerId, isInitialized])
 
   useEffect(() => {
-    // Init: Load logs listener
-    const unlisten = listen<{ source: string, message: string }>("proxy-log", (event) => {
-      const { source, message } = event.payload
-      setLogs(prev => {
-        const stream = source === "helper" ? "helper" : "local"
-        const newStream = [...prev[stream], message]
-        const limitedStream = newStream.length > 1000 ? newStream.slice(-1000) : newStream
-        return { ...prev, [stream]: limitedStream }
-      })
-    })
+    const unlisteners: (() => void)[] = []
+    let active = true
+
+    const setupListeners = async () => {
+      try {
+        const results = await Promise.all([
+          listen<{ source: string, message: string }>("proxy-log", (event) => {
+            if (!active) return
+            const { source, message } = event.payload
+            setLogs(prev => {
+              const stream = source === "helper" ? "helper" : "local"
+              const newStream = [...prev[stream], message]
+              const limitedStream = newStream.length > 1000 ? newStream.slice(-1000) : newStream
+              return { ...prev, [stream]: limitedStream }
+            })
+          }),
+          listen<AppSettings>("settings-update", (event) => {
+            if (!active) return
+            setSettings(event.payload)
+          }),
+          listen<any>("proxy-status-change", (event) => {
+            if (!active) return
+            const status = event.payload
+            if (!status.is_running) {
+              lastAppliedConfigRef.current = ""
+            }
+            setIsConnected(status.is_running)
+            if (status.target_id) setActiveServerId(status.target_id)
+            if (status.routing_mode) setProxyMode(status.routing_mode)
+            setTunEnabled(status.tun_mode)
+            setClashApiPort(status.clash_api_port)
+            setHelperApiPort(status.helper_api_port)
+            if (status.is_running && status.target_id) {
+              lastAppliedConfigRef.current = `${status.target_id}:${status.routing_mode}:${status.tun_mode}`
+            } else if (!status.is_running) {
+              lastAppliedConfigRef.current = null
+            }
+            setIsLoading(false)
+            setConnectionState("idle")
+            if (status.is_running) {
+              setIpRefreshKey(prev => prev + 1)
+            }
+          }),
+          listen<any>("proxy-transition", (event) => {
+            if (!active) return
+            if (manualActionRef.current) return
+            const { state } = event.payload
+            if (state === "connecting" || state === "disconnecting") {
+              setIsLoading(true)
+              setConnectionState(state)
+            } else if (state === "idle") {
+              setIsLoading(false)
+              setConnectionState("idle")
+            }
+          }),
+          listen<any>("connection-details-update", (event) => {
+            if (!active) return
+            setConnectionDetails(event.payload)
+          }),
+          listen("request-connection-details", () => {
+            if (!active) return
+            if (connectionDetailsRef.current) {
+              emit("connection-details-update", connectionDetailsRef.current)
+            }
+          }),
+          listen("profiles-update", (event) => {
+            if (!active) return
+            fetchProfiles(false)
+            const updatedIds = event.payload as string[]
+            if (updatedIds && Array.isArray(updatedIds)) {
+              setTestingNodeIds(prev => prev.filter(id => !updatedIds.includes(id)))
+            }
+          })
+        ])
+
+        if (!active) {
+          results.forEach(f => f())
+        } else {
+          unlisteners.push(...results)
+        }
+      } catch (e) {
+        console.error("Failed to setup listeners:", e)
+      }
+    }
 
     // Init: Load App Settings (including System Proxy)
     getAppSettings().then(setSettings)
-
-    // Listen for settings update from other windows (e.g. Tray)
-    const unlistenSettings = listen<AppSettings>("settings-update", (event) => {
-      setSettings(event.payload)
-    })
 
     // Init: Load stored profiles and nodes
     fetchProfiles(true)
@@ -443,123 +524,41 @@ export default function Home() {
     invoke("get_proxy_status").then((status: any) => {
       if (status.is_running) {
         setIsConnected(true)
-        if (status.target_id) {
-          setActiveServerId(status.target_id)
-        }
-        if (status.routing_mode) {
-          setProxyMode(status.routing_mode)
-        }
+        if (status.target_id) setActiveServerId(status.target_id)
+        if (status.routing_mode) setProxyMode(status.routing_mode)
         setTunEnabled(status.tun_mode)
         setClashApiPort(status.clash_api_port)
         setHelperApiPort(status.helper_api_port)
-
-        // Prevent immediate reload by setting lastAppliedConfigRef
         const targetId = status.target_id
         if (targetId) {
           lastAppliedConfigRef.current = `${targetId}:${status.routing_mode}:${status.tun_mode}`
         }
       } else {
-        // If not running, load the persisted active target ID from settings
         invoke("get_app_settings").then((settings: any) => {
           if (settings.active_target_id) {
             setActiveServerId(settings.active_target_id)
           }
         }).catch(console.error)
       }
-    }).catch(console.error)
-      .finally(() => {
-        setIsInitialized(true)
-      })
-
-    // Listen for proxy status change from other windows (e.g. tray)
-    const unlistenStatus = listen<any>("proxy-status-change", (event) => {
-      // Always accept backend status as truth.
-      // If we are currently performing a LOCAL manual action, this event confirms the result.
-      // if (manualActionRef.current) return; // REMOVED: Caused stuck loading state because final event was ignored
-
-      const status = event.payload
-
-      // Sync refs to prevent phantom "Disconnecting" states if backend stopped externally
-      if (!status.is_running) {
-        lastAppliedConfigRef.current = ""
-      }
-
-      setIsConnected(status.is_running)
-      if (status.target_id) {
-        setActiveServerId(status.target_id)
-      }
-      if (status.routing_mode) {
-        setProxyMode(status.routing_mode)
-      }
-      setTunEnabled(status.tun_mode)
-      setClashApiPort(status.clash_api_port)
-      setHelperApiPort(status.helper_api_port)
-      // Sync ref to avoid restart loop
-      if (status.is_running && status.target_id) {
-        lastAppliedConfigRef.current = `${status.target_id}:${status.routing_mode}:${status.tun_mode}`
-      } else if (!status.is_running) {
-        lastAppliedConfigRef.current = null
-      }
-
-      // Sync loading state when finished in another window
-      setIsLoading(false)
-      setConnectionState("idle")
-
-      // Trigger IP refresh on status change if running
-      if (status.is_running) {
-        setIpRefreshKey(prev => prev + 1)
-      }
+    }).catch(console.error).finally(() => {
+      setIsInitialized(true)
     })
 
-    // Listen for proxy transition from other windows (e.g. tray)
-    const unlistenTransition = listen<any>("proxy-transition", (event) => {
-      // Only process external transitions if we are not busy with our own local action
-      if (manualActionRef.current) return;
-      const { state } = event.payload
-      if (state === "connecting" || state === "disconnecting") {
-        setIsLoading(true)
-        setConnectionState(state)
-      } else if (state === "idle") {
-        setIsLoading(false)
-        setConnectionState("idle")
-      }
-    })
-
-    // Listen for IP updates from other windows
-    const unlistenIp = listen<any>("connection-details-update", (event) => {
-      setConnectionDetails(event.payload)
-    })
-
-    // Listen for requests from other windows (e.g. Tray) to share current IP info
-    const unlistenIpRequest = listen("request-connection-details", () => {
-      if (connectionDetailsRef.current) {
-        emit("connection-details-update", connectionDetailsRef.current)
-      }
-    })
-
-    // Listen for profile updates (latency or location probes finished)
-    const unlistenProfiles = listen("profiles-update", (event) => {
-      fetchProfiles(false)
-      const updatedIds = event.payload as string[]
-      if (updatedIds && Array.isArray(updatedIds)) {
-        setTestingNodeIds(prev => prev.filter(id => !updatedIds.includes(id)))
-      }
-    })
+    setupListeners()
 
     return () => {
-      unlisten.then(f => f())
-      unlistenStatus.then(f => f())
-      unlistenIp.then(f => f())
-      unlistenIpRequest.then(f => f())
-      unlistenSettings.then(f => f())
-      unlistenProfiles.then(f => f())
-      unlistenTransition.then(f => f())
+      active = false
+      unlisteners.forEach(f => f())
     }
   }, [])
 
   useEffect(() => {
     // Listen for update available event (Silent background update)
-    const unlistenUpdate = listen<string>("update-available", async (event) => {
+    let active = true
+    let unlistenFn: (() => void) | undefined
+
+    listen<string>("update-available", async (event) => {
+      if (!active) return
       const version = event.payload
       console.log("Auto-update detected version:", version);
 
@@ -567,18 +566,14 @@ export default function Home() {
       if (version.startsWith("TEST-")) {
         const displayVer = version.replace("TEST-", "")
         console.log("Simulating auto-update download for:", displayVer)
-
-        // Simulate lag
         await new Promise(r => setTimeout(r, 2000))
+        if (!active) return
 
         toast.success(t('update.ready_title', { defaultValue: 'New Version Ready' }), {
           description: t('update.ready_desc', { defaultValue: `v${displayVer} has been downloaded. Restart to apply.` }),
           action: {
             label: t('update.restart', { defaultValue: 'Restart' }),
-            onClick: () => {
-              toast.info("This is a simulation. App would restart now.")
-              // invoke("restart_app")
-            }
+            onClick: () => toast.info("This is a simulation. App would restart now.")
           },
           duration: Infinity,
         })
@@ -588,27 +583,30 @@ export default function Home() {
       try {
         const { check } = await import("@tauri-apps/plugin-updater")
         const update = await check()
-        if (update && update.version === version) {
-          // Silent download
+        if (update && update.version === version && active) {
           await update.downloadAndInstall()
+          if (!active) return
 
-          // Prompt to restart
           toast.success(t('update.ready_title', { defaultValue: 'New Version Ready' }), {
             description: t('update.ready_desc', { defaultValue: `v${version} has been downloaded. Restart to apply.` }),
             action: {
               label: t('update.restart', { defaultValue: 'Restart' }),
               onClick: () => invoke("restart_app")
             },
-            duration: Infinity, // Keep it open until user clicks or dismisses
+            duration: Infinity,
           })
         }
       } catch (e) {
-        console.error("Auto-update failed:", e)
+        if (active) console.error("Auto-update failed:", e)
       }
+    }).then(f => {
+      if (active) unlistenFn = f
+      else f()
     })
 
     return () => {
-      unlistenUpdate.then(f => f())
+      active = false
+      if (unlistenFn) unlistenFn()
     }
   }, [])
 
@@ -619,14 +617,23 @@ export default function Home() {
 
   // Listen for TUN mode sync from Tray (when proxy is stopped)
   useEffect(() => {
-    const unlistenTunPromise = listen<boolean>("tun-mode-updated", (event) => {
+    let active = true
+    let unlistenFn: (() => void) | undefined
+
+    listen<boolean>("tun-mode-updated", (event) => {
+      if (!active) return
       // Only update if not running (if running, proxy-status-change handles it)
       if (!isConnected) {
         setTunEnabled(event.payload)
       }
+    }).then(f => {
+      if (active) unlistenFn = f
+      else f()
     })
+
     return () => {
-      unlistenTunPromise.then(f => f())
+      active = false
+      if (unlistenFn) unlistenFn()
     }
   }, [isConnected])
 
