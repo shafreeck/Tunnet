@@ -306,17 +306,17 @@ function SidebarStatusWidget({ traffic, isLoading, onToggle, connectionState }: 
                     <div className="flex items-center gap-2">
                         <div className={cn(
                             "size-2 rounded-full transition-colors duration-500",
-                            isPending
-                                ? (status.is_running ? "bg-amber-500 animate-pulse" : "bg-emerald-500 animate-pulse")
-                                : (status.is_running ? "bg-accent-green shadow-[0_0_8px_rgba(34,197,94,0.4)]" : "bg-zinc-400/50")
+                            connectionState === "disconnecting" ? "bg-red-500 animate-pulse" :
+                                connectionState === "connecting" ? "bg-yellow-500 animate-pulse" :
+                                    (status.is_running ? "bg-accent-green shadow-[0_0_8px_rgba(34,197,94,0.4)]" : "bg-zinc-400/50")
                         )} />
                         <span className={cn(
                             "text-[10px] font-bold tracking-wider uppercase transition-colors",
-                            status.is_running ? "text-secondary" : "text-tertiary"
+                            status.is_running || connectionState !== "idle" ? "text-secondary" : "text-tertiary"
                         )}>
-                            {isPending
-                                ? (status.is_running ? t('status.stopping') : t('status.starting'))
-                                : (status.is_running ? t('status.active') : t('status.stopped'))
+                            {connectionState === "disconnecting" ? t('status.disconnecting') :
+                                connectionState === "connecting" ? t('status.connecting') :
+                                    (status.is_running ? t('status.active') : t('status.stopped'))
                             }
                         </span>
                     </div>
