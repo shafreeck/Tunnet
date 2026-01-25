@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@cloudworxx/tauri-plugin-mac-rounded-corners": "^1.1.1",
+    "@hello-pangea/dnd": "^18.0.1",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-visually-hidden": "^1.2.4",
     "@tauri-apps/api": "^2.9.1",
