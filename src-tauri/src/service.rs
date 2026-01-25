@@ -24,6 +24,7 @@ pub struct ProxyStatus {
     pub clash_api_port: Option<u16>,
     pub helper_api_port: Option<u16>,
     pub running_settings: Option<crate::settings::AppSettings>,
+    pub starting: bool,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct ProxyNodeStatus {
@@ -102,6 +103,7 @@ pub struct ProxyService<R: Runtime> {
     log_running: std::sync::Arc<std::sync::atomic::AtomicBool>,
     traffic_running: std::sync::Arc<std::sync::atomic::AtomicBool>,
     running_settings: Mutex<Option<crate::settings::AppSettings>>,
+    is_starting: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl<R: Runtime> ProxyService<R> {
@@ -131,6 +133,7 @@ impl<R: Runtime> ProxyService<R> {
             log_running: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             traffic_running: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             running_settings: Mutex::new(None),
+            is_starting: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -143,6 +146,63 @@ impl<R: Runtime> ProxyService<R> {
         // Ensure helper cleans up too (in case of previous crash/TUN mode residue)
         crate::helper_client::HelperClient::new().stop_proxy().ok();
         self.warmup_network_cache();
+    }
+
+    pub async fn maybe_auto_connect(&self) {
+        info!("Checking auto-connect settings...");
+        let settings = match self.manager.load_settings() {
+            Ok(s) => s,
+            Err(e) => {
+                error!("Failed to load settings for auto-connect: {}", e);
+                return;
+            }
+        };
+
+        if !settings.auto_connect {
+            info!("Auto-connect disabled.");
+            return;
+        }
+
+        info!("Auto-connect enabled. Checking for active target...");
+        if let Some(target_id) = settings.active_target_id {
+            // Set starting state
+            self.is_starting.store(true, std::sync::atomic::Ordering::SeqCst);
+
+            // Emit connecting state to frontend
+            self.app.emit("proxy-transition", serde_json::json!({ "state": "connecting" })).ok();
+
+            // Find the active node from all available nodes
+            let nodes = match self.get_nodes() {
+                Ok(n) => n,
+                Err(e) => {
+                    error!("Failed to load nodes for auto-connect: {}", e);
+                    self.is_starting.store(false, std::sync::atomic::Ordering::SeqCst);
+                    self.app.emit("proxy-transition", serde_json::json!({ "state": "idle" })).ok();
+                    return;
+                }
+            };
+
+            let node = nodes.into_iter().find(|n| n.id == target_id);
+            
+            // Wait a bit to ensure system network is ready?
+            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+            info!("Triggering auto-connect with target_id: {}", target_id);
+            let mode = settings.routing_mode.clone().unwrap_or("rule".to_string());
+            if let Err(e) = self.start_proxy(node, settings.tun_mode, mode).await {
+                error!("Auto-connect failed: {}", e);
+            } else {
+                info!("Auto-connect successful.");
+            }
+            
+            // Reset starting state
+            self.is_starting.store(false, std::sync::atomic::Ordering::SeqCst);
+            
+            // Emit idle state to frontend (success or fail, loading is done)
+            self.app.emit("proxy-transition", serde_json::json!({ "state": "idle" })).ok();
+        } else {
+            warn!("Auto-connect enabled but no active target selected.");
+        }
     }
 
     pub async fn start_proxy(
@@ -197,6 +257,15 @@ impl<R: Runtime> ProxyService<R> {
             settings.tun_mode = tun_mode;
             if let Err(e) = self.manager.save_settings(&settings) {
                 error!("Failed to persist tun_mode update: {}", e);
+            }
+        }
+        
+        let mode_val = Some(routing_mode.clone());
+        if settings.routing_mode != mode_val {
+            info!("start_proxy: updating persisted routing_mode to {}", routing_mode);
+            settings.routing_mode = mode_val;
+            if let Err(e) = self.manager.save_settings(&settings) {
+                error!("Failed to persist routing_mode update: {}", e);
             }
         }
 
@@ -598,6 +667,8 @@ impl<R: Runtime> ProxyService<R> {
             match startup_result {
                 Ok(_) => {
                     self.start_traffic_monitor();
+                    // Emit status change so frontend knows we are running and doesn't double-start
+                    self.app.emit("proxy-status-change", self.get_status()).ok();
                     return Ok(());
                 }
                 Err(e) => {
@@ -2058,6 +2129,7 @@ impl<R: Runtime> ProxyService<R> {
             clash_api_port: self.ensure_clash_port(),
             helper_api_port: *self.helper_api_port.lock().unwrap(),
             running_settings: self.running_settings.lock().unwrap().clone(),
+            starting: self.is_starting.load(std::sync::atomic::Ordering::SeqCst),
         }
     }
 

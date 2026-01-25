@@ -580,7 +580,16 @@ export default function Home() {
           if (settings.active_target_id) {
             setActiveServerId(settings.active_target_id)
           }
+          if (settings.routing_mode) {
+            setProxyMode(settings.routing_mode as any)
+          }
         }).catch(console.error)
+      }
+
+      // Fix: If backend is in auto-connect starting phase, force loading state
+      if (status.starting) {
+        setIsLoading(true)
+        setConnectionState("connecting")
       }
     }).catch(console.error).finally(() => {
       setIsInitialized(true)

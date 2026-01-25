@@ -533,6 +533,13 @@ pub fn run() {
             proxy_service.init(); // Clean up orphans and warmup cache
             app.manage(proxy_service);
 
+            // Auto-connect hook
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let service = app_handle.state::<ProxyService<tauri::Wry>>();
+                service.maybe_auto_connect().await;
+            });
+
             // System Tray Setup
             #[cfg(desktop)]
             {

@@ -477,6 +477,13 @@ function GeneralSettings({ settings, update, version, modifiedKeys = [] }: Commo
                 >
                     <Switch checked={settings.start_minimized} onCheckedChange={(v) => update("start_minimized", v)} />
                 </SettingItem>
+                <SettingItem
+                    title={t('settings.general.auto_connect.title')}
+                    description={t('settings.general.auto_connect.desc')}
+                    icon={<Zap size={20} />}
+                >
+                    <Switch checked={settings.auto_connect} onCheckedChange={(v) => update("auto_connect", v)} />
+                </SettingItem>
             </Section>
 
             <Section title={t('settings.general.app_update')} icon={<RefreshCw size={14} />}>

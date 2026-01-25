@@ -7,6 +7,8 @@ pub struct AppSettings {
     pub launch_at_login: bool,
     pub start_minimized: bool,
     pub auto_update: bool,
+    #[serde(default)]
+    pub auto_connect: bool,
 
     // Connection
     pub system_proxy: bool,
@@ -21,6 +23,7 @@ pub struct AppSettings {
     pub dns_hijack: bool,
     pub dns_strategy: String,
     pub dns_servers: String,
+    pub routing_mode: Option<String>,
 
     // Advanced
     pub log_level: String,
@@ -34,6 +37,7 @@ impl Default for AppSettings {
             launch_at_login: false,
             start_minimized: false,
             auto_update: true,
+            auto_connect: false,
             system_proxy: true,
             allow_lan: false,
             mixed_port: 2080,
@@ -44,6 +48,7 @@ impl Default for AppSettings {
             dns_hijack: true,
             dns_strategy: "ipv4".to_string(),
             dns_servers: "8.8.8.8\n1.1.1.1".to_string(),
+            routing_mode: Some("rule".to_string()),
             log_level: "info".to_string(),
             active_target_id: None,
         }

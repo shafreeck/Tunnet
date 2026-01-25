@@ -7,6 +7,7 @@ export interface AppSettings {
     launch_at_login: boolean
     start_minimized: boolean
     auto_update: boolean
+    auto_connect: boolean
 
     // Connection
     system_proxy: boolean
@@ -21,6 +22,7 @@ export interface AppSettings {
     dns_hijack: boolean
     dns_strategy: string
     dns_servers: string
+    routing_mode?: string
 
     // Advanced
     log_level: string
@@ -32,6 +34,7 @@ export const defaultSettings: AppSettings = {
     launch_at_login: false,
     start_minimized: false,
     auto_update: true,
+    auto_connect: false,
     system_proxy: true,
     allow_lan: false,
     mixed_port: 2080,
@@ -42,6 +45,7 @@ export const defaultSettings: AppSettings = {
     dns_hijack: true,
     dns_strategy: "ipv4",
     dns_servers: "8.8.8.8\n1.1.1.1",
+    routing_mode: "rule",
     log_level: "info",
     active_target_id: undefined,
 }

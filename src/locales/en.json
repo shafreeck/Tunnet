@@ -92,6 +92,10 @@
             "auto_check_update": {
                 "title": "Auto Check Update",
                 "desc": "Automatically check for the latest version on startup."
+            },
+            "auto_connect": {
+                "title": "Auto Connect",
+                "desc": "Automatically connect to the last active node on startup."
             }
         },
         "connection": {
