@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { Search, Rocket, Globe, Settings, Sliders, Info, Server, Zap, LayoutGrid, Activity, Play, Square, ArrowDown, ArrowUp, Zap as ZapIcon } from "lucide-react"
+import { Search, Rocket, Globe, Settings, Sliders, Info, Server, Zap, LayoutGrid, Activity, Play, Square, ArrowDown, ArrowUp, Zap as ZapIcon, Power, Loader2, ChevronRight, RotateCcw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { type } from '@tauri-apps/plugin-os'
@@ -24,9 +24,11 @@ interface SidebarProps {
     } | null
     onSearchClick: () => void
     traffic: { up: number, down: number }
+    isLoading?: boolean
+    onToggle?: (restart?: boolean) => void
 }
 
-export function Sidebar({ currentView, onViewChange, subscription, onSearchClick, traffic }: SidebarProps) {
+export function Sidebar({ currentView, onViewChange, subscription, onSearchClick, traffic, isLoading, onToggle }: SidebarProps) {
     const { t } = useTranslation()
     const [modifier, setModifier] = React.useState("⌘")
 
@@ -82,7 +84,7 @@ export function Sidebar({ currentView, onViewChange, subscription, onSearchClick
                         readOnly
                     />
                     <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
-                        <kbd className="hidden sm:flex h-5 select-none items-center gap-1 rounded border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 px-1.5 font-mono text-[10px] font-medium text-tertiary">
+                        <kbd className="hidden sm:flex h-5 select-none items-center gap-1 rounded border border-black/10 dark:border-white/10 bg-black/5 px-1.5 font-mono text-[10px] font-medium text-tertiary">
                             <span className={cn(modifier === "Ctrl" ? "text-[10px] font-bold" : "text-sm top-[0.5px] relative")}>{modifier}</span>K
                         </kbd>
                     </div>
@@ -137,7 +139,11 @@ export function Sidebar({ currentView, onViewChange, subscription, onSearchClick
             </nav>
 
             <div className="p-4 mt-auto space-y-3">
-                <SidebarStatusWidget traffic={traffic} />
+                <SidebarStatusWidget
+                    traffic={traffic}
+                    isLoading={isLoading}
+                    onToggle={onToggle}
+                />
 
                 <div
                     onClick={() => onViewChange("proxies")}
@@ -229,10 +235,19 @@ function NavItem({ icon, label, active = false, onClick }: { icon: React.ReactNo
 }
 
 
-function SidebarStatusWidget({ traffic }: { traffic: { up: number, down: number } }) {
+interface SidebarStatusWidgetProps {
+    traffic: { up: number, down: number }
+    isLoading?: boolean
+    onToggle?: (restart?: boolean) => void
+}
+
+function SidebarStatusWidget({ traffic, isLoading, onToggle }: SidebarStatusWidgetProps) {
     const { t } = useTranslation()
     const [status, setStatus] = React.useState<any>(null)
-    const [isPending, setIsPending] = React.useState(false)
+    const [isInternalPending, setIsInternalPending] = React.useState(false)
+
+    // Merge external loading and internal pending
+    const isPending = isLoading || isInternalPending
 
     // Poll status initially and listen for changes
     const fetchStatus = React.useCallback(async () => {
@@ -256,79 +271,9 @@ function SidebarStatusWidget({ traffic }: { traffic: { up: number, down: number 
 
 
 
-    const handleToggle = async (checked: boolean) => {
-        setIsPending(true)
-        try {
-            if (checked) {
-                // Determine node: use status.node if available (from previous state?), 
-                // but usually start_proxy relies on finding the selected node inside backend or passing explicit.
-                // Here we just toggle on, passing null lets backend decide (using last selected or saved)
-                // However, the backend start_proxy expects arguments.
-
-                // We'll call start_proxy with defaults, backend logic handles "resume".
-                // But wait, start_proxy needs (node, tun, routing). 
-                // We don't want to reset user choices.
-                // Ideally we should have a 'resume_proxy' or 'toggle_proxy' command.
-
-                // Let's check how page.tsx starts it.
-                // Usually it passes current selected node.
-                // If we don't have it here, we might reset it.
-                // Safest bet: Invoke a command that just enables it with saved settings?
-                // The backend `start_proxy` takes arguments.
-
-                // Workaround: We can't easily start with exact same state without context.
-                // Actually `service.rs` uses `latest_node` logic internally if we pass `None`?
-                // `start_proxy(..., node: Option<Node>, ...)`
-
-                // If we pass `null` for node, `tun: true` (or read from settings), `routing: ...`
-
-                // Let's assume the backend handles resumption if arguments are missing/null, 
-                // OR we can read app settings first.
-
-                // Since this component is isolated, we'll try to use the "manager" via `start_proxy` 
-                // but we might missing context.
-                // A better approach for the future is `toggle_proxy` command.
-                // For now, let's try to assume page.tsx state is global or we just trigger the intent.
-
-                // Wait, if I'm in the sidebar, the user might expect it to just work.
-                // Let's try passing nulls, effectively expecting backend to use defaults/persistence.
-
-                // However, `start_proxy` signature in Rust: 
-                // `start_proxy(state, node, tun, routing)`
-
-                // Let's grab current settings first
-                const settings = await invoke("get_app_settings") as any
-                // We also need the selected node... 
-                // If we can't get it, maybe we shouldn't allow Start from here without context?
-                // BUT the user asked for it.
-
-                // Strategy: Call `start_proxy` with `node: null`.
-                // In `service.rs`: `let node_name = node_opt.as_ref().map(|n| n.name.as_str()).unwrap_or("None");`
-                // It updates `latest_node`. If we pass None, `latest_node` becomes None?
-                // No, `*self.latest_node.lock().unwrap() = node_opt.clone();`
-                // So it WILL clear the node if we pass null. That's bad.
-
-                // FIX: Retrieve the current `proxyStatus` - does it have the node?
-                // `ProxyStatus` struct has `pub node: Option<Node>`.
-                // YES! `status` state variable has `node`.
-
-                await invoke("start_proxy", {
-                    node: status?.node || null,
-                    tun: settings.tun_mode,
-                    routing: status?.routing_mode || "rule"
-                })
-
-            } else {
-                await invoke("stop_proxy")
-            }
-            toast.success(checked ? t('dashboard.proxy_started') : t('dashboard.proxy_stopped'))
-        } catch (e) {
-            toast.error(t('dashboard.action_failed', { error: String(e) }))
-            // Revert generic/optimistic state if needed by fetching status again
-            fetchStatus()
-        } finally {
-            setIsPending(false)
-        }
+    const handleRestart = async () => {
+        if (!onToggle) return
+        onToggle(true)
     }
 
     // Formatting
@@ -341,58 +286,154 @@ function SidebarStatusWidget({ traffic }: { traffic: { up: number, down: number 
     if (!status) return null
 
     return (
-        <div className="px-1 space-y-3 pt-2">
-            {/* Minimal Header: Just Status Text + Switch */}
-            <div className="flex items-center justify-between px-1">
-                <div className="flex items-center gap-2 text-tertiary">
-                    <div className={cn("size-1.5 rounded-full transition-colors duration-500", status.is_running ? "bg-accent-green shadow-[0_0_8px_rgba(34,197,94,0.4)]" : "bg-white/20")} />
-                    <span className={cn("text-[10px] font-medium tracking-wide uppercase transition-colors", status.is_running ? "text-secondary" : "text-tertiary")}>
-                        {status.is_running ? t('status.running', 'Active') : t('status.stopped', 'Stopped')}
-                    </span>
-                </div>
-                <div onClick={(e) => e.stopPropagation()}>
-                    <Switch
-                        checked={status.is_running}
-                        onCheckedChange={handleToggle}
+        <div className="relative overflow-hidden group rounded-lg">
+            <div className="relative z-10 px-1 space-y-2 pt-2">
+                {/* Minimal Header: Status Text + Restart Button */}
+                <div className="flex items-center justify-between px-1">
+                    <div className="flex items-center gap-2 text-tertiary">
+                        <div className={cn("size-2 rounded-full transition-colors duration-500", status.is_running ? "bg-accent-green shadow-[0_0_8px_rgba(34,197,94,0.4)]" : "bg-zinc-400/50")} />
+                        <span className={cn("text-[11px] font-semibold tracking-wide uppercase transition-colors", status.is_running ? "text-secondary" : "text-tertiary")}>
+                            {status.is_running ? t('status.active') : t('status.stopped')}
+                        </span>
+                    </div>
+                    <button
+                        onClick={handleRestart}
                         disabled={isPending}
-                        className="scale-75 origin-right data-[state=checked]:bg-primary/80"
-                    />
-                </div>
-            </div>
-
-            {/* Compact Info Grid */}
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 px-1">
-                {/* Speed Row */}
-                <div className="col-span-2 flex items-center justify-between text-[10px] text-tertiary font-mono opacity-80">
-                    <div className="flex items-center gap-1.5">
-                        <ArrowUp size={10} className={traffic.up > 0 ? "text-emerald-500" : "text-inherit opacity-50"} />
-                        <span>{formatSpeed(traffic.up)}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <ArrowDown size={10} className={traffic.down > 0 ? "text-primary" : "text-inherit opacity-50"} />
-                        <span>{formatSpeed(traffic.down)}</span>
-                    </div>
+                        className={cn(
+                            "group relative p-1.5 rounded-lg transition-all duration-300 border border-transparent",
+                            status.is_running ? "bg-primary/5 text-primary hover:bg-primary/10 hover:border-primary/20" : "bg-white/5 text-tertiary hover:bg-white/10 hover:text-secondary",
+                            isPending && "cursor-wait opacity-80"
+                        )}
+                        title={status.is_running ? "Restart" : "Start"}
+                    >
+                        {isPending ? (
+                            <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                            <RotateCcw size={14} className={cn("transition-transform duration-500", status.is_running && "group-hover:-rotate-180")} />
+                        )}
+                    </button>
                 </div>
 
-                {/* Info Text Row */}
-                <div className="col-span-2 flex items-center justify-between border-t border-white/5 pt-2 mt-1">
-                    <div className="flex items-center gap-1.5 max-w-[50%] overflow-hidden" title={status.node?.name || "None"}>
-                        <ZapIcon size={10} className="text-tertiary shrink-0" />
-                        <span className="text-[10px] text-tertiary truncate">
-                            {status.node?.name || "None"}
-                        </span>
+                {/* Compact Info Grid */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 px-1">
+                    {/* Info Text Row (Now Top) */}
+                    <div className="col-span-2 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 max-w-[50%] overflow-hidden" title={status.node?.name || "None"}>
+                            <ZapIcon size={10} className="text-tertiary shrink-0" />
+                            <span className="text-[10px] text-tertiary truncate">
+                                {status.node?.name || "None"}
+                            </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 justify-end">
+                            <span className="text-[10px] text-tertiary">
+                                {status.routing_mode === "global" ? t('mode.global', 'Global') :
+                                    status.routing_mode === "direct" ? t('mode.direct', 'Direct') :
+                                        t('mode.rule', 'Rule')}
+                            </span>
+                            <Sliders size={10} className="text-tertiary shrink-0" />
+                        </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 justify-end">
-                        <span className="text-[10px] text-tertiary">
-                            {status.routing_mode === "global" ? t('mode.global', 'Global') :
-                                status.routing_mode === "direct" ? t('mode.direct', 'Direct') :
-                                    t('mode.rule', 'Rule')}
-                        </span>
-                        <Sliders size={10} className="text-tertiary shrink-0" />
+                    {/* Speed Row (Now Bottom) */}
+                    <div className="col-span-2 flex items-center justify-between text-[10px] text-tertiary font-mono opacity-80 border-t border-black/5 dark:border-white/5 pt-1.5 mt-0.5">
+                        <div className="flex items-center gap-1.5">
+                            <ArrowUp size={10} className={traffic.up > 0 ? "text-emerald-500" : "text-inherit opacity-50"} />
+                            <span>{formatSpeed(traffic.up)}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <ArrowDown size={10} className={traffic.down > 0 ? "text-primary" : "text-inherit opacity-50"} />
+                            <span>{formatSpeed(traffic.down)}</span>
+                        </div>
                     </div>
+                </div>
+
+                {/* Sparkline at the bottom */}
+                <div className="relative h-8 -mx-1 -mt-2 pointer-events-none overflow-hidden opacity-50">
+                    <Sparkline traffic={traffic} isRunning={status.is_running} />
                 </div>
             </div>
         </div>
+    )
+}
+
+function Sparkline({ traffic, isRunning }: { traffic: { up: number, down: number }, isRunning: boolean }) {
+    const [history, setHistory] = React.useState<{ up: number, down: number }[]>(new Array(40).fill({ up: 0, down: 0 }))
+
+    React.useEffect(() => {
+        if (!isRunning) {
+            setHistory(new Array(40).fill({ up: 0, down: 0 }))
+            return
+        }
+        setHistory(prev => {
+            const next = [...prev, traffic]
+            if (next.length > 40) next.shift()
+            return next
+        })
+    }, [traffic, isRunning])
+
+    const width = 100
+    const height = 100
+    // Dynamic scale: use actual max speed but set a lower floor (100KB/s) to make low speeds visible
+    const maxVal = Math.max(100 * 1024, ...history.map(h => Math.max(h.down, h.up)))
+
+    // Helper to generate smooth bezier curves
+    const getSmoothPath = (data: number[], isArea: boolean) => {
+        if (data.length === 0) return ""
+        const step = width / (data.length - 1)
+
+        const points = data.map((val, i) => ({
+            x: i * step,
+            y: height - (val / maxVal) * height * 0.8 // Increased drawing area for better visibility
+        }))
+
+        if (points.length < 2) return ""
+
+        let d = `M ${points[0].x} ${points[0].y}`
+
+        for (let i = 0; i < points.length - 1; i++) {
+            const curr = points[i]
+            const next = points[i + 1]
+            const midX = (curr.x + next.x) / 2
+            d += ` Q ${curr.x} ${curr.y} ${midX} ${(curr.y + next.y) / 2}`
+        }
+
+        const last = points[points.length - 1]
+        d += ` L ${last.x} ${last.y}`
+
+        if (isArea) {
+            d += ` L ${width} ${height} L 0 ${height} Z`
+        }
+        return d
+    }
+
+    const downData = history.map(h => h.down)
+    const upData = history.map(h => h.up)
+
+    // Colors that match the theme
+    const colorUp = "rgb(16, 185, 129)"   // Emerald 500
+    const colorDown = "rgb(59, 130, 246)" // Blue 500 (Primary)
+
+    return (
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full absolute inset-0 pointer-events-none" preserveAspectRatio="none">
+            <defs>
+                <linearGradient id="gradient-up" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={colorUp} stopOpacity="0.25" />
+                    <stop offset="100%" stopColor={colorUp} stopOpacity="0.05" />
+                </linearGradient>
+                <linearGradient id="gradient-down" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={colorDown} stopOpacity="0.3" />
+                    <stop offset="100%" stopColor={colorDown} stopOpacity="0.05" />
+                </linearGradient>
+            </defs>
+
+            {/* Up Stream (Green) */}
+            <path d={getSmoothPath(upData, true)} fill="url(#gradient-up)" className="transition-all duration-300 ease-linear" />
+            <path d={getSmoothPath(upData, false)} stroke={colorUp} strokeWidth="1" fill="none" vectorEffect="non-scaling-stroke" className="opacity-40 transition-all duration-300 ease-linear" />
+
+            {/* Down Stream (Blue) */}
+            <path d={getSmoothPath(downData, true)} fill="url(#gradient-down)" className="transition-all duration-300 ease-linear" />
+            <path d={getSmoothPath(downData, false)} stroke={colorDown} strokeWidth="1.5" fill="none" vectorEffect="non-scaling-stroke" className="opacity-60 transition-all duration-300 ease-linear" />
+        </svg>
     )
 }

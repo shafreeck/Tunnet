@@ -1832,6 +1832,8 @@ export default function Home() {
         subscription={activeSubscription || null}
         onSearchClick={() => setIsSearchOpen(true)}
         traffic={traffic}
+        isLoading={isLoading}
+        onToggle={toggleProxy}
       />
 
       {/* Search Dialog */}
