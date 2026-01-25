@@ -465,6 +465,12 @@ export default function Home() {
             const status = event.payload
             const wasConnected = isConnectedRef.current;
 
+            if (status.starting) {
+              setIsLoading(true)
+              setConnectionState("connecting")
+              return
+            }
+
             if (!status.is_running) {
               lastAppliedConfigRef.current = ""
               setRunningSettings(null)
@@ -1931,6 +1937,7 @@ export default function Home() {
         traffic={traffic}
         isLoading={isLoading}
         onToggle={toggleProxy}
+        connectionState={connectionState}
       />
 
       {/* Search Dialog */}

@@ -215,6 +215,8 @@ impl<R: Runtime> ProxyService<R> {
         info!("start_proxy: acquiring lock...");
         let _lock = self.start_lock.lock().await;
         info!("start_proxy: lock acquired, checking download...");
+        // Mark as starting so frontend shows loading state even during restart
+        self.is_starting.store(true, std::sync::atomic::Ordering::SeqCst);
 
         info!("start_proxy: download check done, ensuring DBs...");
         self.manager.ensure_databases().await?;
@@ -292,7 +294,8 @@ impl<R: Runtime> ProxyService<R> {
 
         // Full restart required (e.g., switched TUN mode or not running)
         info!("start_proxy: calling stop_proxy_internal...");
-        self.stop_proxy_internal(false, retain_system_proxy).await;
+        // Broadcast stop event so frontend knows we are restarting (starting=true in status)
+        self.stop_proxy_internal(true, retain_system_proxy).await;
         info!("start_proxy: stop_proxy_internal returned.");
         // Add a small delay to ensure ports are released (especially for Libbox FFI)
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -667,6 +670,8 @@ impl<R: Runtime> ProxyService<R> {
             match startup_result {
                 Ok(_) => {
                     self.start_traffic_monitor();
+                    // Reset starting state BEFORE broadcasting success, so get_status() returns starting=false
+                    self.is_starting.store(false, std::sync::atomic::Ordering::SeqCst);
                     // Emit status change so frontend knows we are running and doesn't double-start
                     self.app.emit("proxy-status-change", self.get_status()).ok();
                     return Ok(());
@@ -683,11 +688,13 @@ impl<R: Runtime> ProxyService<R> {
                         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                         continue;
                     }
+                    self.is_starting.store(false, std::sync::atomic::Ordering::SeqCst);
                     return Err(e);
                 }
             }
         }
 
+        self.is_starting.store(false, std::sync::atomic::Ordering::SeqCst);
         Err(format!(
             "Failed to start dual-instance proxy after {} attempts. Last error: {}",
             max_retries, last_error

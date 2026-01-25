@@ -26,9 +26,10 @@ interface SidebarProps {
     traffic: { up: number, down: number }
     isLoading?: boolean
     onToggle?: (restart?: boolean) => void
+    connectionState?: "idle" | "connecting" | "disconnecting"
 }
 
-export function Sidebar({ currentView, onViewChange, subscription, onSearchClick, traffic, isLoading, onToggle }: SidebarProps) {
+export function Sidebar({ currentView, onViewChange, subscription, onSearchClick, traffic, isLoading, onToggle, connectionState }: SidebarProps) {
     const { t } = useTranslation()
     const [modifier, setModifier] = React.useState("⌘")
 
@@ -143,6 +144,7 @@ export function Sidebar({ currentView, onViewChange, subscription, onSearchClick
                     traffic={traffic}
                     isLoading={isLoading}
                     onToggle={onToggle}
+                    connectionState={connectionState}
                 />
 
                 <div
@@ -249,9 +251,10 @@ interface SidebarStatusWidgetProps {
     traffic: { up: number, down: number }
     isLoading?: boolean
     onToggle?: (restart?: boolean) => void
+    connectionState?: "idle" | "connecting" | "disconnecting"
 }
 
-function SidebarStatusWidget({ traffic, isLoading, onToggle }: SidebarStatusWidgetProps) {
+function SidebarStatusWidget({ traffic, isLoading, onToggle, connectionState }: SidebarStatusWidgetProps) {
     const { t } = useTranslation()
     const [status, setStatus] = React.useState<any>(null)
     const [isInternalPending, setIsInternalPending] = React.useState(false)
