@@ -69,6 +69,8 @@ export default function Home() {
   const activeServerIdRef = useRef(activeServerId)
   const groupsRef = useRef<Group[]>([])
   const lastAppliedConfigRef = useRef<string | null>(null) // Format: "nodeId:mode:tun"
+  const lastPulseSeenRef = useRef(0)
+  const pendingConfigRef = useRef<string | null>(null)
 
   useEffect(() => { serversRef.current = servers }, [servers])
   useEffect(() => { activeServerIdRef.current = activeServerId }, [activeServerId])
@@ -270,7 +272,6 @@ export default function Home() {
   }, [tunEnabled])
 
   const lastPulseIdRef = useRef(0)
-  const pendingConfigRef = useRef<string | null>(null)
 
   // Reactive Proxy Controller (The single source of truth for execution)
   useEffect(() => {
@@ -314,7 +315,11 @@ export default function Home() {
 
       const currentConfigKey = `${activeServerIdRef.current}:${proxyMode}:${tunEnabled}`
 
-      if (currentConfigKey === lastAppliedConfigRef.current || currentConfigKey === pendingConfigRef.current) return
+      const isPulseRestart = syncPulse > lastPulseSeenRef.current
+      lastPulseSeenRef.current = syncPulse
+
+      if (currentConfigKey === lastAppliedConfigRef.current && !isPulseRestart) return
+      if (currentConfigKey === pendingConfigRef.current && !isPulseRestart) return
       pendingConfigRef.current = currentConfigKey
       // if (isLoading) return // REMOVED: This blocked processing because handleServerToggle sets loading=true optimistically
 
@@ -343,7 +348,7 @@ export default function Home() {
       const pulseId = ++lastPulseIdRef.current
 
       setIsLoading(true)
-      const transitState = isConnected ? "disconnecting" : "connecting";
+      const transitState = lastAppliedConfigRef.current ? "disconnecting" : "connecting";
       setConnectionState(transitState)
       emit("proxy-transition", { state: transitState })
       // console.log("Syncing proxy config...", { proxyMode, tunEnabled, node: node.name })
@@ -1176,9 +1181,6 @@ export default function Home() {
         emit("proxy-transition", { state: "disconnecting" })
 
         if (restart) {
-          // Clear current config ref to force a re-sync
-          lastAppliedConfigRef.current = null
-          pendingConfigRef.current = null
           // Trigger forced sync to start the Connecting phase immediately
           setSyncPulse(p => p + 1)
         } else {
