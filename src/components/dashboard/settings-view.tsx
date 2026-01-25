@@ -54,6 +54,7 @@ export function SettingsView({ initialCategory = "general", clashApiPort, helper
     const [loading, setLoading] = useState(true)
     const [isMac, setIsMac] = useState(false)
     const [isApplying, setIsApplying] = useState(false)
+    const [appVersion, setAppVersion] = useState<string>("")
 
     // Check if any critical setting that requires restart has changed
     const hasPendingChanges = React.useMemo(() => {
@@ -75,6 +76,7 @@ export function SettingsView({ initialCategory = "general", clashApiPort, helper
         if (typeof navigator !== 'undefined') {
             setIsMac(navigator.userAgent.toLowerCase().includes('mac'))
         }
+        getVersion().then(setAppVersion).catch(console.error)
     }, [])
 
     const refreshSettings = useCallback(async () => {
@@ -249,11 +251,11 @@ export function SettingsView({ initialCategory = "general", clashApiPort, helper
                             <div className="flex items-center justify-center p-20 text-secondary">{t('settings.loading')}</div>
                         ) : (
                             <>
-                                {activeCategory === "general" && <GeneralSettings settings={settings} update={updateSetting} save={handleSave} />}
+                                {activeCategory === "general" && <GeneralSettings settings={settings} update={updateSetting} save={handleSave} version={appVersion} />}
                                 {activeCategory === "connection" && <ConnectionSettings settings={settings} update={updateSetting} save={handleSave} tunEnabled={tunEnabled} onTunToggle={onTunToggle} />}
                                 {activeCategory === "dns" && <DnsSettings settings={settings} update={updateSetting} save={handleSave} />}
                                 {activeCategory === "advanced" && <AdvancedSettings settings={settings} update={updateSetting} save={handleSave} clashApiPort={clashApiPort} helperApiPort={helperApiPort} />}
-                                {activeCategory === "about" && <AboutSection />}
+                                {activeCategory === "about" && <AboutSection version={appVersion} />}
                             </>
                         )}
                     </div>
@@ -263,7 +265,7 @@ export function SettingsView({ initialCategory = "general", clashApiPort, helper
     )
 }
 
-function Section({ title, children, icon }: { title: string, children: React.ReactNode, icon?: React.ReactNode }) {
+function Section({ title, children, icon }: { title: React.ReactNode, children: React.ReactNode, icon?: React.ReactNode }) {
     return (
         <div className="space-y-4 mb-10 last:mb-0">
             <div className="flex items-center gap-2 px-1">
@@ -283,7 +285,7 @@ function SettingItem({
     children,
     icon
 }: {
-    title: string,
+    title: React.ReactNode,
     description?: string,
     children: React.ReactNode,
     icon?: React.ReactNode
@@ -313,6 +315,7 @@ interface CommonProps {
     settings: AppSettings
     update: (key: keyof AppSettings, value: any) => Promise<void>
     save: (s: AppSettings) => Promise<void> | void
+    version?: string
 }
 
 interface ConnectionProps extends CommonProps {
@@ -320,7 +323,7 @@ interface ConnectionProps extends CommonProps {
     onTunToggle?: () => void
 }
 
-function GeneralSettings({ settings, update }: CommonProps) {
+function GeneralSettings({ settings, update, version }: CommonProps) {
     const { t, i18n } = useTranslation()
     const { theme, setTheme } = useTheme()
 
@@ -404,7 +407,16 @@ function GeneralSettings({ settings, update }: CommonProps) {
 
             <Section title={t('settings.general.app_update')} icon={<RefreshCw size={14} />}>
                 <SettingItem
-                    title={t('settings.general.auto_check_update.title')}
+                    title={
+                        <div className="flex items-center gap-2">
+                            <span>{t('settings.general.auto_check_update.title')}</span>
+                            {version && (
+                                <span className="text-[10px] font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">
+                                    v{version}
+                                </span>
+                            )}
+                        </div>
+                    }
                     description={t('settings.general.auto_check_update.desc')}
                     icon={<RefreshCw size={20} />}
                 >
@@ -846,13 +858,9 @@ function AdvancedSettings({ settings, update, clashApiPort, helperApiPort }: Adv
 
 
 
-function AboutSection() {
-    const [version, setVersion] = useState<string>("")
+function AboutSection({ version }: { version: string }) {
+    const { t } = useTranslation()
     const [clicks, setClicks] = useState(0)
-
-    useEffect(() => {
-        getVersion().then(setVersion)
-    }, [])
 
     const handleTestUpdate = () => {
         const newClicks = clicks + 1
