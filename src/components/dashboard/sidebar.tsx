@@ -138,7 +138,7 @@ export function Sidebar({ currentView, onViewChange, subscription, onSearchClick
                 />
             </nav>
 
-            <div className="p-4 mt-auto space-y-3">
+            <div className="px-3 pb-3 pt-1 mt-auto space-y-2">
                 <SidebarStatusWidget
                     traffic={traffic}
                     isLoading={isLoading}
@@ -148,70 +148,80 @@ export function Sidebar({ currentView, onViewChange, subscription, onSearchClick
                 <div
                     onClick={() => onViewChange("proxies")}
                     className={cn(
-                        "rounded-lg px-3 py-2 transition-all duration-200 cursor-pointer group select-none",
-                        "hover:bg-black/5 dark:hover:bg-white/10 active:scale-95"
+                        "relative group cursor-pointer select-none transition-all duration-300",
+                        "bg-primary/3 dark:bg-white/5 backdrop-blur-sm hover:bg-primary/6 dark:hover:bg-white/10",
+                        "border border-primary/10 dark:border-white/5 hover:border-primary/20 dark:hover:border-white/20",
+                        "rounded-xl p-2.5 shadow-sm hover:shadow-md active:scale-[0.98]"
                     )}
                 >
+                    {/* Header: Icon + Name + Chevron */}
+                    <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2 overflow-hidden">
+                            <div className="p-1 rounded-lg bg-primary/10 text-primary shrink-0 transition-transform group-hover:scale-110">
+                                <Zap size={12} className="fill-current" />
+                            </div>
+                            <span className="text-xs font-bold text-secondary truncate group-hover:text-primary transition-colors">
+                                {subscription ? getDisplayName(subscription.name) : t('sidebar.no_subscription')}
+                            </span>
+                        </div>
+                        <ChevronRight size={12} className="text-tertiary transition-transform group-hover:translate-x-1" />
+                    </div>
+
                     {subscription ? (
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
+                            {/* Stats Line (Used / Total + Expire) */}
                             <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-secondary group-hover:text-primary transition-colors truncate max-w-[120px]" title={getDisplayName(subscription.name) || t('sidebar.subscription')}>{getDisplayName(subscription.name) || t('sidebar.subscription')}</span>
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-[11px] font-mono font-bold text-secondary">{formatBytes(used, 1).split(' ')[0]}</span>
+                                    <span className="text-[9px] font-medium text-tertiary uppercase">{formatBytes(used, 1).split(' ')[1]}</span>
+                                    <span className="text-[9px] text-tertiary/40 px-0.5">/</span>
+                                    <span className="text-[9px] font-medium text-tertiary">{total > 0 ? formatBytes(total) : '∞'}</span>
+                                </div>
+
                                 {subscription.expire && subscription.expire * 1000 < Date.now() ? (
-                                    <span className="text-[10px] font-medium text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded">{t('sidebar.expired')}</span>
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-red-500/10 text-red-500 font-bold uppercase tracking-wider">{t('sidebar.expired')}</span>
                                 ) : (
-                                    <span className="text-[10px] font-medium text-accent-green bg-accent-green/10 px-1.5 py-0.5 rounded">
+                                    <div className="px-1.5 py-0.5 rounded-md bg-accent-green/10 text-accent-green text-[9px] font-bold uppercase tracking-wider">
                                         {subscription.expire
                                             ? t('subscriptions.remaining_days', {
                                                 count: Math.max(1, Math.floor((subscription.expire - Date.now() / 1000) / 86400)),
-                                                defaultValue: `Remaining ${Math.max(1, Math.floor((subscription.expire - Date.now() / 1000) / 86400))} days`
+                                                defaultValue: `${Math.max(1, Math.floor((subscription.expire - Date.now() / 1000) / 86400))}D`
                                             })
                                             : (total > 0 ? t('sidebar.active') : t('sidebar.unlimited'))
                                         }
-                                    </span>
+                                    </div>
                                 )}
                             </div>
 
-                            {total > 0 ? (
-                                <div className="space-y-1.5">
-                                    <div className="h-1 w-full bg-black/5 dark:bg-white/10 rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full bg-primary transition-all duration-500"
-                                            style={{ width: `${percent}%` }}
-                                        />
-                                    </div>
-                                    <div className="flex justify-between text-[10px] text-tertiary font-medium">
-                                        <span>{formatBytes(used)}</span>
-                                        <span>{formatBytes(total)}</span>
-                                    </div>
+                            {/* Slim Progress Bar */}
+                            <div className="relative h-1 w-full bg-primary/10 dark:bg-white/10 rounded-full overflow-hidden">
+                                <div
+                                    className={cn(
+                                        "absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ease-out",
+                                        percent > 90 ? "bg-red-500" : percent > 75 ? "bg-orange-500" : "bg-accent-green"
+                                    )}
+                                    style={{ width: `${percent}%` }}
+                                >
+                                    <div className="absolute inset-0 bg-white/10 animate-pulse" />
                                 </div>
-                            ) : (
-                                <div className="space-y-1.5">
-                                    <div className="h-1 w-full bg-black/5 dark:bg-white/10 rounded-full overflow-hidden">
-                                        <div className="h-full bg-accent-green w-full opacity-50" />
-                                    </div>
-                                    <div className="flex justify-between text-[10px] text-tertiary font-medium">
-                                        <span>{formatBytes(used)}</span>
-                                        <span>∞</span>
-                                    </div>
-                                </div>
-                            )}
+                            </div>
                         </div>
                     ) : (
-                        <div className="flex items-center gap-3">
-                            <div className="flex items-center justify-center size-8 rounded-full bg-black/5 dark:bg-white/5 text-tertiary group-hover:bg-primary/10 group-hover:text-primary transition-all">
-                                <Zap size={16} />
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="text-xs font-medium text-secondary group-hover:text-primary transition-colors">{t('sidebar.subscription')}</span>
-                                <span className="text-[10px] text-tertiary">{t('sidebar.no_active_plan')}</span>
-                            </div>
+                        <div className="py-2 text-center text-[10px] text-tertiary italic opacity-60">
+                            {t('sidebar.click_to_manage', { defaultValue: 'Click to manage subscriptions' })}
                         </div>
                     )}
                 </div>
 
-
+                <div
+                    onClick={() => onViewChange("proxies")}
+                    className="flex md:hidden items-center gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5 text-tertiary"
+                >
+                    <Zap size={16} />
+                    <span className="text-xs">{subscription ? getDisplayName(subscription.name) : t('sidebar.no_subscription')}</span>
+                </div>
             </div>
-        </aside >
+        </aside>
     )
 }
 
