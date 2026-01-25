@@ -26,6 +26,7 @@ export default function TrayPage() {
     const [status, setStatus] = useState<any>({ is_running: false, tun_mode: false, routing_mode: "rule" })
     const [mounted, setMounted] = useState(false)
     const [isTransitioning, setIsTransitioning] = useState(false)
+    const [connectionState, setConnectionState] = useState<"idle" | "connecting" | "disconnecting">("idle")
     const [nodes, setNodes] = useState<any[]>([])
     const [ipInfo, setIpInfo] = useState<any>(null)
     const [checkingIp, setCheckingIp] = useState(false)
@@ -70,10 +71,12 @@ export default function TrayPage() {
             setStatus(event.payload)
             if (event.payload.starting && !event.payload.is_running) {
                 setIsTransitioning(true)
+                setConnectionState("connecting")
                 emit("proxy-transition", { state: "connecting" })
                 return
             }
             setIsTransitioning(false) // Stop loading when status confirmed
+            setConnectionState(event.payload.is_running ? "idle" : "idle") // Actual state determined by is_running in UI
             // Also refresh profiles on status change to be safe
             invoke("get_profiles").then((profiles: any) => {
                 const allNodes = profiles.flatMap((p: any) => p.nodes)
@@ -119,8 +122,10 @@ export default function TrayPage() {
             const { state } = event.payload
             if (state === "connecting" || state === "disconnecting") {
                 setIsTransitioning(true)
+                setConnectionState(state)
             } else if (state === "idle") {
                 setIsTransitioning(false)
+                setConnectionState("idle")
             }
         })
         return () => { unlistenTransition.then(f => f()) }
@@ -256,6 +261,7 @@ export default function TrayPage() {
         manualActionRef.current = true
 
         const transitState = status.is_running ? "disconnecting" : "connecting"
+        setConnectionState(transitState)
         emit("proxy-transition", { state: transitState })
         setIsTransitioning(true)
 
@@ -320,6 +326,7 @@ export default function TrayPage() {
     const setMode = async (mode: "rule" | "global" | "direct") => {
         if (isTransitioning) return
         const transitState = status.is_running ? "disconnecting" : "connecting"
+        setConnectionState(transitState)
         emit("proxy-transition", { state: transitState })
         setIsTransitioning(true)
         try {
@@ -394,10 +401,14 @@ export default function TrayPage() {
                 <div className="flex items-center gap-2">
                     <div className={cn(
                         "size-2 rounded-full transition-colors",
-                        isTransitioning ? "bg-blue-400 animate-pulse" : (status.is_running ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-yellow-500")
+                        connectionState === "disconnecting" ? "bg-red-500 animate-pulse" :
+                            (connectionState === "connecting" ? "bg-yellow-500 animate-pulse" :
+                                (status.is_running ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-yellow-500"))
                     )} />
                     <span className="text-xs font-bold tracking-wider opacity-80 uppercase">
-                        {isTransitioning ? t('tray.processing') : (isReconnectMode ? t('status.reconnect') : (status.is_running ? `${t('tray.on')} (${status.tun_mode ? t('tray.mode_short.tun') : (settings.system_proxy ? t('tray.mode_short.system') : t('tray.mode_short.port'))})` : t('tray.off')))}
+                        {connectionState === "disconnecting" ? t('status.disconnecting') :
+                            (connectionState === "connecting" ? t('status.connecting') :
+                                (isReconnectMode ? t('status.reconnect') : (status.is_running ? `${t('tray.on')} (${status.tun_mode ? t('tray.mode_short.tun') : (settings.system_proxy ? t('tray.mode_short.system') : t('tray.mode_short.port'))})` : t('tray.off'))))}
                     </span>
                 </div>
                 <button
@@ -424,9 +435,11 @@ export default function TrayPage() {
                 >
                     <div className={cn(
                         "size-12 rounded-[18px] flex items-center justify-center transition-all duration-500 shadow-lg",
-                        status.is_running && !isTransitioning
-                            ? (isReconnectMode ? "bg-yellow-500 text-white shadow-yellow-500/20 scale-105" : "bg-primary text-white shadow-primary/20 scale-105")
-                            : "bg-black/10 dark:bg-white/5 text-text-secondary group-hover:bg-black/20 dark:group-hover:bg-white/10"
+                        connectionState === "disconnecting" ? "bg-red-500 text-white shadow-red-500/20" :
+                            (connectionState === "connecting" ? "bg-yellow-500 text-white shadow-yellow-500/20" :
+                                (status.is_running
+                                    ? (isReconnectMode ? "bg-yellow-500 text-white shadow-yellow-500/20 scale-105" : "bg-primary text-white shadow-primary/20 scale-105")
+                                    : "bg-black/10 dark:bg-white/5 text-text-secondary group-hover:bg-black/20 dark:group-hover:bg-white/10"))
                     )}>
                         <Power size={20} className={cn(
                             "transition-all duration-500",
@@ -438,19 +451,24 @@ export default function TrayPage() {
                     <div className="flex flex-col items-start gap-1">
                         <span className={cn(
                             "text-lg font-bold tracking-tight transition-colors duration-500",
-                            isReconnectMode ? "text-yellow-600 dark:text-yellow-500" : ((status.is_running && !isTransitioning) ? "text-text-primary" : "text-text-secondary")
+                            connectionState === "disconnecting" ? "text-red-600 dark:text-red-500" :
+                                (connectionState === "connecting" ? "text-yellow-600 dark:text-yellow-500" :
+                                    (isReconnectMode ? "text-yellow-600 dark:text-yellow-500" : ((status.is_running && !isTransitioning) ? "text-text-primary" : "text-text-secondary")))
                         )}>
-                            {isTransitioning
-                                ? (status.is_running ? t('tray.stopping') : t('tray.connecting'))
-                                : (isReconnectMode ? t('status.reconnect') : (status.tun_mode
-                                    ? t('tray.mode.tun')
-                                    : (settings.system_proxy ? t('tray.mode.system') : t('tray.mode.port'))))}
+                            {connectionState === "disconnecting"
+                                ? t('tray.stopping')
+                                : (connectionState === "connecting"
+                                    ? t('tray.connecting')
+                                    : (isReconnectMode ? t('status.reconnect') : (status.tun_mode
+                                        ? t('tray.mode.tun')
+                                        : (settings.system_proxy ? t('tray.mode.system') : t('tray.mode.port')))))}
                         </span>
                         <span className={cn(
                             "text-xs transition-colors duration-500",
-                            isReconnectMode ? "text-yellow-600/80 dark:text-yellow-500/80 font-medium" : ((status.is_running && !isTransitioning) ? "text-primary/80 font-medium" : "text-text-tertiary")
+                            (connectionState === "disconnecting" || connectionState === "connecting") ? "text-text-tertiary font-medium" :
+                                (isReconnectMode ? "text-yellow-600/80 dark:text-yellow-500/80 font-medium" : ((status.is_running && !isTransitioning) ? "text-primary/80 font-medium" : "text-text-tertiary"))
                         )}>
-                            {isTransitioning
+                            {connectionState === "disconnecting" || connectionState === "connecting"
                                 ? t('tray.wait')
                                 : (isReconnectMode ? t('status.reconnecting', { defaultValue: 'RECONNECTING...' }) : (status.is_running
                                     ? (status.tun_mode ? t('tray.desc.global') : (settings.system_proxy ? t('tray.desc.system') : t('tray.desc.port', { port: settings.mixed_port })))
