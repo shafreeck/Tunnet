@@ -495,7 +495,7 @@ export function RulesView() {
                                 {isPresetOpen && (
                                     <>
                                         <div className="fixed inset-0 z-10" onClick={() => setIsPresetOpen(false)} />
-                                        <div className="absolute top-full right-0 mt-2 w-64 bg-card-bg border border-border-color rounded-2xl shadow-2xl py-3 z-50 animate-in zoom-in-95 duration-200 origin-top-right backdrop-blur-xl">
+                                        <div className="absolute top-full right-0 mt-2 w-64 bg-white/90 dark:bg-black/90 backdrop-blur-xl border border-border-color rounded-2xl shadow-2xl py-3 z-50 animate-in zoom-in-95 duration-200 origin-top-right ring-1 ring-black/5 dark:ring-white/5">
                                             {Object.keys(PRESETS).concat(["Custom"]).map(name => (
                                                 <button
                                                     key={name}
