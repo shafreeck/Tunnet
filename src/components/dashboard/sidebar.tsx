@@ -149,8 +149,8 @@ export function Sidebar({ currentView, onViewChange, subscription, onSearchClick
                     onClick={() => onViewChange("proxies")}
                     className={cn(
                         "relative group cursor-pointer select-none transition-all duration-300",
-                        "bg-primary/3 dark:bg-white/5 backdrop-blur-sm hover:bg-primary/6 dark:hover:bg-white/10",
-                        "border border-primary/10 dark:border-white/5 hover:border-primary/20 dark:hover:border-white/20",
+                        "bg-primary/3 dark:bg-primary/4 backdrop-blur-sm hover:bg-primary/6 dark:hover:bg-primary/8",
+                        "border border-primary/10 dark:border-primary/8 hover:border-primary/20 dark:hover:border-primary/20",
                         "rounded-xl p-2.5 shadow-sm hover:shadow-md active:scale-[0.98]"
                     )}
                 >
@@ -194,7 +194,7 @@ export function Sidebar({ currentView, onViewChange, subscription, onSearchClick
                             </div>
 
                             {/* Slim Progress Bar */}
-                            <div className="relative h-1 w-full bg-primary/10 dark:bg-white/10 rounded-full overflow-hidden">
+                            <div className="relative h-1 w-full bg-primary/10 dark:bg-primary/10 rounded-full overflow-hidden">
                                 <div
                                     className={cn(
                                         "absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ease-out",
@@ -215,7 +215,7 @@ export function Sidebar({ currentView, onViewChange, subscription, onSearchClick
 
                 <div
                     onClick={() => onViewChange("proxies")}
-                    className="flex md:hidden items-center gap-2 p-2 rounded-lg bg-black/5 dark:bg-white/5 text-tertiary"
+                    className="flex md:hidden items-center gap-2 p-2 rounded-lg bg-primary/5 dark:bg-primary/10 text-tertiary"
                 >
                     <Zap size={16} />
                     <span className="text-xs">{subscription ? getDisplayName(subscription.name) : t('sidebar.no_subscription')}</span>
@@ -296,13 +296,13 @@ function SidebarStatusWidget({ traffic, isLoading, onToggle }: SidebarStatusWidg
     if (!status) return null
 
     return (
-        <div className="relative overflow-hidden group rounded-lg">
-            <div className="relative z-10 px-1 space-y-2 pt-2">
+        <div className="relative overflow-hidden group">
+            <div className="relative z-10 px-1 space-y-2">
                 {/* Minimal Header: Status Text + Restart Button */}
                 <div className="flex items-center justify-between px-1">
-                    <div className="flex items-center gap-2 text-tertiary">
+                    <div className="flex items-center gap-2">
                         <div className={cn("size-2 rounded-full transition-colors duration-500", status.is_running ? "bg-accent-green shadow-[0_0_8px_rgba(34,197,94,0.4)]" : "bg-zinc-400/50")} />
-                        <span className={cn("text-[11px] font-semibold tracking-wide uppercase transition-colors", status.is_running ? "text-secondary" : "text-tertiary")}>
+                        <span className={cn("text-[10px] font-bold tracking-wider uppercase transition-colors", status.is_running ? "text-secondary" : "text-tertiary")}>
                             {status.is_running ? t('status.active') : t('status.stopped')}
                         </span>
                     </div>
@@ -310,49 +310,49 @@ function SidebarStatusWidget({ traffic, isLoading, onToggle }: SidebarStatusWidg
                         onClick={handleRestart}
                         disabled={isPending}
                         className={cn(
-                            "group relative p-1.5 rounded-lg transition-all duration-300 border border-transparent",
+                            "group relative p-1 rounded-lg transition-all duration-300 border border-transparent",
                             status.is_running ? "bg-primary/5 text-primary hover:bg-primary/10 hover:border-primary/20" : "bg-white/5 text-tertiary hover:bg-white/10 hover:text-secondary",
                             isPending && "cursor-wait opacity-80"
                         )}
                         title={status.is_running ? "Restart" : "Start"}
                     >
                         {isPending ? (
-                            <Loader2 size={14} className="animate-spin" />
+                            <Loader2 size={12} className="animate-spin" />
                         ) : (
-                            <RotateCcw size={14} className={cn("transition-transform duration-500", status.is_running && "group-hover:-rotate-180")} />
+                            <RotateCcw size={12} className={cn("transition-transform duration-500", status.is_running && "group-hover:-rotate-180")} />
                         )}
                     </button>
                 </div>
 
                 {/* Compact Info Grid */}
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 px-1">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
                     {/* Info Text Row (Now Top) */}
                     <div className="col-span-2 flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 max-w-[50%] overflow-hidden" title={status.node?.name || "None"}>
-                            <ZapIcon size={10} className="text-tertiary shrink-0" />
-                            <span className="text-[10px] text-tertiary truncate">
+                        <div className="flex items-center gap-1.5 max-w-[60%] overflow-hidden" title={status.node?.name || "None"}>
+                            <ZapIcon size={10} className={cn("shrink-0 transition-colors", status.is_running ? "text-primary/70" : "text-tertiary")} />
+                            <span className={cn("text-[10px] truncate transition-colors", status.is_running ? "text-secondary font-bold" : "text-tertiary font-medium")}>
                                 {status.node?.name || "None"}
                             </span>
                         </div>
 
-                        <div className="flex items-center gap-1.5 justify-end">
-                            <span className="text-[10px] text-tertiary">
-                                {status.routing_mode === "global" ? t('mode.global', 'Global') :
-                                    status.routing_mode === "direct" ? t('mode.direct', 'Direct') :
-                                        t('mode.rule', 'Rule')}
+                        <div className="flex items-center gap-1 justify-end">
+                            <span className="text-[10px] text-tertiary font-medium">
+                                {status.routing_mode === "global" ? t('status.mode.global') :
+                                    status.routing_mode === "direct" ? t('status.mode.direct') :
+                                        t('status.mode.rule')}
                             </span>
-                            <Sliders size={10} className="text-tertiary shrink-0" />
+                            <Sliders size={10} className="text-tertiary/60 shrink-0" />
                         </div>
                     </div>
 
                     {/* Speed Row (Now Bottom) */}
-                    <div className="col-span-2 flex items-center justify-between text-[10px] text-tertiary font-mono opacity-80 border-t border-black/5 dark:border-white/5 pt-1.5 mt-0.5">
-                        <div className="flex items-center gap-1.5">
-                            <ArrowUp size={10} className={traffic.up > 0 ? "text-emerald-500" : "text-inherit opacity-50"} />
+                    <div className="col-span-2 flex items-center justify-between text-[10px] font-mono border-t border-black/5 dark:border-white/5 pt-1.5 mt-0.5">
+                        <div className={cn("flex items-center gap-1 transition-colors", traffic.up > 0 ? "text-emerald-500 font-bold" : "text-tertiary opacity-60")}>
+                            <ArrowUp size={10} className={cn("transition-transform", traffic.up > 0 && "animate-pulse")} />
                             <span>{formatSpeed(traffic.up)}</span>
                         </div>
-                        <div className="flex items-center gap-1.5">
-                            <ArrowDown size={10} className={traffic.down > 0 ? "text-primary" : "text-inherit opacity-50"} />
+                        <div className={cn("flex items-center gap-1 transition-colors", traffic.down > 0 ? "text-primary font-bold" : "text-tertiary opacity-60")}>
+                            <ArrowDown size={10} className={cn("transition-transform", traffic.down > 0 && "animate-pulse")} />
                             <span>{formatSpeed(traffic.down)}</span>
                         </div>
                     </div>
