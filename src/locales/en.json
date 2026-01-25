@@ -559,6 +559,7 @@
         "upload": "Upload",
         "total_download": "Total Download",
         "total_upload": "Total Upload",
+        "not_running": "Proxy is not running",
         "toast": {
             "closed": "Connection closed",
             "close_failed": "Failed to close connection: {{error}}",

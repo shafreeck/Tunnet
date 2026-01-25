@@ -116,7 +116,7 @@ export function ConnectionsView() {
         } catch (e: any) {
             const errStr = String(e)
             if (errStr.includes("Proxy is not running")) {
-                setError("Proxy is not running")
+                setError(t('connections.not_running'))
                 setConnections([])
                 setTotalTraffic({ up: 0, down: 0 })
                 setTotalSpeed({ up: 0, down: 0 })

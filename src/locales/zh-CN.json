@@ -570,6 +570,7 @@
         "upload": "上传",
         "total_download": "总下载流量",
         "total_upload": "总上传流量",
+        "not_running": "代理未运行",
         "toast": {
             "closed": "连接已断开",
             "close_failed": "断开连接失败: {{error}}",
