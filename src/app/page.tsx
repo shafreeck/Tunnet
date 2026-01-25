@@ -113,12 +113,28 @@ export default function Home() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings)
   const [systemProxyEnabled, setSystemProxyEnabled] = useState(false)
   const [clashApiPort, setClashApiPort] = useState<number | null>(null)
+  const [helperApiPort, setHelperApiPort] = useState<number | null>(null)
   const [subSortBy, setSubSortBy] = useState<"name" | "ping">("ping")
   const [showSubSortMenu, setShowSubSortMenu] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [exportTarget, setExportTarget] = useState<{ id: string, name: string, type: "node" | "profile" | "group" } | null>(null)
   const [isWindowDragging, setIsWindowDragging] = useState(false)
 
+
+
+  // Traffic State (Global)
+  const [traffic, setTraffic] = useState({ up: 0, down: 0 })
+
+  useEffect(() => {
+    if (!isConnected) {
+      setTraffic({ up: 0, down: 0 })
+      return
+    }
+    const unlistenPromise = listen<any>("traffic-update", (event) => {
+      setTraffic(event.payload)
+    })
+    return () => { unlistenPromise.then(f => f()) }
+  }, [isConnected])
 
   // Sync derived state
   useEffect(() => {
@@ -340,6 +356,7 @@ export default function Home() {
         setTunEnabled(result.tun_mode)
         setProxyMode(result.routing_mode as any)
         setClashApiPort(result.clash_api_port)
+        setHelperApiPort(result.helper_api_port)
 
         // Trigger IP refresh after successful sync
         setIpRefreshKey(prev => prev + 1)
@@ -411,6 +428,7 @@ export default function Home() {
         }
         setTunEnabled(status.tun_mode)
         setClashApiPort(status.clash_api_port)
+        setHelperApiPort(status.helper_api_port)
 
         // Prevent immediate reload by setting lastAppliedConfigRef
         const targetId = status.target_id
@@ -449,6 +467,7 @@ export default function Home() {
       }
       setTunEnabled(status.tun_mode)
       setClashApiPort(status.clash_api_port)
+      setHelperApiPort(status.helper_api_port)
       // Sync ref to avoid restart loop
       if (status.is_running && status.target_id) {
         lastAppliedConfigRef.current = `${status.target_id}:${status.routing_mode}:${status.tun_mode}`
@@ -1759,7 +1778,7 @@ export default function Home() {
                 hasNoServers={servers.length === 0}
               />
 
-              <TrafficMonitor isRunning={isConnected} apiPort={clashApiPort} />
+              <TrafficMonitor isRunning={isConnected} traffic={traffic} />
 
               <ServerList
                 servers={displayedServers}
@@ -1812,6 +1831,7 @@ export default function Home() {
         onViewChange={setCurrentView}
         subscription={activeSubscription || null}
         onSearchClick={() => setIsSearchOpen(true)}
+        traffic={traffic}
       />
 
       {/* Search Dialog */}

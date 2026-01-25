@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { cn } from "@/lib/utils"
 
 const formatSpeed = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B/s`
@@ -11,63 +10,26 @@ const formatSpeed = (bytes: number) => {
 
 interface TrafficMonitorProps {
     isRunning: boolean
-    apiPort: number | null
+    traffic: { up: number, down: number }
 }
 
-export function TrafficMonitor({ isRunning, apiPort }: TrafficMonitorProps) {
-    const [traffic, setTraffic] = useState({ up: 0, down: 0 })
+export function TrafficMonitor({ isRunning, traffic }: TrafficMonitorProps) {
     const [trafficHistory, setTrafficHistory] = useState<{ up: number, down: number }[]>(new Array(30).fill({ up: 0, down: 0 }))
 
     useEffect(() => {
-        if (!isRunning || !apiPort) {
-            setTraffic({ up: 0, down: 0 })
+        if (!isRunning) {
             setTrafficHistory(new Array(30).fill({ up: 0, down: 0 }))
             return
         }
 
-        let ws: WebSocket | null = null
-        let retryTimeout: NodeJS.Timeout
-
-        const connect = () => {
-            ws = new WebSocket(`ws://127.0.0.1:${apiPort}/traffic`)
-
-            ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data)
-                    setTraffic({ up: data.up, down: data.down })
-                    setTrafficHistory(prev => {
-                        const next = [...prev, { up: data.up, down: data.down }]
-                        if (next.length > 30) next.shift()
-                        return next
-                    })
-                } catch (e) {
-                    // ignore
-                }
-            }
-
-            ws.onerror = () => {
-                ws?.close()
-            }
-
-            ws.onclose = () => {
-                // Simple retry logic
-                retryTimeout = setTimeout(connect, 2000)
-            }
-        }
-
-        // Delay connection slightly to allow core start
-        setTimeout(connect, 1000)
-
-        return () => {
-            clearTimeout(retryTimeout)
-            ws?.close()
-        }
-    }, [isRunning, apiPort])
-
-    // if (!isRunning) return null -- Removed to keep layout stable
+        setTrafficHistory(prev => {
+            const next = [...prev, traffic]
+            if (next.length > 30) next.shift()
+            return next
+        })
+    }, [traffic, isRunning])
 
     return (
-
         <div className="flex flex-col gap-1 w-full px-2 mt-2 mb-6 animate-in fade-in slide-in-from-bottom-2">
             <div className="flex items-center justify-between text-[11px] font-mono font-medium px-1 opacity-80">
                 <span className="text-emerald-500">↑ {formatSpeed(traffic.up)}</span>

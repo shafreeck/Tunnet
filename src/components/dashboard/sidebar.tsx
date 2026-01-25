@@ -1,10 +1,14 @@
 "use client"
 
 import React from "react"
-import { Search, Rocket, Globe, Settings, Sliders, Info, Server, Zap, LayoutGrid, Activity } from "lucide-react"
+import { Search, Rocket, Globe, Settings, Sliders, Info, Server, Zap, LayoutGrid, Activity, Play, Square, ArrowDown, ArrowUp, Zap as ZapIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { type } from '@tauri-apps/plugin-os'
+import { Switch } from "@/components/ui/switch"
+import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
+import { toast } from "sonner"
 
 export type ViewType = "dashboard" | "locations" | "rules" | "settings" | "proxies" | "groups" | "connections"
 
@@ -19,9 +23,10 @@ interface SidebarProps {
         expire: number
     } | null
     onSearchClick: () => void
+    traffic: { up: number, down: number }
 }
 
-export function Sidebar({ currentView, onViewChange, subscription, onSearchClick }: SidebarProps) {
+export function Sidebar({ currentView, onViewChange, subscription, onSearchClick, traffic }: SidebarProps) {
     const { t } = useTranslation()
     const [modifier, setModifier] = React.useState("⌘")
 
@@ -131,7 +136,9 @@ export function Sidebar({ currentView, onViewChange, subscription, onSearchClick
                 />
             </nav>
 
-            <div className="p-4 mt-auto">
+            <div className="p-4 mt-auto space-y-3">
+                <SidebarStatusWidget traffic={traffic} />
+
                 <div
                     onClick={() => onViewChange("proxies")}
                     className={cn(
@@ -221,3 +228,171 @@ function NavItem({ icon, label, active = false, onClick }: { icon: React.ReactNo
     )
 }
 
+
+function SidebarStatusWidget({ traffic }: { traffic: { up: number, down: number } }) {
+    const { t } = useTranslation()
+    const [status, setStatus] = React.useState<any>(null)
+    const [isPending, setIsPending] = React.useState(false)
+
+    // Poll status initially and listen for changes
+    const fetchStatus = React.useCallback(async () => {
+        try {
+            const s = await invoke("get_proxy_status") as any
+            setStatus(s)
+        } catch (e) {
+            console.error("Failed to fetch proxy status", e)
+        }
+    }, [])
+
+    React.useEffect(() => {
+        fetchStatus()
+        const unlisten = listen("proxy-status-change", (event: any) => {
+            setStatus(event.payload)
+        })
+        return () => {
+            unlisten.then(f => f())
+        }
+    }, [fetchStatus])
+
+
+
+    const handleToggle = async (checked: boolean) => {
+        setIsPending(true)
+        try {
+            if (checked) {
+                // Determine node: use status.node if available (from previous state?), 
+                // but usually start_proxy relies on finding the selected node inside backend or passing explicit.
+                // Here we just toggle on, passing null lets backend decide (using last selected or saved)
+                // However, the backend start_proxy expects arguments.
+
+                // We'll call start_proxy with defaults, backend logic handles "resume".
+                // But wait, start_proxy needs (node, tun, routing). 
+                // We don't want to reset user choices.
+                // Ideally we should have a 'resume_proxy' or 'toggle_proxy' command.
+
+                // Let's check how page.tsx starts it.
+                // Usually it passes current selected node.
+                // If we don't have it here, we might reset it.
+                // Safest bet: Invoke a command that just enables it with saved settings?
+                // The backend `start_proxy` takes arguments.
+
+                // Workaround: We can't easily start with exact same state without context.
+                // Actually `service.rs` uses `latest_node` logic internally if we pass `None`?
+                // `start_proxy(..., node: Option<Node>, ...)`
+
+                // If we pass `null` for node, `tun: true` (or read from settings), `routing: ...`
+
+                // Let's assume the backend handles resumption if arguments are missing/null, 
+                // OR we can read app settings first.
+
+                // Since this component is isolated, we'll try to use the "manager" via `start_proxy` 
+                // but we might missing context.
+                // A better approach for the future is `toggle_proxy` command.
+                // For now, let's try to assume page.tsx state is global or we just trigger the intent.
+
+                // Wait, if I'm in the sidebar, the user might expect it to just work.
+                // Let's try passing nulls, effectively expecting backend to use defaults/persistence.
+
+                // However, `start_proxy` signature in Rust: 
+                // `start_proxy(state, node, tun, routing)`
+
+                // Let's grab current settings first
+                const settings = await invoke("get_app_settings") as any
+                // We also need the selected node... 
+                // If we can't get it, maybe we shouldn't allow Start from here without context?
+                // BUT the user asked for it.
+
+                // Strategy: Call `start_proxy` with `node: null`.
+                // In `service.rs`: `let node_name = node_opt.as_ref().map(|n| n.name.as_str()).unwrap_or("None");`
+                // It updates `latest_node`. If we pass None, `latest_node` becomes None?
+                // No, `*self.latest_node.lock().unwrap() = node_opt.clone();`
+                // So it WILL clear the node if we pass null. That's bad.
+
+                // FIX: Retrieve the current `proxyStatus` - does it have the node?
+                // `ProxyStatus` struct has `pub node: Option<Node>`.
+                // YES! `status` state variable has `node`.
+
+                await invoke("start_proxy", {
+                    node: status?.node || null,
+                    tun: settings.tun_mode,
+                    routing: status?.routing_mode || "rule"
+                })
+
+            } else {
+                await invoke("stop_proxy")
+            }
+            toast.success(checked ? t('dashboard.proxy_started') : t('dashboard.proxy_stopped'))
+        } catch (e) {
+            toast.error(t('dashboard.action_failed', { error: String(e) }))
+            // Revert generic/optimistic state if needed by fetching status again
+            fetchStatus()
+        } finally {
+            setIsPending(false)
+        }
+    }
+
+    // Formatting
+    const formatSpeed = (bytes: number) => {
+        if (bytes < 1024) return `${bytes} B/s`
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB/s`
+        return `${(bytes / 1024 / 1024).toFixed(1)} MB/s`
+    }
+
+    if (!status) return null
+
+    return (
+        <div className="px-1 space-y-3 pt-2">
+            {/* Minimal Header: Just Status Text + Switch */}
+            <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2 text-tertiary">
+                    <div className={cn("size-1.5 rounded-full transition-colors duration-500", status.is_running ? "bg-accent-green shadow-[0_0_8px_rgba(34,197,94,0.4)]" : "bg-white/20")} />
+                    <span className={cn("text-[10px] font-medium tracking-wide uppercase transition-colors", status.is_running ? "text-secondary" : "text-tertiary")}>
+                        {status.is_running ? t('status.running', 'Active') : t('status.stopped', 'Stopped')}
+                    </span>
+                </div>
+                <div onClick={(e) => e.stopPropagation()}>
+                    <Switch
+                        checked={status.is_running}
+                        onCheckedChange={handleToggle}
+                        disabled={isPending}
+                        className="scale-75 origin-right data-[state=checked]:bg-primary/80"
+                    />
+                </div>
+            </div>
+
+            {/* Compact Info Grid */}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 px-1">
+                {/* Speed Row */}
+                <div className="col-span-2 flex items-center justify-between text-[10px] text-tertiary font-mono opacity-80">
+                    <div className="flex items-center gap-1.5">
+                        <ArrowUp size={10} className={traffic.up > 0 ? "text-emerald-500" : "text-inherit opacity-50"} />
+                        <span>{formatSpeed(traffic.up)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <ArrowDown size={10} className={traffic.down > 0 ? "text-primary" : "text-inherit opacity-50"} />
+                        <span>{formatSpeed(traffic.down)}</span>
+                    </div>
+                </div>
+
+                {/* Info Text Row */}
+                <div className="col-span-2 flex items-center justify-between border-t border-white/5 pt-2 mt-1">
+                    <div className="flex items-center gap-1.5 max-w-[50%] overflow-hidden" title={status.node?.name || "None"}>
+                        <ZapIcon size={10} className="text-tertiary shrink-0" />
+                        <span className="text-[10px] text-tertiary truncate">
+                            {status.node?.name || "None"}
+                        </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 justify-end">
+                        <span className="text-[10px] text-tertiary">
+                            {status.routing_mode === "global" ? t('mode.global', 'Global') :
+                                status.routing_mode === "direct" ? t('mode.direct', 'Direct') :
+                                    t('mode.rule', 'Rule')}
+                        </span>
+                        <Sliders size={10} className="text-tertiary shrink-0" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
