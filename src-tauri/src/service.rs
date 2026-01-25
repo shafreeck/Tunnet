@@ -2929,10 +2929,6 @@ impl<R: Runtime> ProxyService<R> {
                         if let Some(n) = nodes.into_iter().find(|n| n.id == *id) {
                             *latest = Some(n);
                         } else {
-                            // If it's a group, we might want to resolve it too, 
-                            // but usually Node is enough for display.
-                            // If we can't find it, we keep it as is or clear it?
-                            // Let's clear if it's genuinely missing from nodes.
                             *latest = None;
                         }
                     }
@@ -2949,30 +2945,12 @@ impl<R: Runtime> ProxyService<R> {
             return Ok(());
         }
 
-        // Check if we need a full restart
-        // Check if we need a full restart
-        let need_restart = settings.mixed_port != old_settings.mixed_port
-            || settings.tun_mode != old_settings.tun_mode
-            || settings.tun_stack != old_settings.tun_stack
-            || settings.tun_mtu != old_settings.tun_mtu
-            || settings.strict_route != old_settings.strict_route
-            || settings.allow_lan != old_settings.allow_lan
-            || settings.dns_hijack != old_settings.dns_hijack
-            || settings.dns_strategy != old_settings.dns_strategy
-            || settings.dns_servers != old_settings.dns_servers
-            || settings.log_level != old_settings.log_level;
-
-        if need_restart {
-            info!("Core configuration changed, restarting proxy...");
-            self.restart_proxy_by_config(settings.tun_mode).await?;
-        } else {
-            // If only system_proxy changed (or nothing important changed), handle system proxy toggle
-            if settings.system_proxy != old_settings.system_proxy {
-                if settings.system_proxy {
-                    self.enable_system_proxy(settings.mixed_port);
-                } else {
-                    self.disable_system_proxy();
-                }
+        // Handle system proxy toggle immediately if it changed (does not require core restart)
+        if settings.system_proxy != old_settings.system_proxy {
+            if settings.system_proxy {
+                self.enable_system_proxy(settings.mixed_port);
+            } else {
+                self.disable_system_proxy();
             }
         }
         let _ = self.app.emit("settings-update", &settings);

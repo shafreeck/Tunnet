@@ -255,6 +255,7 @@ export default function Home() {
   }, [tunEnabled])
 
   const lastPulseIdRef = useRef(0)
+  const pendingConfigRef = useRef<string | null>(null)
 
   // Reactive Proxy Controller (The single source of truth for execution)
   useEffect(() => {
@@ -293,7 +294,8 @@ export default function Home() {
 
       const currentConfigKey = `${activeServerIdRef.current}:${proxyMode}:${tunEnabled}`
 
-      if (currentConfigKey === lastAppliedConfigRef.current) return
+      if (currentConfigKey === lastAppliedConfigRef.current || currentConfigKey === pendingConfigRef.current) return
+      pendingConfigRef.current = currentConfigKey
       // if (isLoading) return // REMOVED: This blocked processing because handleServerToggle sets loading=true optimistically
 
       let node = serversRef.current.find(s => s.id === activeServerIdRef.current)
@@ -360,7 +362,8 @@ export default function Home() {
       toast.promise(promise, {
         loading: getLoadingMsg(),
         success: getSuccessMsg(),
-        error: (err: any) => t('toast.action_failed', { error: err })
+        error: (err: any) => t('toast.action_failed', { error: err }),
+        id: "proxy-sync"
       })
 
       try {
@@ -386,6 +389,9 @@ export default function Home() {
         lastAppliedConfigRef.current = null
         lastAppliedConfigRef.current = null
       } finally {
+        if (pendingConfigRef.current === currentConfigKey) {
+          pendingConfigRef.current = null
+        }
         setIsLoading(false)
         setConnectionState("idle")
         emit("proxy-transition", { state: "idle" })
@@ -1082,19 +1088,12 @@ export default function Home() {
       }
     }
 
-    if (isConnected) {
-      setIsLoading(true)
-      setConnectionState("connecting")
-      emit("proxy-transition", { state: "connecting" })
-    }
     setTunEnabled(nextState)
     // Persist to backend settings to sync with Tray and other components
     saveAppSettings({ ...settings, tun_mode: nextState }).catch(console.error)
 
     // Emit sync event for Tray (when stopped)
     emit("tun-mode-updated", nextState)
-
-    toast.success(t(nextState ? 'toast.tun_mode_enabled' : 'toast.tun_mode_disabled'))
   }
 
   const toggleProxy = async (restart?: boolean) => {
@@ -1734,7 +1733,7 @@ export default function Home() {
       case "connections":
         return <ConnectionsView />
       case "settings":
-        return <SettingsView key={currentView} clashApiPort={clashApiPort} tunEnabled={tunEnabled} onTunToggle={handleTunToggle} />
+        return <SettingsView key={currentView} clashApiPort={clashApiPort} helperApiPort={helperApiPort} tunEnabled={tunEnabled} onTunToggle={handleTunToggle} />
       case "dashboard":
       default:
         // Original Dashboard Content

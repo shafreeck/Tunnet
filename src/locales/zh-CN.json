@@ -63,6 +63,8 @@
     },
     "settings": {
         "loading": "加载设置中...",
+        "pending_title": "设置待生效",
+        "pending_desc": "配置已修改，点击应用以重启服务并完成设置。",
         "nav": {
             "general": "常规",
             "connection": "连接",

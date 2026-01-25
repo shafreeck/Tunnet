@@ -63,6 +63,8 @@
     },
     "settings": {
         "loading": "Loading settings...",
+        "pending_title": "Settings Pending",
+        "pending_desc": "Configuration modified. Click Apply to restart service and apply settings.",
         "nav": {
             "general": "General",
             "connection": "Connection",

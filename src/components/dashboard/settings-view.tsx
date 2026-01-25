@@ -21,7 +21,10 @@ import {
     Plus,
     Minus,
     LogOut,
-    Loader2
+    Loader2,
+    RotateCcw,
+    Check,
+    AlertCircle
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
@@ -38,16 +41,35 @@ interface SettingsViewProps {
     initialCategory?: SettingCategory
     onClose?: () => void
     clashApiPort?: number | null
+    helperApiPort?: number | null
     tunEnabled?: boolean
     onTunToggle?: () => void
 }
 
-export function SettingsView({ initialCategory = "general", clashApiPort, tunEnabled, onTunToggle }: SettingsViewProps) {
+export function SettingsView({ initialCategory = "general", clashApiPort, helperApiPort, tunEnabled, onTunToggle }: SettingsViewProps) {
     const { t } = useTranslation()
     const [activeCategory, setActiveCategory] = useState<SettingCategory>(initialCategory)
     const [settings, setSettings] = useState<AppSettings>(defaultSettings)
+    const [appliedSettings, setAppliedSettings] = useState<AppSettings>(defaultSettings)
     const [loading, setLoading] = useState(true)
     const [isMac, setIsMac] = useState(false)
+    const [isApplying, setIsApplying] = useState(false)
+
+    // Check if any critical setting that requires restart has changed
+    const hasPendingChanges = React.useMemo(() => {
+        if (loading) return false
+        return (
+            settings.mixed_port !== appliedSettings.mixed_port ||
+            settings.allow_lan !== appliedSettings.allow_lan ||
+            settings.tun_stack !== appliedSettings.tun_stack ||
+            settings.tun_mtu !== appliedSettings.tun_mtu ||
+            settings.strict_route !== appliedSettings.strict_route ||
+            settings.dns_hijack !== appliedSettings.dns_hijack ||
+            settings.dns_strategy !== appliedSettings.dns_strategy ||
+            settings.dns_servers !== appliedSettings.dns_servers ||
+            settings.log_level !== appliedSettings.log_level
+        )
+    }, [settings, appliedSettings, loading])
 
     useEffect(() => {
         if (typeof navigator !== 'undefined') {
@@ -59,6 +81,7 @@ export function SettingsView({ initialCategory = "general", clashApiPort, tunEna
         setLoading(true)
         const s = await getAppSettings()
         setSettings(s)
+        setAppliedSettings(s) // Initialize appliedSettings with current settings from disk
         setLoading(false)
     }, [])
 
@@ -146,6 +169,78 @@ export function SettingsView({ initialCategory = "general", clashApiPort, tunEna
                 </div>
             </div>
 
+            {hasPendingChanges && (
+                <div className="px-4 md:px-8 mt-4 shrink-0">
+                    <div className="max-w-3xl mx-auto">
+                        <div className="glass-card border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.15)] rounded-2xl p-4 flex items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-500">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-amber-500/10 rounded-xl">
+                                    <Zap size={18} className="text-amber-500 animate-pulse" />
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-bold text-foreground leading-none mb-1">{t('settings.pending_title', { defaultValue: 'Ready to Apply' })}</h4>
+                                    <p className="text-[10px] md:text-xs text-secondary font-medium">{t('settings.pending_desc', { defaultValue: 'Some settings have been modified. Apply changes to restart proxy service.' })}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setSettings(appliedSettings)}
+                                    className="px-4 py-2 text-xs font-bold text-secondary hover:text-foreground transition-colors flex items-center gap-1.5"
+                                >
+                                    <RotateCcw size={14} />
+                                    <span className="hidden sm:inline">{t('rules.discard_changes', { defaultValue: 'Discard' })}</span>
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        setIsApplying(true)
+                                        import("@tauri-apps/api/event").then(({ emit }) => {
+                                            emit("proxy-transition", { state: "connecting" })
+                                        })
+                                        try {
+                                            // 1. Fetch current status to get target_id, etc.
+                                            const status = await invoke<any>("get_proxy_status")
+                                            const tun_mode = status.tun_mode
+                                            const routing_mode = status.routing_mode
+
+                                            // 2. Fetch current nodes and find active one
+                                            const nodes = await invoke<any[]>("get_nodes")
+                                            const activeNode = nodes.find(n => n.id === settings.active_target_id) || null
+
+                                            // 3. Start proxy (backend will read new settings from disk)
+                                            await invoke("start_proxy", {
+                                                node: activeNode,
+                                                tun: tun_mode,
+                                                routing: routing_mode
+                                            })
+
+                                            setAppliedSettings(settings)
+                                            toast.success(t('rules.toast.applied_success', { defaultValue: 'Settings applied successfully' }))
+                                        } catch (e) {
+                                            console.error("Failed to apply settings", e)
+                                            toast.error(t('rules.toast.apply_failed', { defaultValue: 'Failed to apply settings' }))
+                                        } finally {
+                                            setIsApplying(false)
+                                            import("@tauri-apps/api/event").then(({ emit }) => {
+                                                emit("proxy-transition", { state: "idle" })
+                                            })
+                                        }
+                                    }}
+                                    disabled={isApplying}
+                                    className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2 scale-100 active:scale-95"
+                                >
+                                    {isApplying ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                        <Check size={14} />
+                                    )}
+                                    {t('rules.apply_changes', { defaultValue: 'Apply Changes' })}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto sidebar-scroll px-4 md:px-8 py-6 md:py-10">
                 <div className="max-w-3xl mx-auto pb-10">
@@ -157,7 +252,7 @@ export function SettingsView({ initialCategory = "general", clashApiPort, tunEna
                                 {activeCategory === "general" && <GeneralSettings settings={settings} update={updateSetting} save={handleSave} />}
                                 {activeCategory === "connection" && <ConnectionSettings settings={settings} update={updateSetting} save={handleSave} tunEnabled={tunEnabled} onTunToggle={onTunToggle} />}
                                 {activeCategory === "dns" && <DnsSettings settings={settings} update={updateSetting} save={handleSave} />}
-                                {activeCategory === "advanced" && <AdvancedSettings settings={settings} update={updateSetting} save={handleSave} clashApiPort={clashApiPort} />}
+                                {activeCategory === "advanced" && <AdvancedSettings settings={settings} update={updateSetting} save={handleSave} clashApiPort={clashApiPort} helperApiPort={helperApiPort} />}
                                 {activeCategory === "about" && <AboutSection />}
                             </>
                         )}
@@ -649,9 +744,10 @@ function DnsSettings({ settings, update, save }: CommonProps) {
 
 interface AdvancedProps extends CommonProps {
     clashApiPort?: number | null
+    helperApiPort?: number | null
 }
 
-function AdvancedSettings({ settings, update, clashApiPort }: AdvancedProps) {
+function AdvancedSettings({ settings, update, clashApiPort, helperApiPort }: AdvancedProps) {
     const { t } = useTranslation()
     const [refreshingGeoData, setRefreshingGeoData] = useState(false)
 
@@ -719,15 +815,29 @@ function AdvancedSettings({ settings, update, clashApiPort }: AdvancedProps) {
                 <SettingItem
                     title={t('settings.advanced.core.title')}
                     description={t('settings.advanced.core.desc')}
-                    icon={<Server size={20} />}
+                    icon={<Zap size={20} />}
                 >
-                    {clashApiPort ? (
-                        <code className="text-xs font-mono bg-primary/10 text-primary px-2 py-1 rounded select-all cursor-text">
-                            http://127.0.0.1:{clashApiPort}
-                        </code>
-                    ) : (
-                        <span className="text-xs text-secondary/50 italic">{t('status.stopped')}</span>
-                    )}
+                    <div className="flex flex-col gap-2 items-end">
+                        {clashApiPort && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Main</span>
+                                <code className="text-[11px] font-mono bg-primary/10 text-primary px-2 py-1 rounded select-all cursor-text min-w-[160px] text-center">
+                                    http://127.0.0.1:{clashApiPort}
+                                </code>
+                            </div>
+                        )}
+                        {helperApiPort && (
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Helper</span>
+                                <code className="text-[11px] font-mono bg-accent-green/10 text-accent-green px-2 py-1 rounded select-all cursor-text min-w-[160px] text-center">
+                                    http://127.0.0.1:{helperApiPort}
+                                </code>
+                            </div>
+                        )}
+                        {!clashApiPort && !helperApiPort && (
+                            <span className="text-xs text-secondary/50 italic">{t('status.stopped')}</span>
+                        )}
+                    </div>
                 </SettingItem>
             </Section >
         </div >
