@@ -11,106 +11,52 @@ import { Group } from "./groups-view"
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd"
 import { createPortal } from "react-dom"
 
-interface Rule {
-    id: string
-    type: "DOMAIN" | "DOMAIN_SUFFIX" | "DOMAIN_KEYWORD" | "IP_CIDR" | "GEOIP" | "FINAL" | "IP_IS_PRIVATE"
-    value: string
-    policy: string // Changed from strict literal to string to support group IDs
-    enabled: boolean
-    description?: string
+import { Rule, areRuleSetsEqual, PRESETS, getPresetName, LEGACY_DESCRIPTION_MAP } from "@/lib/rules"
+
+interface RulesViewProps {
+    draftRules: Rule[]
+    setDraftRules: (rules: Rule[]) => void
+    runningRules: Rule[]
+    setRunningRules: (rules: Rule[]) => void
+    draftDefaultPolicy: string
+    setDraftDefaultPolicy: (policy: string) => void
+    runningDefaultPolicy: string
+    setRunningDefaultPolicy: (policy: string) => void
+    currentPreset: string
+    setCurrentPreset: (preset: string) => void
+    isLoaded: boolean
+    onReload: () => void
 }
 
-const LEGACY_DESCRIPTION_MAP: Record<string, string> = {
-    "Direct connection for Mainland China IPs": "rules.description.geoip_cn",
-    "Direct connection for Mainland China Domains": "rules.description.geosite_cn",
-    "Force Google via Proxy": "rules.description.google",
-    "Local Network": "rules.description.local_network",
-    "Block Ads": "rules.description.ads",
-    "Default Fallback Policy": "rules.description.final_proxy"
-}
-
-// Presets Configuration
-const PRESETS = {
-    "Smart Connect": {
-        defaultPolicy: "PROXY",
-        rules: [
-            { id: "private-rule", type: "IP_IS_PRIVATE", value: "true", policy: "DIRECT", enabled: true, description: "rules.description.private_network" },
-            { id: "ads-1", type: "DOMAIN", value: "geosite:geosite-ads", policy: "REJECT", enabled: true, description: "rules.description.ads_blocking" },
-            { id: "cn-1", type: "DOMAIN", value: "geosite:geosite-cn", policy: "DIRECT", enabled: true, description: "rules.description.china_all" },
-            { id: "cn-2", type: "GEOIP", value: "geoip-cn", policy: "DIRECT", enabled: true, description: "rules.description.china_all" },
-        ] as Rule[]
-    },
-    "Global Proxy": {
-        defaultPolicy: "PROXY",
-        rules: [] as Rule[]
-    },
-    "Global Direct": {
-        defaultPolicy: "DIRECT",
-        rules: [] as Rule[]
-    },
-    "Bypass LAN & CN": {
-        defaultPolicy: "PROXY",
-        rules: [
-            { id: "lan-b", type: "IP_IS_PRIVATE", value: "true", policy: "DIRECT", enabled: true, description: "rules.description.private_network" },
-            { id: "cn-b1", type: "GEOIP", value: "geoip-cn", policy: "DIRECT", enabled: true, description: "rules.description.geoip_cn" },
-            { id: "cn-b2", type: "DOMAIN", value: "geosite:geosite-cn", policy: "DIRECT", enabled: true, description: "rules.description.geosite_cn" },
-        ] as Rule[]
-    }
-}
-
-const getPresetName = (name: string, t: any) => {
-    switch (name) {
-        case "Smart Connect": return t('rules.preset.smart')
-        case "Global Proxy": return t('rules.preset.global_proxy')
-        case "Global Direct": return t('rules.preset.global_direct')
-        case "Bypass LAN & CN": return t('rules.preset.bypass_lan_cn')
-        case "Custom": return t('rules.preset.custom')
-        default: return name
-    }
-}
-
-// Robust comparison for rule sets (ignores field order)
-const areRuleSetsEqual = (a: Rule[], b: Rule[]) => {
-    if (a.length !== b.length) return false
-    for (let i = 0; i < a.length; i++) {
-        const r1 = a[i]
-        const r2 = b[i]
-        const equal = (
-            r1.id === r2.id &&
-            r1.type === r2.type &&
-            String(r1.value) === String(r2.value) &&
-            r1.policy === r2.policy &&
-            r1.enabled === r2.enabled &&
-            (r1.description || "") === (r2.description || "")
-        )
-        if (!equal) return false
-    }
-    return true
-}
-
-export function RulesView() {
+export function RulesView({
+    draftRules: rules,
+    setDraftRules: setRules,
+    runningRules: initialRules,
+    setRunningRules: setInitialRules,
+    draftDefaultPolicy: defaultPolicy,
+    setDraftDefaultPolicy: setDefaultPolicy,
+    runningDefaultPolicy: initialDefaultPolicy,
+    setRunningDefaultPolicy: setInitialDefaultPolicy,
+    currentPreset,
+    setCurrentPreset,
+    isLoaded,
+    onReload
+}: RulesViewProps) {
     const { t } = useTranslation()
-    const [rules, setRules] = useState<Rule[]>([])
     const [groups, setGroups] = useState<Group[]>([])
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedPolicy, setSelectedPolicy] = useState<"ALL" | "PROXY" | "DIRECT" | "REJECT">("ALL")
-    const [defaultPolicy, setDefaultPolicy] = useState<"PROXY" | "DIRECT" | "REJECT">("PROXY")
     const [isFallbackOpen, setIsFallbackOpen] = useState(false)
     const [isPresetOpen, setIsPresetOpen] = useState(false)
-    const [currentPreset, setCurrentPreset] = useState("Smart Connect")
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [editingRule, setEditingRule] = useState<Rule | null>(null)
     const [currentlyApplying, setCurrentlyApplying] = useState(false)
-    const [isLoading, setIsLoading] = useState(true)
     const [loadingRuleId, setLoadingRuleId] = useState<string | null>(null)
     const [loadingDefaultPolicy, setLoadingDefaultPolicy] = useState(false)
     const [isSavingRule, setIsSavingRule] = useState(false)
     const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null)
     const [openRuleMenuId, setOpenRuleMenuId] = useState<string | null>(null)
     const [ruleMenuPos, setRuleMenuPos] = useState<{ top?: number, bottom?: number, right: number } | null>(null)
-    const [hasPendingChanges, setHasPendingChanges] = useState(false)
-    const [initialRules, setInitialRules] = useState<Rule[]>([])
-    const [initialDefaultPolicy, setInitialDefaultPolicy] = useState<string>("")
     const [isApplying, setIsApplying] = useState(false)
     const [proxyStatus, setProxyStatus] = useState<{ is_running: boolean, tun_mode: boolean, routing_mode: string } | null>(null)
     const [dialogData, setDialogData] = useState<Partial<Rule>>({
@@ -122,6 +68,28 @@ export function RulesView() {
     })
     const [isMac, setIsMac] = useState(false)
     const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null)
+
+    // Check if the current rules/policy deviate from what's currently active on the server
+    const hasPendingChanges = React.useMemo(() => {
+        const isRulesDifferent = !areRuleSetsEqual(rules, initialRules)
+        const isPolicyDifferent = defaultPolicy !== initialDefaultPolicy
+        return isRulesDifferent || isPolicyDifferent
+    }, [rules, initialRules, defaultPolicy, initialDefaultPolicy])
+
+    const isDefaultPolicyModified = React.useMemo(() => {
+        return defaultPolicy !== initialDefaultPolicy
+    }, [defaultPolicy, initialDefaultPolicy])
+
+    const modifiedRuleIds = React.useMemo(() => {
+        const modified = new Set<string>()
+        rules.forEach(rule => {
+            const initial = initialRules.find(r => r.id === rule.id)
+            if (!initial || !areRuleSetsEqual([rule], [initial])) {
+                modified.add(rule.id)
+            }
+        })
+        return modified
+    }, [rules, initialRules])
 
     // Check if the current rules/policy deviate from the current preset's template
     const isModified = React.useMemo(() => {
@@ -142,7 +110,9 @@ export function RulesView() {
     }, [])
 
     useEffect(() => {
-        fetchRules()
+        if (!isLoaded) {
+            onReload()
+        }
         fetchGroups()
         fetchProxyStatus()
 
@@ -153,7 +123,7 @@ export function RulesView() {
         return () => {
             unlisten.then(f => f())
         }
-    }, [])
+    }, [isLoaded, onReload])
 
     const fetchProxyStatus = async () => {
         try {
@@ -173,67 +143,9 @@ export function RulesView() {
         }
     }
 
-    const fetchRules = async () => {
-        try {
-            setIsLoading(true)
-            const allRules = await invoke<Rule[]>("get_rules")
-            const finalRule = allRules.find(r => r.type === "FINAL")
-            let normalRules = allRules.filter(r => r.type !== "FINAL")
-
-            // Auto-migrate legacy descriptions
-            let hasChanges = false
-            normalRules = normalRules.map(r => {
-                if (r.description && LEGACY_DESCRIPTION_MAP[r.description]) {
-                    hasChanges = true
-                    return { ...r, description: LEGACY_DESCRIPTION_MAP[r.description] }
-                }
-                return r
-            })
-
-            if (hasChanges) {
-                const finalPolicy = finalRule ? finalRule.policy : "PROXY"
-                const payload = [...normalRules]
-                if (finalRule) payload.push(finalRule)
-                await invoke("save_rules", { rules: payload })
-            }
-
-            setRules(normalRules)
-            setInitialRules(normalRules)
-            if (finalRule) {
-                setDefaultPolicy(finalRule.policy as any)
-                setInitialDefaultPolicy(finalRule.policy)
-            }
-
-            // Sync preset selection based on current content
-            const currentPolicy = finalRule ? finalRule.policy : "PROXY"
-            const matchedPresetName = Object.keys(PRESETS).find(key => {
-                const p = PRESETS[key as keyof typeof PRESETS]
-                return p.defaultPolicy === currentPolicy && areRuleSetsEqual(p.rules, normalRules)
-            })
-
-            if (matchedPresetName) {
-                setCurrentPreset(matchedPresetName)
-                localStorage.setItem("tunnet_rules_preset", matchedPresetName)
-            } else {
-                // No exact match found, treat as custom
-                setCurrentPreset("Custom")
-                localStorage.setItem("tunnet_rules_preset", "Custom")
-            }
-
-            setHasPendingChanges(false)
-        } catch (error) {
-            console.error("Failed to fetch rules:", error)
-            // Fallback: hide loader even on error
-            setIsLoading(false)
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
     const checkPendingChanges = (updatedRules: Rule[], updatedPolicy: string) => {
-        const isRulesDifferent = JSON.stringify(updatedRules) !== JSON.stringify(initialRules)
-        const isPolicyDifferent = updatedPolicy !== initialDefaultPolicy
-        setHasPendingChanges(isRulesDifferent || isPolicyDifferent)
+        // This is now purely reactive via useMemo(hasPendingChanges), but we keep the helper
+        // if any logic needs to be triggered manually.
     }
 
     const saveRulesToBackend = async (rulesToSave: Rule[], policy: string, isSilent = false) => {
@@ -264,7 +176,7 @@ export function RulesView() {
                 await saveRulesToBackend(rules, defaultPolicy)
                 setInitialRules([...rules])
                 setInitialDefaultPolicy(defaultPolicy)
-                setHasPendingChanges(false)
+                // Purely reactive via useMemo(hasPendingChanges)
                 toast.success(t('rules.toast.saved_only'))
             } catch (e) {
                 toast.error(t('rules.toast.save_failed'))
@@ -291,7 +203,7 @@ export function RulesView() {
             })
             setInitialRules([...rules])
             setInitialDefaultPolicy(defaultPolicy)
-            setHasPendingChanges(false)
+            // Purely reactive via useMemo(hasPendingChanges)
             localStorage.setItem("tunnet_rules_preset", currentPreset)
             toast.success(t('rules.toast.applied_success'))
         } catch (err) {
@@ -312,12 +224,9 @@ export function RulesView() {
         items.splice(result.destination.index, 0, reorderedItem)
 
         setRules(items)
-        setHasPendingChanges(true)
 
-        // Auto-save to backend but marked as pending
-        saveRulesToBackend(items, defaultPolicy, false).catch(() => {
-            toast.error(t('rules.toast.save_failed'))
-        })
+        // Auto-save to backend removed to allow Discard/Undo functionality
+        // Changes are now only persisted when clicking "Apply"
 
         switchToCustom(items, defaultPolicy)
     }
@@ -358,9 +267,8 @@ export function RulesView() {
             // Check if this new state differs from what's currently on the server
             checkPendingChanges(newRules, newPolicy)
 
-            if (!isSilent) {
-                toast.success(t('rules.toast.applied_preset', { name: getPresetName(name, t) }))
-            }
+            // We don't show an "Applied" toast here anymore because it's confusing.
+            // The yellow "Pending Changes" banner is sufficient feedback.
         }
     }
 
@@ -369,8 +277,7 @@ export function RulesView() {
         if (template) {
             setRules([...template.rules])
             setDefaultPolicy(template.defaultPolicy as any)
-            checkPendingChanges(template.rules, template.defaultPolicy)
-            toast.success(t('rules.toast.preset_restored', { defaultValue: 'Preset restored to template' }))
+            toast.success(t('rules.toast.preset_restored'))
         }
     }
 
@@ -397,7 +304,6 @@ export function RulesView() {
         setDeletingRuleId(id)
         try {
             const newRules = rules.filter(r => r.id !== id)
-            await saveRulesToBackend(newRules, defaultPolicy)
             setRules(newRules)
             switchToCustom(newRules, defaultPolicy)
             toast.success(t('rules.toast.rule_deleted'))
@@ -422,7 +328,6 @@ export function RulesView() {
             } else {
                 newRules = [...rules, { ...dialogData, id: crypto.randomUUID(), enabled: true } as Rule]
             }
-            await saveRulesToBackend(newRules, defaultPolicy)
             setRules(newRules)
             setIsDialogOpen(false)
             switchToCustom(newRules, defaultPolicy)
@@ -447,7 +352,6 @@ export function RulesView() {
         setLoadingRuleId(ruleId)
         try {
             const newRules = rules.map(r => r.id === ruleId ? { ...r, policy: newPolicy } as Rule : r)
-            await saveRulesToBackend(newRules, defaultPolicy)
             switchToCustom(newRules, defaultPolicy)
             setRules(newRules) // Update local state immediately
             toast.success(t('rules.toast.rule_updated'))
@@ -465,7 +369,6 @@ export function RulesView() {
         setLoadingDefaultPolicy(true)
         const nextPolicy = getNextPolicy(defaultPolicy)
         try {
-            await saveRulesToBackend(rules, nextPolicy)
             setDefaultPolicy(nextPolicy as any)
             switchToCustom(rules, nextPolicy)
             toast.success(t('rules.toast.rule_updated'))
@@ -507,7 +410,7 @@ export function RulesView() {
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* Unified Header Style */}
             <div className={cn(
-                "border-b border-black/5 dark:border-white/5 bg-transparent p-5 md:px-8 md:pb-6 shrink-0 relative z-20",
+                "border-b border-black/5 dark:border-white/5 bg-transparent p-5 md:px-8 md:pb-6 shrink-0 relative z-30",
                 isMac ? "md:pt-8" : "md:pt-8"
             )}>
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
@@ -624,46 +527,50 @@ export function RulesView() {
                 </div>
             </div>
 
+            {/* Fixed Pending Banner */}
+            {hasPendingChanges && (
+                <div className="shrink-0 relative z-20 px-4 md:px-8 py-2 bg-transparent animate-in slide-in-from-top-4 duration-500">
+                    <div className="max-w-5xl mx-auto w-full glass-card border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.15)] rounded-2xl p-3 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="p-1.5 bg-amber-500/10 rounded-xl">
+                                <Zap size={16} className="text-amber-500 animate-pulse" />
+                            </div>
+                            <div>
+                                <h4 className="text-xs font-bold text-text-primary leading-none mb-0.5">{t('rules.pending_title', { defaultValue: 'Ready to Apply' })}</h4>
+                                <p className="text-[10px] text-text-secondary font-medium">{t('rules.pending_desc', { defaultValue: 'Apply changes to restart proxy service.' })}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => onReload()}
+                                className="px-3 py-1.5 text-[10px] font-bold text-text-secondary hover:text-text-primary transition-colors flex items-center gap-1.5"
+                            >
+                                <RotateCcw size={12} />
+                                <span className="hidden sm:inline">{t('rules.discard_changes', { defaultValue: 'Discard' })}</span>
+                            </button>
+                            <button
+                                onClick={handleApplyChanges}
+                                disabled={isApplying}
+                                className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-bold transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2 scale-100 active:scale-95"
+                            >
+                                {isApplying ? (
+                                    <Loader2 size={12} className="animate-spin" />
+                                ) : (
+                                    <Check size={12} />
+                                )}
+                                {t('rules.apply_changes', { defaultValue: 'Apply Changes' })}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-8 sidebar-scroll bg-transparent">
                 <div className="max-w-5xl mx-auto w-full space-y-3 pb-32">
-                    {/* Pending Changes Banner */}
-                    {hasPendingChanges && (
-                        <div className="glass-card mb-6 border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.15)] rounded-2xl p-4 flex items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-500">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-amber-500/10 rounded-xl">
-                                    <Zap size={18} className="text-amber-500 animate-pulse" />
-                                </div>
-                                <div>
-                                    <h4 className="text-sm font-bold text-text-primary leading-none mb-1">{t('rules.pending_title', { defaultValue: 'Ready to Apply' })}</h4>
-                                    <p className="text-[10px] md:text-xs text-text-secondary font-medium">{t('rules.pending_desc', { defaultValue: 'Some rules have been modified. Apply changes to restart proxy service.' })}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => fetchRules()}
-                                    className="px-4 py-2 text-xs font-bold text-text-secondary hover:text-text-primary transition-colors flex items-center gap-1.5"
-                                >
-                                    <RotateCcw size={14} />
-                                    <span className="hidden sm:inline">{t('rules.discard_changes', { defaultValue: 'Discard' })}</span>
-                                </button>
-                                <button
-                                    onClick={handleApplyChanges}
-                                    disabled={isApplying}
-                                    className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2 scale-100 active:scale-95"
-                                >
-                                    {isApplying ? (
-                                        <Loader2 size={14} className="animate-spin" />
-                                    ) : (
-                                        <Check size={14} />
-                                    )}
-                                    {t('rules.apply_changes', { defaultValue: 'Apply Changes' })}
-                                </button>
-                            </div>
-                        </div>
-                    )}
 
-                    {isLoading ? (
+
+                    {!isLoaded ? (
                         <div className="flex flex-col items-center justify-center py-20 text-gray-400">
                             <Loader2 size={40} className="mb-4 animate-spin opacity-20" />
                             <p className="text-sm font-medium">{t('common.loading', { defaultValue: 'Loading...' })}</p>
@@ -702,12 +609,18 @@ export function RulesView() {
                                                                 maxWidth: snapshot.isDragging ? '1024px' : 'none',
                                                             }}
                                                             className={cn(
-                                                                "glass-card flex items-center justify-between p-4 rounded-2xl group border border-transparent hover:border-border-color",
+                                                                "glass-card flex items-center justify-between p-4 rounded-2xl group border border-transparent hover:border-border-color transition-all duration-500 relative overflow-hidden",
+                                                                modifiedRuleIds.has(rule.id)
+                                                                    ? "ring-1 ring-amber-500/50 bg-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.1)]"
+                                                                    : "hover:border-border-color",
                                                                 snapshot.isDragging
                                                                     ? "shadow-2xl border-primary/40 z-50 bg-sidebar-bg/90 backdrop-blur-2xl ring-2 ring-primary/20 scale-[1.02]"
                                                                     : "transition-all duration-300 hover:bg-black/5 dark:hover:bg-white/8"
                                                             )}
                                                         >
+                                                            {modifiedRuleIds.has(rule.id) && (
+                                                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-amber-500/50 z-20" />
+                                                            )}
                                                             <div className="flex items-center flex-1 min-w-0">
                                                                 <div
                                                                     {...provided.dragHandleProps}
@@ -811,13 +724,16 @@ export function RulesView() {
                 "fixed left-0 right-0 z-30 pointer-events-none flex justify-center",
                 "bottom-[72px] md:bottom-10" // Adjust bottom position for mobile to be above BottomNav
             )}>
-                <div
-                    className={cn(
-                        "pointer-events-auto glass-card flex items-center justify-between md:justify-start gap-4 transition-all active:scale-95 group cursor-pointer relative",
-                        "w-full mx-4 px-5 py-4 rounded-[2rem] border-t border-white/10 shadow-[0_-8px_30px_rgba(0,0,0,0.3)]", // Mobile: Near full-width bar
-                        "md:w-auto md:mx-0 md:px-6 md:py-3 md:rounded-2xl md:border md:shadow-2xl" // Desktop: Floating pill
-                    )}
+                <div className={cn(
+                    "pointer-events-auto glass-card flex items-center justify-between md:justify-start gap-4 transition-all active:scale-95 group cursor-pointer relative overflow-hidden",
+                    "w-full mx-4 px-5 py-4 rounded-[2rem] border-t border-white/10 shadow-[0_-8px_30px_rgba(0,0,0,0.3)]", // Mobile: Near full-width bar
+                    "md:w-auto md:mx-0 md:px-6 md:py-3 md:rounded-2xl md:border md:shadow-2xl", // Desktop: Floating pill
+                    isDefaultPolicyModified ? "ring-1 ring-amber-500/50 bg-amber-500/5 shadow-[0_0_20px_rgba(245,158,11,0.2)] border-amber-500/20" : ""
+                )}
                 >
+                    {isDefaultPolicyModified && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-amber-500/50 z-20" />
+                    )}
                     {isFallbackOpen && (
                         <>
                             <div className="fixed inset-0 z-0" onClick={() => setIsFallbackOpen(false)} />
@@ -832,20 +748,9 @@ export function RulesView() {
                                             key={policy}
                                             onClick={() => {
                                                 if (loadingDefaultPolicy) return
-                                                setLoadingDefaultPolicy(true)
-                                                saveRulesToBackend(rules, policy)
-                                                    .then(() => {
-                                                        setDefaultPolicy(policy)
-                                                        switchToCustom(rules, policy)
-                                                        toast.success(t('rules.toast.rule_updated'))
-                                                    })
-                                                    .catch(() => {
-                                                        toast.error(t('rules.toast.save_failed'))
-                                                    })
-                                                    .finally(() => {
-                                                        setLoadingDefaultPolicy(false)
-                                                        setIsFallbackOpen(false)
-                                                    })
+                                                setDefaultPolicy(policy)
+                                                switchToCustom(rules, policy)
+                                                setIsFallbackOpen(false)
                                             }}
                                             className={cn(
                                                 "w-full text-left px-4 py-2.5 text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex items-center justify-between font-bold",
@@ -865,20 +770,9 @@ export function RulesView() {
                                                     key={group.id}
                                                     onClick={() => {
                                                         if (loadingDefaultPolicy) return
-                                                        setLoadingDefaultPolicy(true)
-                                                        saveRulesToBackend(rules, group.id)
-                                                            .then(() => {
-                                                                setDefaultPolicy(group.id as any)
-                                                                switchToCustom(rules, group.id)
-                                                                toast.success(t('rules.toast.rule_updated'))
-                                                            })
-                                                            .catch(() => {
-                                                                toast.error(t('rules.toast.save_failed'))
-                                                            })
-                                                            .finally(() => {
-                                                                setLoadingDefaultPolicy(false)
-                                                                setIsFallbackOpen(false)
-                                                            })
+                                                        setDefaultPolicy(group.id as any)
+                                                        switchToCustom(rules, group.id)
+                                                        setIsFallbackOpen(false)
                                                     }}
                                                     className={cn(
                                                         "w-full text-left px-4 py-2.5 text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex items-center justify-between font-bold",
@@ -899,7 +793,10 @@ export function RulesView() {
                         <span className="text-[9px] md:text-[10px] font-bold text-text-tertiary uppercase tracking-widest leading-none mb-1">{t('rules.default_policy')}</span>
                         <div className="flex items-center gap-2 min-w-0">
                             <span className="text-xs md:text-sm font-bold text-text-primary truncate">{t('rules.all_other_traffic')}</span>
-                            <div className={cn("size-1 md:size-1.5 rounded-full animate-pulse bg-primary shrink-0")} />
+                            <div className={cn(
+                                "size-1 md:size-1.5 rounded-full animate-pulse shrink-0",
+                                isDefaultPolicyModified ? "bg-amber-500" : "bg-primary"
+                            )} />
                         </div>
                     </div>
                     <div className="h-8 w-px bg-white/10 mx-1 md:mx-2 shrink-0" />
@@ -909,6 +806,7 @@ export function RulesView() {
                         className={cn(
                             "px-3 md:px-4 py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase border cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md min-w-[70px] md:min-w-[80px] flex items-center justify-center shrink-0",
                             getPolicyColor(defaultPolicy),
+                            isDefaultPolicyModified ? "border-amber-500/40" : "",
                             loadingDefaultPolicy ? "opacity-70 cursor-wait" : ""
                         )}>
                         {loadingDefaultPolicy ? (
@@ -921,184 +819,188 @@ export function RulesView() {
             </div>
 
             {/* Modal - Simplified Integration */}
-            {isDialogOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm bg-black/60 animate-in fade-in duration-500">
-                    <div className="fixed inset-0" onClick={() => setIsDialogOpen(false)} />
-                    <div className="relative w-full max-w-lg bg-sidebar-bg border border-border-color rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300">
-                        <div className="px-8 py-5 border-b border-border-color bg-black/10 dark:bg-white/5">
-                            <h3 className="text-lg font-bold text-text-primary tracking-tight">{editingRule ? t('rules.dialog.edit_title') : t('rules.dialog.add_title')}</h3>
-                        </div>
-                        <div className="p-8 flex flex-col gap-6">
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest pl-1">{t('rules.dialog.type')}</label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {(["DOMAIN", "DOMAIN_SUFFIX", "DOMAIN_KEYWORD", "IP_CIDR", "GEOIP", "IP_IS_PRIVATE"] as const).map(type => (
-                                        <button
-                                            key={type}
-                                            onClick={() => {
-                                                let newValue = dialogData.value;
-                                                if (type === 'IP_IS_PRIVATE') {
-                                                    newValue = 'true';
-                                                } else if (dialogData.type === 'IP_IS_PRIVATE') {
-                                                    newValue = '';
-                                                }
-                                                setDialogData({ ...dialogData, type, value: newValue });
-                                            }}
-                                            className={cn(
-                                                "px-2 py-2.5 rounded-xl text-[10px] font-bold border transition-all truncate uppercase tracking-tighter",
-                                                dialogData.type === type
-                                                    ? "bg-linear-to-br from-primary to-blue-600 border-primary/50 text-white shadow-lg shadow-primary/25 border-t-white/30"
-                                                    : "bg-black/10 dark:bg-black/40 border-border-color text-text-secondary hover:text-text-primary hover:bg-white/10"
-                                            )}
-                                        >
-                                            {type === 'IP_IS_PRIVATE' ? 'PRIVATE' : type.replace(/_/g, ' ')}
-                                        </button>
-                                    ))}
-                                </div>
+            {
+                isDialogOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm bg-black/60 animate-in fade-in duration-500">
+                        <div className="fixed inset-0" onClick={() => setIsDialogOpen(false)} />
+                        <div className="relative w-full max-w-lg bg-sidebar-bg border border-border-color rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300">
+                            <div className="px-8 py-5 border-b border-border-color bg-black/10 dark:bg-white/5">
+                                <h3 className="text-lg font-bold text-text-primary tracking-tight">{editingRule ? t('rules.dialog.edit_title') : t('rules.dialog.add_title')}</h3>
                             </div>
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest pl-1">{t('rules.dialog.value')}</label>
-                                <input
-                                    type="text"
-                                    value={dialogData.type === 'IP_IS_PRIVATE' ? t('rules.dialog.placeholders.private') : dialogData.value}
-                                    readOnly={dialogData.type === 'IP_IS_PRIVATE'}
-                                    autoFocus
-                                    onChange={(e) => setDialogData({ ...dialogData, value: e.target.value })}
-                                    className={cn(
-                                        "w-full bg-black/10 dark:bg-black/40 border border-border-color rounded-2xl px-6 py-4 text-sm text-text-primary focus:outline-none focus:border-primary/50 transition-all font-mono placeholder:text-text-tertiary",
-                                        dialogData.type === 'IP_IS_PRIVATE' && "opacity-50 cursor-not-allowed text-text-tertiary"
-                                    )}
-                                    placeholder={t(`rules.dialog.placeholders.${(dialogData.type || 'DOMAIN').toLowerCase().replace('ip_is_private', 'private')}` as any)}
-                                    autoCapitalize="none"
-                                    autoCorrect="off"
-                                    spellCheck={false}
-                                />
-                            </div>
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest pl-1">{t('rules.dialog.policy')}</label>
-                                <div className="flex flex-wrap gap-2">
-                                    {/* Standard Policies */}
-                                    <div className="flex bg-black/10 dark:bg-black/40 p-1.5 rounded-[1.25rem] border border-border-color/50 flex-1 min-w-[240px]">
-                                        {(["PROXY", "DIRECT", "REJECT"] as const).map(policy => (
+                            <div className="p-8 flex flex-col gap-6">
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest pl-1">{t('rules.dialog.type')}</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {(["DOMAIN", "DOMAIN_SUFFIX", "DOMAIN_KEYWORD", "IP_CIDR", "GEOIP", "IP_IS_PRIVATE"] as const).map(type => (
                                             <button
-                                                key={policy}
-                                                onClick={() => setDialogData({ ...dialogData, policy })}
+                                                key={type}
+                                                onClick={() => {
+                                                    let newValue = dialogData.value;
+                                                    if (type === 'IP_IS_PRIVATE') {
+                                                        newValue = 'true';
+                                                    } else if (dialogData.type === 'IP_IS_PRIVATE') {
+                                                        newValue = '';
+                                                    }
+                                                    setDialogData({ ...dialogData, type, value: newValue });
+                                                }}
                                                 className={cn(
-                                                    "flex-1 py-2.5 rounded-xl text-[10px] font-bold transition-all uppercase tracking-widest relative overflow-hidden",
-                                                    dialogData.policy === policy
-                                                        ? (policy === "PROXY"
-                                                            ? "bg-linear-to-br from-violet-500 to-indigo-600 text-white shadow-lg shadow-violet-500/20 border-t border-t-white/30"
-                                                            : policy === "DIRECT"
-                                                                ? "bg-linear-to-br from-emerald-400 to-emerald-600 text-white shadow-lg shadow-emerald-500/20 border-t border-t-white/30"
-                                                                : "bg-linear-to-br from-rose-500 to-rose-700 text-white shadow-lg shadow-rose-500/20 border-t border-t-white/30")
-                                                        : "text-text-secondary hover:text-text-primary"
+                                                    "px-2 py-2.5 rounded-xl text-[10px] font-bold border transition-all truncate uppercase tracking-tighter",
+                                                    dialogData.type === type
+                                                        ? "bg-linear-to-br from-primary to-blue-600 border-primary/50 text-white shadow-lg shadow-primary/25 border-t-white/30"
+                                                        : "bg-black/10 dark:bg-black/40 border-border-color text-text-secondary hover:text-text-primary hover:bg-white/10"
                                                 )}
                                             >
-                                                {t(`rules.policies.${policy.toLowerCase()}` as any)}
+                                                {type === 'IP_IS_PRIVATE' ? 'PRIVATE' : type.replace(/_/g, ' ')}
                                             </button>
                                         ))}
                                     </div>
-                                    {/* Groups */}
-                                    {groups.length > 0 && (
-                                        <div className="flex flex-wrap gap-2 w-full">
-                                            {groups.map(group => (
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest pl-1">{t('rules.dialog.value')}</label>
+                                    <input
+                                        type="text"
+                                        value={dialogData.type === 'IP_IS_PRIVATE' ? t('rules.dialog.placeholders.private') : dialogData.value}
+                                        readOnly={dialogData.type === 'IP_IS_PRIVATE'}
+                                        autoFocus
+                                        onChange={(e) => setDialogData({ ...dialogData, value: e.target.value })}
+                                        className={cn(
+                                            "w-full bg-black/10 dark:bg-black/40 border border-border-color rounded-2xl px-6 py-4 text-sm text-text-primary focus:outline-none focus:border-primary/50 transition-all font-mono placeholder:text-text-tertiary",
+                                            dialogData.type === 'IP_IS_PRIVATE' && "opacity-50 cursor-not-allowed text-text-tertiary"
+                                        )}
+                                        placeholder={t(`rules.dialog.placeholders.${(dialogData.type || 'DOMAIN').toLowerCase().replace('ip_is_private', 'private')}` as any)}
+                                        autoCapitalize="none"
+                                        autoCorrect="off"
+                                        spellCheck={false}
+                                    />
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest pl-1">{t('rules.dialog.policy')}</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {/* Standard Policies */}
+                                        <div className="flex bg-black/10 dark:bg-black/40 p-1.5 rounded-[1.25rem] border border-border-color/50 flex-1 min-w-[240px]">
+                                            {(["PROXY", "DIRECT", "REJECT"] as const).map(policy => (
                                                 <button
-                                                    key={group.id}
-                                                    onClick={() => setDialogData({ ...dialogData, policy: group.id })}
+                                                    key={policy}
+                                                    onClick={() => setDialogData({ ...dialogData, policy })}
                                                     className={cn(
-                                                        "px-4 py-2 rounded-xl text-[10px] font-bold transition-all border",
-                                                        dialogData.policy === group.id
-                                                            ? "bg-blue-500 text-white border-blue-500 shadow-lg"
-                                                            : "bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10"
+                                                        "flex-1 py-2.5 rounded-xl text-[10px] font-bold transition-all uppercase tracking-widest relative overflow-hidden",
+                                                        dialogData.policy === policy
+                                                            ? (policy === "PROXY"
+                                                                ? "bg-linear-to-br from-violet-500 to-indigo-600 text-white shadow-lg shadow-violet-500/20 border-t border-t-white/30"
+                                                                : policy === "DIRECT"
+                                                                    ? "bg-linear-to-br from-emerald-400 to-emerald-600 text-white shadow-lg shadow-emerald-500/20 border-t border-t-white/30"
+                                                                    : "bg-linear-to-br from-rose-500 to-rose-700 text-white shadow-lg shadow-rose-500/20 border-t border-t-white/30")
+                                                            : "text-text-secondary hover:text-text-primary"
                                                     )}
                                                 >
-                                                    {group.name}
+                                                    {t(`rules.policies.${policy.toLowerCase()}` as any)}
                                                 </button>
                                             ))}
                                         </div>
-                                    )}
+                                        {/* Groups */}
+                                        {groups.length > 0 && (
+                                            <div className="flex flex-wrap gap-2 w-full">
+                                                {groups.map(group => (
+                                                    <button
+                                                        key={group.id}
+                                                        onClick={() => setDialogData({ ...dialogData, policy: group.id })}
+                                                        className={cn(
+                                                            "px-4 py-2 rounded-xl text-[10px] font-bold transition-all border",
+                                                            dialogData.policy === group.id
+                                                                ? "bg-blue-500 text-white border-blue-500 shadow-lg"
+                                                                : "bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10"
+                                                        )}
+                                                    >
+                                                        {group.name}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        <div className="px-8 py-5 border-t border-border-color bg-black/10 dark:bg-white/5 flex justify-end gap-3">
-                            <button onClick={() => setIsDialogOpen(false)} disabled={isSavingRule} className="px-5 py-2.5 rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary transition-all">{t('rules.dialog.cancel')}</button>
-                            <button
-                                onClick={handleSaveRule}
-                                disabled={isSavingRule}
-                                className={cn(
-                                    "px-7 py-2.5 rounded-xl text-xs font-bold bg-linear-to-br from-primary to-blue-600 text-white transition-all shadow-xl shadow-primary/25 border-t border-t-white/30 scale-100 active:scale-95 flex items-center gap-2",
-                                    isSavingRule ? "opacity-70 cursor-wait active:scale-100" : ""
-                                )}
-                            >
-                                {isSavingRule && <Loader2 size={14} className="animate-spin" />}
-                                {t('rules.dialog.save')}
-                            </button>
+                            <div className="px-8 py-5 border-t border-border-color bg-black/10 dark:bg-white/5 flex justify-end gap-3">
+                                <button onClick={() => setIsDialogOpen(false)} disabled={isSavingRule} className="px-5 py-2.5 rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary transition-all">{t('rules.dialog.cancel')}</button>
+                                <button
+                                    onClick={handleSaveRule}
+                                    disabled={isSavingRule}
+                                    className={cn(
+                                        "px-7 py-2.5 rounded-xl text-xs font-bold bg-linear-to-br from-primary to-blue-600 text-white transition-all shadow-xl shadow-primary/25 border-t border-t-white/30 scale-100 active:scale-95 flex items-center gap-2",
+                                        isSavingRule ? "opacity-70 cursor-wait active:scale-100" : ""
+                                    )}
+                                >
+                                    {isSavingRule && <Loader2 size={14} className="animate-spin" />}
+                                    {t('rules.dialog.save')}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Rule Policy Context Menu (Fixed Position) */}
-            {openRuleMenuId && ruleMenuPos && (
-                <>
-                    <div className="fixed inset-0 z-50" onClick={() => setOpenRuleMenuId(null)} />
-                    <div
-                        className={cn(
-                            "fixed z-50 w-48 bg-white/90 dark:bg-black/90 backdrop-blur-xl border border-border-color rounded-2xl shadow-xl py-2 overflow-hidden animate-in zoom-in-95 duration-200",
-                            ruleMenuPos.bottom ? "origin-bottom-right slide-in-from-bottom-2" : "origin-top-right slide-in-from-top-2"
-                        )}
-                        style={{
-                            top: ruleMenuPos.top,
-                            bottom: ruleMenuPos.bottom,
-                            right: ruleMenuPos.right
-                        }}
-                    >
-                        <div className="max-h-[240px] overflow-y-auto custom-scrollbar">
-                            <div className="px-4 py-2 text-[10px] font-bold text-text-tertiary uppercase tracking-widest border-b border-border-color/50 mb-1">{t('rules.dialog.policy')}</div>
-                            {(["PROXY", "DIRECT", "REJECT"] as const).map(policy => {
-                                const currentRule = rules.find(r => r.id === openRuleMenuId);
-                                if (!currentRule) return null;
-                                return (
-                                    <button
-                                        key={policy}
-                                        onClick={() => handleUpdateRulePolicy(openRuleMenuId, policy)}
-                                        className={cn(
-                                            "w-full text-left px-4 py-2.5 text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex items-center justify-between font-bold",
-                                            currentRule.policy === policy ? "text-primary bg-primary/5" : "text-text-secondary"
-                                        )}
-                                    >
-                                        {t(`rules.policies.${policy.toLowerCase()}` as any)}
-                                        {currentRule.policy === policy && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
-                                    </button>
-                                )
-                            })}
-
-                            {groups.length > 0 && (
-                                <>
-                                    <div className="px-4 py-2 text-[10px] font-bold text-text-tertiary uppercase tracking-widest border-b border-border-color/50 mt-2 mb-1 border-t">{t('groups.title')}</div>
-                                    {groups.map(group => {
-                                        const currentRule = rules.find(r => r.id === openRuleMenuId);
-                                        if (!currentRule) return null;
-                                        return (
-                                            <button
-                                                key={group.id}
-                                                onClick={() => handleUpdateRulePolicy(openRuleMenuId, group.id)}
-                                                className={cn(
-                                                    "w-full text-left px-4 py-2.5 text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex items-center justify-between font-bold",
-                                                    currentRule.policy === group.id ? "text-primary bg-primary/5" : "text-text-secondary"
-                                                )}
-                                            >
-                                                <span className="truncate">{group.name}</span>
-                                                {currentRule.policy === group.id && <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
-                                            </button>
-                                        )
-                                    })}
-                                </>
+            {
+                openRuleMenuId && ruleMenuPos && (
+                    <>
+                        <div className="fixed inset-0 z-50" onClick={() => setOpenRuleMenuId(null)} />
+                        <div
+                            className={cn(
+                                "fixed z-50 w-48 bg-white/90 dark:bg-black/90 backdrop-blur-xl border border-border-color rounded-2xl shadow-xl py-2 overflow-hidden animate-in zoom-in-95 duration-200",
+                                ruleMenuPos.bottom ? "origin-bottom-right slide-in-from-bottom-2" : "origin-top-right slide-in-from-top-2"
                             )}
+                            style={{
+                                top: ruleMenuPos?.top,
+                                bottom: ruleMenuPos?.bottom,
+                                right: ruleMenuPos?.right || 0
+                            }}
+                        >
+                            <div className="max-h-[240px] overflow-y-auto custom-scrollbar">
+                                <div className="px-4 py-2 text-[10px] font-bold text-text-tertiary uppercase tracking-widest border-b border-border-color/50 mb-1">{t('rules.dialog.policy')}</div>
+                                {(["PROXY", "DIRECT", "REJECT"] as const).map(policy => {
+                                    const currentRule = rules.find(r => r.id === openRuleMenuId);
+                                    if (!currentRule) return null;
+                                    return (
+                                        <button
+                                            key={policy}
+                                            onClick={() => handleUpdateRulePolicy(openRuleMenuId, policy)}
+                                            className={cn(
+                                                "w-full text-left px-4 py-2.5 text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex items-center justify-between font-bold",
+                                                currentRule.policy === policy ? "text-primary bg-primary/5" : "text-text-secondary"
+                                            )}
+                                        >
+                                            {t(`rules.policies.${policy.toLowerCase()}` as any)}
+                                            {currentRule.policy === policy && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                                        </button>
+                                    )
+                                })}
+
+                                {groups.length > 0 && (
+                                    <>
+                                        <div className="px-4 py-2 text-[10px] font-bold text-text-tertiary uppercase tracking-widest border-b border-border-color/50 mt-2 mb-1 border-t">{t('groups.title')}</div>
+                                        {groups.map(group => {
+                                            const currentRule = rules.find(r => r.id === openRuleMenuId);
+                                            if (!currentRule) return null;
+                                            return (
+                                                <button
+                                                    key={group.id}
+                                                    onClick={() => handleUpdateRulePolicy(openRuleMenuId, group.id)}
+                                                    className={cn(
+                                                        "w-full text-left px-4 py-2.5 text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex items-center justify-between font-bold",
+                                                        currentRule.policy === group.id ? "text-primary bg-primary/5" : "text-text-secondary"
+                                                    )}
+                                                >
+                                                    <span className="truncate">{group.name}</span>
+                                                    {currentRule.policy === group.id && <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
+                                                </button>
+                                            )
+                                        })}
+                                    </>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                </>
-            )}
-        </div>
+                    </>
+                )
+            }
+        </div >
     )
 }

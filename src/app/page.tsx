@@ -11,6 +11,7 @@ import { LocationsView } from "@/components/dashboard/locations-view"
 import { GroupsView, Group } from "@/components/dashboard/groups-view"
 import { SubscriptionsView, EditSubscriptionModal, Subscription } from "@/components/dashboard/subscriptions-view"
 import { RulesView } from "@/components/dashboard/rules-view"
+import { Rule, areRuleSetsEqual, PRESETS, LEGACY_DESCRIPTION_MAP } from "@/lib/rules"
 import { open } from "@tauri-apps/plugin-shell"
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { Zap, RefreshCw, Edit2, Trash2, Target, ExternalLink, ArrowUpDown, Upload } from "lucide-react"
@@ -125,6 +126,15 @@ export default function Home() {
   const [exportTarget, setExportTarget] = useState<{ id: string, name: string, type: "node" | "profile" | "group" } | null>(null)
   const [isWindowDragging, setIsWindowDragging] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
+
+  // Rules State (Lifted for persistence)
+  const [draftRules, setDraftRules] = useState<Rule[]>([])
+  const [runningRules, setRunningRules] = useState<Rule[]>([])
+  const [draftDefaultPolicy, setDraftDefaultPolicy] = useState<string>("PROXY")
+  const [runningDefaultPolicy, setRunningDefaultPolicy] = useState<string>("PROXY")
+  const [currentRulesPreset, setCurrentRulesPreset] = useState("Smart Connect")
+  const [isRulesLoaded, setIsRulesLoaded] = useState(false)
+  const [activeAutoNodeId, setActiveAutoNodeId] = useState<string | null>(null)
 
 
 
@@ -702,6 +712,54 @@ export default function Home() {
   // Keep ref updated for listener access
   const connectionDetailsRef = useRef(connectionDetails)
   useEffect(() => { connectionDetailsRef.current = connectionDetails }, [connectionDetails])
+
+  const fetchRules = useCallback(async () => {
+    try {
+      const allRules: Rule[] = await invoke("get_rules")
+      const finalRule = allRules.find(r => r.type === "FINAL")
+      let normalRules = allRules.filter(r => r.type !== "FINAL")
+
+      // Auto-migrate legacy descriptions
+      let hasChanges = false
+      normalRules = normalRules.map(r => {
+        if (r.description && LEGACY_DESCRIPTION_MAP[r.description]) {
+          hasChanges = true
+          return { ...r, description: LEGACY_DESCRIPTION_MAP[r.description] }
+        }
+        return r
+      })
+
+      const currentPolicy = finalRule ? finalRule.policy : "PROXY"
+
+      if (hasChanges) {
+        const payload = [...normalRules]
+        if (finalRule) payload.push(finalRule)
+        await invoke("save_rules", { rules: payload })
+      }
+
+      setDraftRules(normalRules)
+      setRunningRules(normalRules)
+      setDraftDefaultPolicy(currentPolicy)
+      setRunningDefaultPolicy(currentPolicy)
+
+      // Sync preset
+      const matchedPresetName = Object.keys(PRESETS).find(key => {
+        const p = PRESETS[key as keyof typeof PRESETS]
+        return p.defaultPolicy === currentPolicy && areRuleSetsEqual(p.rules, normalRules)
+      }) || "Custom"
+
+      setCurrentRulesPreset(matchedPresetName)
+      setIsRulesLoaded(true)
+    } catch (e) {
+      console.error("Failed to fetch rules:", e)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (isInitialized) {
+      fetchRules()
+    }
+  }, [isInitialized, fetchRules])
 
   const fetchProfiles = useCallback((checkPing = false) => {
     invoke("get_profiles").then((profiles: any) => {
@@ -1378,7 +1436,6 @@ export default function Home() {
   const [currentView, setCurrentView] = useState<ViewType>("dashboard")
   const [profiles, setProfiles] = useState<any[]>([])
 
-  const [activeAutoNodeId, setActiveAutoNodeId] = useState<string | null>(null)
   const activeAutoNode = useMemo(() => {
     if (!activeAutoNodeId) return null
     return servers.find(s => s.id === activeAutoNodeId || s.name === activeAutoNodeId)
@@ -1794,8 +1851,22 @@ export default function Home() {
 
         )
       case "rules":
-
-        return <RulesView />
+        return (
+          <RulesView
+            draftRules={draftRules}
+            setDraftRules={setDraftRules}
+            runningRules={runningRules}
+            setRunningRules={setRunningRules}
+            draftDefaultPolicy={draftDefaultPolicy}
+            setDraftDefaultPolicy={setDraftDefaultPolicy}
+            runningDefaultPolicy={runningDefaultPolicy}
+            setRunningDefaultPolicy={setRunningDefaultPolicy}
+            currentPreset={currentRulesPreset}
+            setCurrentPreset={setCurrentRulesPreset}
+            isLoaded={isRulesLoaded}
+            onReload={fetchRules}
+          />
+        )
       case "connections":
         return <ConnectionsView />
       case "settings":
