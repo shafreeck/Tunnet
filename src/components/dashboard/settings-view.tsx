@@ -44,47 +44,60 @@ interface SettingsViewProps {
     helperApiPort?: number | null
     tunEnabled?: boolean
     onTunToggle?: () => void
+    draftSettings: AppSettings
+    setDraftSettings: React.Dispatch<React.SetStateAction<AppSettings>>
+    runningSettings: AppSettings | null
+    setRunningSettings: React.Dispatch<React.SetStateAction<AppSettings | null>>
+    isConnected: boolean
 }
 
-export function SettingsView({ initialCategory = "general", clashApiPort, helperApiPort, tunEnabled, onTunToggle }: SettingsViewProps) {
+export function SettingsView({
+    initialCategory = "general",
+    clashApiPort,
+    helperApiPort,
+    tunEnabled,
+    onTunToggle,
+    draftSettings,
+    setDraftSettings,
+    runningSettings,
+    setRunningSettings,
+    isConnected
+}: SettingsViewProps) {
+    console.log("SettingsView render - settings:", draftSettings, "runningSettings:", runningSettings, "isConnected:", isConnected)
+
     const { t } = useTranslation()
     const [activeCategory, setActiveCategory] = useState<SettingCategory>(initialCategory)
-    const [settings, setSettings] = useState<AppSettings>(defaultSettings)
-    const [appliedSettings, setAppliedSettings] = useState<AppSettings>(defaultSettings)
-    const [loading, setLoading] = useState(true)
+
+    // settings is the current draft from props
+    const settings = draftSettings
+    const setSettings = setDraftSettings
+
+    // appliedSettings is the running config from props (fallback to draft if none running)
+    const appliedSettings = runningSettings || draftSettings
+
     const [isMac, setIsMac] = useState(false)
     const [isApplying, setIsApplying] = useState(false)
     const [appVersion, setAppVersion] = useState<string>("")
 
-    // Check if any critical setting that requires restart has changed
-    const hasPendingChanges = React.useMemo(() => {
-        if (loading) return false
-        return (
-            settings.mixed_port !== appliedSettings.mixed_port ||
-            settings.allow_lan !== appliedSettings.allow_lan ||
-            settings.tun_stack !== appliedSettings.tun_stack ||
-            settings.tun_mtu !== appliedSettings.tun_mtu ||
-            settings.strict_route !== appliedSettings.strict_route ||
-            settings.dns_hijack !== appliedSettings.dns_hijack ||
-            settings.dns_strategy !== appliedSettings.dns_strategy ||
-            settings.dns_servers !== appliedSettings.dns_servers ||
-            settings.log_level !== appliedSettings.log_level
-        )
-    }, [settings, appliedSettings, loading])
+    // List of settings that require a proxy restart to apply
+    const criticalKeys: (keyof AppSettings)[] = [
+        "mixed_port", "allow_lan", "tun_mode", "tun_stack", "tun_mtu",
+        "strict_route", "dns_hijack", "dns_strategy", "dns_servers",
+        "log_level", "system_proxy"
+    ]
+
+    const modifiedKeys = React.useMemo(() => {
+        if (!isConnected || !runningSettings) return []
+        return criticalKeys.filter(key => settings[key] !== runningSettings[key])
+    }, [settings, runningSettings, isConnected])
+
+    const hasPendingChanges = modifiedKeys.length > 0
 
     useEffect(() => {
         if (typeof navigator !== 'undefined') {
             setIsMac(navigator.userAgent.toLowerCase().includes('mac'))
         }
         getVersion().then(setAppVersion).catch(console.error)
-    }, [])
-
-    const refreshSettings = useCallback(async () => {
-        setLoading(true)
-        const s = await getAppSettings()
-        setSettings(s)
-        setAppliedSettings(s) // Initialize appliedSettings with current settings from disk
-        setLoading(false)
     }, [])
 
     useEffect(() => {
@@ -110,24 +123,27 @@ export function SettingsView({ initialCategory = "general", clashApiPort, helper
             }
         }
 
-        refreshSettings()
         setupListener()
 
         return () => {
             active = false;
             if (unlistenFn) unlistenFn();
         }
-    }, [refreshSettings])
+    }, [setSettings])
 
     const updateSetting = async (key: keyof AppSettings, value: any) => {
         const newSettings = { ...settings, [key]: value }
         setSettings(newSettings)
-        try {
-            await saveAppSettings(newSettings)
-            // Optional: toast success
-        } catch (e) {
-            console.error("Failed to save setting", e)
-            // Revert?
+
+        // Case A: Disconnected -> Save everything immediately
+        // Case B: Connected -> Only save non-critical settings immediately
+        const isCritical = criticalKeys.includes(key)
+        if (!isConnected || !isCritical) {
+            try {
+                await saveAppSettings(newSettings)
+            } catch (e) {
+                console.error(`Failed to save setting ${key}:`, e)
+            }
         }
     }
 
@@ -140,10 +156,18 @@ export function SettingsView({ initialCategory = "general", clashApiPort, helper
     // The updateSetting above saves immediately. I'll create a handleBlur or distinct handleSave.
 
     const handleSave = async (newSettings: AppSettings) => {
-        try {
-            await saveAppSettings(newSettings)
-        } catch (e) {
-            console.error("Failed to save", e)
+        setSettings(newSettings)
+
+        // If not connected, always save immediately
+        // If connected, only save if NO critical keys were changed from running config
+        const hasCriticalChange = criticalKeys.some(key => newSettings[key] !== appliedSettings[key])
+
+        if (!isConnected || !hasCriticalChange) {
+            try {
+                await saveAppSettings(newSettings)
+            } catch (e) {
+                console.error("Failed to save settings:", e)
+            }
         }
     }
 
@@ -178,6 +202,16 @@ export function SettingsView({ initialCategory = "general", clashApiPort, helper
                             {cat.icon}
                             <span className="hidden sm:inline">{cat.label}</span>
                             <span className="sm:hidden">{cat.label.slice(0, 2)}</span>
+                            {/* Tab Indicator */}
+                            {isConnected && cat.id === "connection" && modifiedKeys.some(k => ["mixed_port", "allow_lan", "tun_mode", "tun_stack", "tun_mtu", "strict_route", "system_proxy"].includes(k as any)) && (
+                                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            )}
+                            {isConnected && cat.id === "dns" && modifiedKeys.some(k => ["dns_hijack", "dns_strategy", "dns_servers"].includes(k as any)) && (
+                                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            )}
+                            {isConnected && cat.id === "advanced" && modifiedKeys.some(k => ["log_level"].includes(k as any)) && (
+                                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            )}
                         </button>
                     ))}
                 </div>
@@ -215,23 +249,26 @@ export function SettingsView({ initialCategory = "general", clashApiPort, helper
                                             emit("proxy-transition", { state: "connecting" })
                                         })
                                         try {
-                                            // 1. Fetch current status to get target_id, etc.
+                                            // 1. SAVE to disk first, as backend reads from disk on startup
+                                            await saveAppSettings(settings)
+
+                                            // 2. Fetch current status to get target_id, etc.
                                             const status = await invoke<any>("get_proxy_status")
-                                            const tun_mode = status.tun_mode
+                                            const tun_mode = settings.tun_mode // Use new settings!
                                             const routing_mode = status.routing_mode
 
-                                            // 2. Fetch current nodes and find active one
+                                            // 3. Fetch current nodes and find active one
                                             const nodes = await invoke<any[]>("get_nodes")
                                             const activeNode = nodes.find(n => n.id === settings.active_target_id) || null
 
-                                            // 3. Start proxy (backend will read new settings from disk)
+                                            // 4. Start proxy (backend will read new settings from disk)
                                             await invoke("start_proxy", {
                                                 node: activeNode,
                                                 tun: tun_mode,
                                                 routing: routing_mode
                                             })
 
-                                            setAppliedSettings(settings)
+                                            setRunningSettings(settings)
                                             toast.success(t('rules.toast.applied_success', { defaultValue: 'Settings applied successfully' }))
                                         } catch (e) {
                                             console.error("Failed to apply settings", e)
@@ -263,17 +300,13 @@ export function SettingsView({ initialCategory = "general", clashApiPort, helper
             <div className="flex-1 overflow-y-auto sidebar-scroll px-4 md:px-8 py-6 md:py-10">
                 <div className="max-w-3xl mx-auto pb-10">
                     <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-                        {loading ? (
-                            <div className="flex items-center justify-center p-20 text-secondary">{t('settings.loading')}</div>
-                        ) : (
-                            <>
-                                {activeCategory === "general" && <GeneralSettings settings={settings} update={updateSetting} save={handleSave} version={appVersion} />}
-                                {activeCategory === "connection" && <ConnectionSettings settings={settings} update={updateSetting} save={handleSave} tunEnabled={tunEnabled} onTunToggle={onTunToggle} />}
-                                {activeCategory === "dns" && <DnsSettings settings={settings} update={updateSetting} save={handleSave} />}
-                                {activeCategory === "advanced" && <AdvancedSettings settings={settings} update={updateSetting} save={handleSave} clashApiPort={clashApiPort} helperApiPort={helperApiPort} />}
-                                {activeCategory === "about" && <AboutSection version={appVersion} />}
-                            </>
-                        )}
+                        <>
+                            {activeCategory === "general" && <GeneralSettings settings={settings} update={updateSetting} save={handleSave} version={appVersion} modifiedKeys={modifiedKeys} />}
+                            {activeCategory === "connection" && <ConnectionSettings settings={settings} update={updateSetting} save={handleSave} tunEnabled={tunEnabled} onTunToggle={onTunToggle} modifiedKeys={modifiedKeys} />}
+                            {activeCategory === "dns" && <DnsSettings settings={settings} update={updateSetting} save={handleSave} modifiedKeys={modifiedKeys} />}
+                            {activeCategory === "advanced" && <AdvancedSettings settings={settings} update={updateSetting} save={handleSave} clashApiPort={clashApiPort} helperApiPort={helperApiPort} modifiedKeys={modifiedKeys} />}
+                            {activeCategory === "about" && <AboutSection version={appVersion} />}
+                        </>
                     </div>
                 </div>
             </div>
@@ -299,27 +332,51 @@ function SettingItem({
     title,
     description,
     children,
-    icon
+    icon,
+    isModified
 }: {
     title: React.ReactNode,
     description?: string,
     children: React.ReactNode,
-    icon?: React.ReactNode
+    icon?: React.ReactNode,
+    isModified?: boolean
 }) {
     return (
-        <div className="glass-card flex items-center justify-between p-4 md:p-5 rounded-3xl transition-all duration-500 ring-1 ring-border-color group">
-            <div className="flex items-center gap-3 md:gap-5 flex-1 min-w-0">
+        <div className={cn(
+            "glass-card flex items-center justify-between p-4 md:p-5 rounded-3xl transition-all duration-500 ring-1 group relative overflow-hidden",
+            isModified
+                ? "ring-amber-500/50 bg-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.1)]"
+                : "ring-border-color"
+        )}>
+            {isModified && (
+                <div className="absolute left-0 top-0 bottom-0 w-1 bg-amber-500/50" />
+            )}
+            <div className="flex items-center gap-3 md:gap-5 flex-1 min-w-0 z-10">
                 {icon && (
-                    <div className="size-10 md:size-12 shrink-0 rounded-2xl bg-black/5 dark:bg-white/5 flex items-center justify-center text-secondary group-hover:text-primary transition-all duration-300 group-hover:bg-primary/10 group-hover:scale-110">
+                    <div className={cn(
+                        "size-10 md:size-12 shrink-0 rounded-2xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 relative",
+                        isModified
+                            ? "bg-amber-500/20 text-amber-500"
+                            : "bg-black/5 dark:bg-white/5 text-secondary group-hover:text-primary group-hover:bg-primary/10"
+                    )}>
                         {icon}
+                        {isModified && (
+                            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                            </span>
+                        )}
                     </div>
                 )}
                 <div className="flex flex-col gap-0.5 min-w-0">
-                    <span className="text-sm font-semibold text-foreground group-hover:text-primary/90 transition-colors truncate">{title}</span>
+                    <span className={cn(
+                        "text-sm font-semibold transition-colors truncate",
+                        isModified ? "text-amber-500" : "text-foreground group-hover:text-primary/90"
+                    )}>{title}</span>
                     {description && <span className="text-xs text-secondary max-w-[450px] leading-relaxed line-clamp-2 md:line-clamp-none">{description}</span>}
                 </div>
             </div>
-            <div className="flex items-center shrink-0 ml-2">
+            <div className="flex items-center shrink-0 ml-2 z-10">
                 {children}
             </div>
         </div>
@@ -332,6 +389,7 @@ interface CommonProps {
     update: (key: keyof AppSettings, value: any) => Promise<void>
     save: (s: AppSettings) => Promise<void> | void
     version?: string
+    modifiedKeys?: string[]
 }
 
 interface ConnectionProps extends CommonProps {
@@ -339,7 +397,7 @@ interface ConnectionProps extends CommonProps {
     onTunToggle?: () => void
 }
 
-function GeneralSettings({ settings, update, version }: CommonProps) {
+function GeneralSettings({ settings, update, version, modifiedKeys = [] }: CommonProps) {
     const { t, i18n } = useTranslation()
     const { theme, setTheme } = useTheme()
 
@@ -580,7 +638,7 @@ function CheckUpdateBtn() {
     )
 }
 
-function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle }: ConnectionProps) {
+function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle, modifiedKeys = [] }: ConnectionProps) {
     const { t } = useTranslation()
     const [port, setPort] = useState(settings.mixed_port.toString())
     const [mtu, setMtu] = useState(settings.tun_mtu.toString())
@@ -592,6 +650,7 @@ function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle }:
                     title={t('settings.connection.system_proxy.title')}
                     description={t('settings.connection.system_proxy.desc')}
                     icon={<Server size={20} />}
+                    isModified={modifiedKeys.includes("system_proxy")}
                 >
                     <Switch checked={settings.system_proxy} onCheckedChange={(v) => update("system_proxy", v)} />
                 </SettingItem>
@@ -599,6 +658,7 @@ function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle }:
                     title={t('settings.connection.allow_lan.title')}
                     description={t('settings.connection.allow_lan.desc')}
                     icon={<Globe size={20} />}
+                    isModified={modifiedKeys.includes("allow_lan")}
                 >
                     <Switch checked={settings.allow_lan} onCheckedChange={(v) => update("allow_lan", v)} />
                 </SettingItem>
@@ -606,6 +666,7 @@ function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle }:
                     title={t('settings.connection.mixed_port.title')}
                     description={t('settings.connection.mixed_port.desc')}
                     icon={<Database size={20} />}
+                    isModified={modifiedKeys.includes("mixed_port")}
                 >
                     <div className="flex items-center gap-1 bg-card-bg border border-border-color rounded-xl p-1">
                         <button
@@ -650,6 +711,7 @@ function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle }:
                     title={t('settings.connection.enable_tun.title')}
                     description={t('settings.connection.enable_tun.desc')}
                     icon={<Zap size={20} />}
+                    isModified={modifiedKeys.includes("tun_mode")}
                 >
                     <Switch checked={!!tunEnabled} onCheckedChange={() => onTunToggle && onTunToggle()} />
                 </SettingItem>
@@ -657,6 +719,7 @@ function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle }:
                     title={t('settings.connection.stack.title')}
                     description={t('settings.connection.stack.desc')}
                     icon={<Shield size={20} />}
+                    isModified={modifiedKeys.includes("tun_stack")}
                 >
                     <select
                         value={settings.tun_stack}
@@ -672,6 +735,7 @@ function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle }:
                     title={t('settings.connection.mtu.title')}
                     description={t('settings.connection.mtu.desc')}
                     icon={<RefreshCw size={20} />}
+                    isModified={modifiedKeys.includes("tun_mtu")}
                 >
                     <div className="flex items-center gap-1 bg-card-bg border border-border-color rounded-xl p-1">
                         <button
@@ -713,6 +777,7 @@ function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle }:
                     title={t('settings.connection.strict_route.title')}
                     description={t('settings.connection.strict_route.desc')}
                     icon={<RefreshCw size={20} />}
+                    isModified={modifiedKeys.includes("strict_route")}
                 >
                     <Switch checked={settings.strict_route} onCheckedChange={(v) => update("strict_route", v)} />
                 </SettingItem>
@@ -721,7 +786,7 @@ function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle }:
     )
 }
 
-function DnsSettings({ settings, update, save }: CommonProps) {
+function DnsSettings({ settings, update, save, modifiedKeys = [] }: CommonProps) {
     const { t } = useTranslation()
     const [servers, setServers] = useState(settings.dns_servers)
 
@@ -732,6 +797,7 @@ function DnsSettings({ settings, update, save }: CommonProps) {
                     title={t('settings.dns.dns_hijack.title')}
                     description={t('settings.dns.dns_hijack.desc')}
                     icon={<Shield size={20} />}
+                    isModified={modifiedKeys.includes("dns_hijack")}
                 >
                     <Switch checked={settings.dns_hijack} onCheckedChange={(v) => update("dns_hijack", v)} />
                 </SettingItem>
@@ -739,6 +805,7 @@ function DnsSettings({ settings, update, save }: CommonProps) {
                     title={t('settings.dns.strategy.title')}
                     description={t('settings.dns.strategy.desc')}
                     icon={<Globe size={20} />}
+                    isModified={modifiedKeys.includes("dns_strategy")}
                 >
                     <select
                         value={settings.dns_strategy}
@@ -762,7 +829,10 @@ function DnsSettings({ settings, update, save }: CommonProps) {
                         value={servers}
                         onChange={(e) => setServers(e.target.value)}
                         onBlur={() => update("dns_servers", servers)}
-                        className="w-full h-40 bg-card-bg border border-border-color rounded-2xl p-4 text-xs font-mono text-foreground focus:outline-none focus:border-primary/30 transition-all resize-none shadow-inner"
+                        className={cn(
+                            "w-full h-40 bg-card-bg border rounded-2xl p-4 text-xs font-mono text-foreground focus:outline-none focus:border-primary/30 transition-all resize-none shadow-inner",
+                            modifiedKeys.includes("dns_servers") ? "border-amber-500/50 ring-1 ring-amber-500/20" : "border-border-color"
+                        )}
                     />
                 </div>
             </Section>
@@ -775,7 +845,7 @@ interface AdvancedProps extends CommonProps {
     helperApiPort?: number | null
 }
 
-function AdvancedSettings({ settings, update, clashApiPort, helperApiPort }: AdvancedProps) {
+function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modifiedKeys = [] }: AdvancedProps) {
     const { t } = useTranslation()
     const [refreshingGeoData, setRefreshingGeoData] = useState(false)
 
@@ -799,6 +869,7 @@ function AdvancedSettings({ settings, update, clashApiPort, helperApiPort }: Adv
                     title={t('settings.advanced.log_level.title')}
                     description={t('settings.advanced.log_level.desc')}
                     icon={<Bug size={20} />}
+                    isModified={modifiedKeys.includes("log_level")}
                 >
                     <select
                         value={settings.log_level}

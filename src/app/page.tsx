@@ -111,7 +111,9 @@ export default function Home() {
 
   // Settings State
   const [settings, setSettings] = useState<AppSettings>(defaultSettings)
+  const [runningSettings, setRunningSettings] = useState<AppSettings | null>(null)
   const [systemProxyEnabled, setSystemProxyEnabled] = useState(false)
+  const isConnectedRef = useRef(false)
   const [clashApiPort, setClashApiPort] = useState<number | null>(null)
   const [helperApiPort, setHelperApiPort] = useState<number | null>(null)
   const [subSortBy, setSubSortBy] = useState<"name" | "ping">("ping")
@@ -288,6 +290,11 @@ export default function Home() {
             const result: any = await invoke("stop_proxy")
             if (pulseId !== lastPulseIdRef.current) return
             setIsConnected(result.is_running)
+
+            // Refetch settings from disk to discard any unsaved drafts when stopping
+            const diskSettings = await invoke<AppSettings>("get_app_settings")
+            setSettings(diskSettings)
+            setRunningSettings(null)
           } catch (e) {
             console.error("Failed to stop proxy", e)
           } finally {
@@ -389,6 +396,10 @@ export default function Home() {
         setProxyMode(result.routing_mode as any)
         setClashApiPort(result.clash_api_port)
         setHelperApiPort(result.helper_api_port)
+        if (result.running_settings) {
+          setRunningSettings(result.running_settings)
+          setSettings(result.running_settings) // Sync UI with actually applied/disk settings
+        }
 
         // Trigger IP refresh after successful sync
         setIpRefreshKey(prev => prev + 1)
@@ -452,15 +463,36 @@ export default function Home() {
           listen<any>("proxy-status-change", (event) => {
             if (!active) return
             const status = event.payload
+            const wasConnected = isConnectedRef.current;
+
             if (!status.is_running) {
               lastAppliedConfigRef.current = ""
+              setRunningSettings(null)
+              // Optional: if wasConnected, we might want to reload from disk to discard drafts
+              if (wasConnected) {
+                invoke<AppSettings>("get_app_settings").then(setSettings).catch(console.error)
+              }
+            } else if (status.running_settings) {
+              // Only update states if they actually changed to avoid wiping user drafts unnecessarily
+              setRunningSettings(prev => {
+                // If it was a transition from disconnected, OR if running settings actually changed
+                // we sync the UI settings (draft) to the running settings.
+                const settingsChanged = !prev || JSON.stringify(prev) !== JSON.stringify(status.running_settings);
+                if (!wasConnected || settingsChanged) {
+                  setSettings(status.running_settings);
+                }
+                return status.running_settings;
+              });
             }
+
             setIsConnected(status.is_running)
+            isConnectedRef.current = status.is_running;
             if (status.target_id) setActiveServerId(status.target_id)
             if (status.routing_mode) setProxyMode(status.routing_mode)
             setTunEnabled(status.tun_mode)
             setClashApiPort(status.clash_api_port)
             setHelperApiPort(status.helper_api_port)
+
             if (status.is_running && status.target_id) {
               lastAppliedConfigRef.current = `${status.target_id}:${status.routing_mode}:${status.tun_mode}`
             } else if (!status.is_running) {
@@ -522,19 +554,29 @@ export default function Home() {
 
     // Init: Load current proxy status from backend
     invoke("get_proxy_status").then((status: any) => {
+      if (status.running_settings) {
+        setRunningSettings(status.running_settings)
+      }
       if (status.is_running) {
         setIsConnected(true)
+        isConnectedRef.current = true;
         if (status.target_id) setActiveServerId(status.target_id)
         if (status.routing_mode) setProxyMode(status.routing_mode)
         setTunEnabled(status.tun_mode)
         setClashApiPort(status.clash_api_port)
         setHelperApiPort(status.helper_api_port)
+        if (status.running_settings) {
+          setRunningSettings(status.running_settings)
+          setSettings(status.running_settings) // Sync UI draft with running settings on init
+        }
+        // Sync ref to avoid restart loop
         const targetId = status.target_id
         if (targetId) {
           lastAppliedConfigRef.current = `${targetId}:${status.routing_mode}:${status.tun_mode}`
         }
       } else {
         invoke("get_app_settings").then((settings: any) => {
+          setSettings(settings) // Load full settings from disk when not running
           if (settings.active_target_id) {
             setActiveServerId(settings.active_target_id)
           }
@@ -1740,7 +1782,20 @@ export default function Home() {
       case "connections":
         return <ConnectionsView />
       case "settings":
-        return <SettingsView key={currentView} clashApiPort={clashApiPort} helperApiPort={helperApiPort} tunEnabled={tunEnabled} onTunToggle={handleTunToggle} />
+        return (
+          <SettingsView
+            key={currentView}
+            clashApiPort={clashApiPort}
+            helperApiPort={helperApiPort}
+            tunEnabled={tunEnabled}
+            onTunToggle={handleTunToggle}
+            draftSettings={settings}
+            setDraftSettings={setSettings}
+            runningSettings={runningSettings}
+            setRunningSettings={setRunningSettings}
+            isConnected={isConnected}
+          />
+        )
       case "dashboard":
       default:
         // Original Dashboard Content

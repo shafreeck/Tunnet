@@ -23,6 +23,7 @@ pub struct ProxyStatus {
     pub routing_mode: String,
     pub clash_api_port: Option<u16>,
     pub helper_api_port: Option<u16>,
+    pub running_settings: Option<crate::settings::AppSettings>,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct ProxyNodeStatus {
@@ -100,6 +101,7 @@ pub struct ProxyService<R: Runtime> {
     local_log_fd: Mutex<Option<i64>>,
     log_running: std::sync::Arc<std::sync::atomic::AtomicBool>,
     traffic_running: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    running_settings: Mutex<Option<crate::settings::AppSettings>>,
 }
 
 impl<R: Runtime> ProxyService<R> {
@@ -128,6 +130,7 @@ impl<R: Runtime> ProxyService<R> {
             local_log_fd: Mutex::new(None),
             log_running: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             traffic_running: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            running_settings: Mutex::new(None),
         }
     }
 
@@ -575,6 +578,7 @@ impl<R: Runtime> ProxyService<R> {
                     }
                 }
 
+                *self.running_settings.lock().unwrap() = Some(settings.clone());
                 let _ = self.app.emit("proxy-status-change", self.get_status());
 
                 if let Some(node) = node_opt.as_ref() {
@@ -2053,6 +2057,7 @@ impl<R: Runtime> ProxyService<R> {
             routing_mode: self.latest_routing_mode.lock().unwrap().clone(),
             clash_api_port: self.ensure_clash_port(),
             helper_api_port: *self.helper_api_port.lock().unwrap(),
+            running_settings: self.running_settings.lock().unwrap().clone(),
         }
     }
 
@@ -2107,6 +2112,7 @@ impl<R: Runtime> ProxyService<R> {
     }
 
     async fn stop_proxy_internal(&self, broadcast: bool, retain_system_proxy: bool) {
+        *self.running_settings.lock().unwrap() = None;
         let mut cleanup_performed = false;
 
         if *self.local_proxy_running.lock().unwrap() {
