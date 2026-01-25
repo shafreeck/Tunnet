@@ -51,6 +51,7 @@ export default function Home() {
   const [isConnected, setIsConnected] = useState(false)
   const [connectionState, setConnectionState] = useState<"idle" | "connecting" | "disconnecting">("idle")
   const [isLoading, setIsLoading] = useState(false)
+  const [syncPulse, setSyncPulse] = useState(0)
   const [latencyLoading, setLatencyLoading] = useState(false)
   const isLoadingRef = useRef(false)
   const manualActionRef = useRef(false)
@@ -342,10 +343,9 @@ export default function Home() {
       const pulseId = ++lastPulseIdRef.current
 
       setIsLoading(true)
-      const transitState = isConnected ? "connecting" : "disconnecting"; // If starting from connected, it's likely a restart or mode change which feels like 'connecting' to a new state. Actually, syncProxy handles both. 
-      // If we are already connected and syncProxy is called, it's usually a mode/tun change.
-      setConnectionState("connecting")
-      emit("proxy-transition", { state: "connecting" })
+      const transitState = isConnected ? "disconnecting" : "connecting";
+      setConnectionState(transitState)
+      emit("proxy-transition", { state: transitState })
       // console.log("Syncing proxy config...", { proxyMode, tunEnabled, node: node.name })
 
       const isOnlyTunUpdate = lastAppliedConfigRef.current &&
@@ -424,7 +424,7 @@ export default function Home() {
 
 
     syncProxy()
-  }, [isConnected, proxyMode, tunEnabled, activeServerId, groups, servers])
+  }, [isConnected, proxyMode, tunEnabled, syncPulse, activeServerId, groups, servers])
 
   // Watch and persist active node ID
   useEffect(() => {
@@ -465,9 +465,9 @@ export default function Home() {
             const status = event.payload
             const wasConnected = isConnectedRef.current;
 
-            if (status.starting) {
-              setIsLoading(true)
+            if (status.starting && !status.is_running) {
               setConnectionState("connecting")
+              setIsLoading(true)
               return
             }
 
@@ -1171,18 +1171,18 @@ export default function Home() {
 
     try {
       if (isConnected) {
-        // Just update state, the useEffect takes care of the backend
+        // Just update state to disconnecting, the useEffect takes care of the backend
         setConnectionState("disconnecting")
         emit("proxy-transition", { state: "disconnecting" })
-        setIsConnected(false)
 
         if (restart) {
-          // Clear current config ref to force a re-sync even if settings are identical
+          // Clear current config ref to force a re-sync
           lastAppliedConfigRef.current = null
-          // Trigger reconnect after short delay to allow cleanup to start
-          setTimeout(() => {
-            setIsConnected(true)
-          }, 800)
+          pendingConfigRef.current = null
+          // Trigger forced sync to start the Connecting phase immediately
+          setSyncPulse(p => p + 1)
+        } else {
+          setIsConnected(false)
         }
       } else {
         // Find active service node

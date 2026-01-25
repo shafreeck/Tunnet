@@ -66,10 +66,13 @@ export default function TrayPage() {
 
         // Listen for proxy status update
         const unlistenStatus = listen<any>("proxy-status-change", (event) => {
-            if (manualActionRef.current) return;
             console.log("Tray: Proxy status updated", event.payload)
             setStatus(event.payload)
-
+            if (event.payload.starting && !event.payload.is_running) {
+                setIsTransitioning(true)
+                emit("proxy-transition", { state: "connecting" })
+                return
+            }
             setIsTransitioning(false) // Stop loading when status confirmed
             // Also refresh profiles on status change to be safe
             invoke("get_profiles").then((profiles: any) => {
@@ -252,8 +255,7 @@ export default function TrayPage() {
         if (isTransitioning) return
         manualActionRef.current = true
 
-        const isRestart = isReconnectMode
-        const transitState = status.is_running && !isRestart ? "disconnecting" : "connecting"
+        const transitState = status.is_running ? "disconnecting" : "connecting"
         emit("proxy-transition", { state: transitState })
         setIsTransitioning(true)
 
@@ -262,36 +264,31 @@ export default function TrayPage() {
                 const res: any = await invoke("stop_proxy")
                 setStatus(res)
 
-                if (isRestart) {
-                    // Capture current modes BEFORE stopping, as status might be reset after stop
+                if (isReconnectMode) {
+                    // Capture current modes BEFORE stopping
                     const currentTun = status.tun_mode
                     const currentRouting = status.routing_mode
+                    // No need for setTimeout. Just rely on the start_proxy call below to trigger backend stop/broadcast.
+                    const nodeId = settings.active_target_id
+                    const node = nodes.find(n => n.id === nodeId) || nodes[0]
 
-                    // Start it again after a short delay
-                    setTimeout(async () => {
-                        const nodeId = settings.active_target_id
-                        const node = nodes.find(n => n.id === nodeId) || nodes[0]
-                        if (node) {
-                            try {
-                                const startRes: any = await invoke("start_proxy", {
-                                    node,
-                                    tun: currentTun,
-                                    routing: currentRouting
-                                })
-                                setStatus(startRes)
-                            } catch (e) {
-                                console.error("Tray: Restart failed", e)
-                            } finally {
-                                setIsTransitioning(false)
-                            }
-                        } else {
-                            setIsTransitioning(false)
-                        }
-                    }, 800)
+                    if (!node) {
+                        setIsTransitioning(false)
+                        invoke("open_main_window")
+                        return
+                    }
+
+                    const startRes: any = await invoke("start_proxy", {
+                        node,
+                        tun: currentTun,
+                        routing: currentRouting
+                    })
+                    setStatus(startRes)
+                    emit("proxy-transition", { state: "idle" })
                 } else {
-                    setIsTransitioning(false)
                     emit("proxy-transition", { state: "idle" })
                 }
+                setIsTransitioning(false)
             } else {
                 const nodeId = settings.active_target_id
                 const node = nodes.find(n => n.id === nodeId) || nodes[0]
@@ -322,8 +319,7 @@ export default function TrayPage() {
 
     const setMode = async (mode: "rule" | "global" | "direct") => {
         if (isTransitioning) return
-        const isRestart = isReconnectMode
-        const transitState = status.is_running && !isRestart ? "disconnecting" : "connecting"
+        const transitState = status.is_running ? "disconnecting" : "connecting"
         emit("proxy-transition", { state: transitState })
         setIsTransitioning(true)
         try {
