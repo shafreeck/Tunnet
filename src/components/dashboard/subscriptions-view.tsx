@@ -549,6 +549,9 @@ export function EditSubscriptionModal({ isOpen, onClose, onSave, initialData }: 
                             onChange={e => setName(e.target.value)}
                             className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/50 rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none transition-all"
                             placeholder={t('subscriptions.name_placeholder', { defaultValue: "My Subscription" })}
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            spellCheck={false}
                         />
                     </div>
 
@@ -561,6 +564,9 @@ export function EditSubscriptionModal({ isOpen, onClose, onSave, initialData }: 
                                     onChange={e => setUrl(e.target.value)}
                                     className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/50 rounded-xl px-4 py-2 text-xs text-text-primary focus:outline-none transition-all font-mono"
                                     placeholder="https://example.com/sub"
+                                    autoCapitalize="none"
+                                    autoCorrect="off"
+                                    spellCheck={false}
                                 />
                             </div>
 
@@ -577,6 +583,9 @@ export function EditSubscriptionModal({ isOpen, onClose, onSave, initialData }: 
                                                 ? t('subscriptions.default_interval', { count: Math.round(initialData.header_update_interval / 60), defaultValue: `Default: ${Math.round(initialData.header_update_interval / 60)} min` })
                                                 : t('subscriptions.interval_placeholder', { defaultValue: "e.g. 60 (Empty to disable)" })
                                         }
+                                        autoCapitalize="none"
+                                        autoCorrect="off"
+                                        spellCheck={false}
                                     />
                                 </div>
                                 <p className="text-[10px] text-text-tertiary">{t('subscriptions.interval_hint', { defaultValue: "Leave empty to use default. Set to 0 to disable." })}</p>

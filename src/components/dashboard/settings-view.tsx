@@ -504,6 +504,9 @@ function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle }:
                                 update("mixed_port", val)
                             }}
                             className="w-16 bg-transparent border-none text-sm text-center focus:outline-none font-mono text-foreground p-0 no-spinner"
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            spellCheck={false}
                         />
                         <button
                             onClick={() => {
@@ -567,6 +570,9 @@ function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle }:
                                 update("tun_mtu", val)
                             }}
                             className="w-16 bg-transparent border-none text-sm text-center focus:outline-none font-mono text-foreground p-0 no-spinner"
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            spellCheck={false}
                         />
                         <button
                             onClick={() => {

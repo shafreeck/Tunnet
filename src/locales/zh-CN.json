@@ -352,10 +352,16 @@
             "global_proxy": "全局代理",
             "global_direct": "全局直连",
             "bypass_lan_cn": "绕过局域网和大陆",
-            "custom": "自定义配置"
+            "custom": "自定义配置",
+            "restore": "丢弃修改并恢复模板",
+            "save_to_custom": "保存当前为自定义"
         },
         "add_rule": "新增规则",
         "search_placeholder": "搜索规则...",
+        "pending_title": "规则待生效",
+        "pending_desc": "分流规则已修改，点击应用以重启服务并生效。",
+        "discard_changes": "撤销修改",
+        "apply_changes": "立即应用",
         "default_policy": "默认分流策略",
         "all_other_traffic": "所有其它流量",
         "no_rules_found": "未找到相关规则",
@@ -376,7 +382,12 @@
             "value_required": "特征值不能为空",
             "rule_updated": "规则已更新",
             "rule_added": "规则已添加",
-            "save_failed": "保存规则失败"
+            "save_failed": "保存规则失败",
+            "saved_only": "已保存。下次启动或手动应用后生效。",
+            "applied_success": "修改已成功应用",
+            "apply_failed": "应用失败",
+            "preset_restored": "已恢复至预设模板",
+            "saved_to_custom": "已保存当前规则至自定义配置"
         },
         "policies": {
             "all": "全部",

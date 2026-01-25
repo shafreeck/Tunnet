@@ -2562,24 +2562,14 @@ impl<R: Runtime> ProxyService<R> {
 
     pub async fn save_rules(&self, rules: Vec<crate::profile::Rule>) -> Result<(), String> {
         self.manager.save_rules(&rules)?;
-        if self.is_proxy_running() {
-            let tun = *self.tun_mode.lock().unwrap();
-            self.restart_proxy_by_config(tun).await
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
 
     pub async fn add_rule(&self, rule: crate::profile::Rule) -> Result<(), String> {
         let mut rules = self.manager.load_rules()?;
         rules.push(rule);
         self.manager.save_rules(&rules)?;
-        if self.is_proxy_running() {
-            let tun = *self.tun_mode.lock().unwrap();
-            self.restart_proxy_by_config(tun).await
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
 
     pub async fn update_rule(&self, rule: crate::profile::Rule) -> Result<(), String> {
@@ -2587,12 +2577,7 @@ impl<R: Runtime> ProxyService<R> {
         if let Some(pos) = rules.iter().position(|r| r.id == rule.id) {
             rules[pos] = rule;
             self.manager.save_rules(&rules)?;
-            if self.is_proxy_running() {
-                let tun = *self.tun_mode.lock().unwrap();
-                self.restart_proxy_by_config(tun).await
-            } else {
-                Ok(())
-            }
+            Ok(())
         } else {
             Err("Rule not found".to_string())
         }
@@ -2602,12 +2587,7 @@ impl<R: Runtime> ProxyService<R> {
         let mut rules = self.manager.load_rules()?;
         rules.retain(|r| r.id != id);
         self.manager.save_rules(&rules)?;
-        if self.is_proxy_running() {
-            let tun = *self.tun_mode.lock().unwrap();
-            self.restart_proxy_by_config(tun).await
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
 
     pub fn get_rules(&self) -> Result<Vec<crate::profile::Rule>, String> {

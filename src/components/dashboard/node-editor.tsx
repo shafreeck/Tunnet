@@ -164,6 +164,9 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
                                         className="w-full bg-black/5 dark:bg-black/20 border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-primary/50 transition-all"
                                         placeholder="My Server"
                                         required
+                                        autoCapitalize="none"
+                                        autoCorrect="off"
+                                        spellCheck={false}
                                     />
                                 </div>
                                 <div className="space-y-1.5 col-span-2 sm:col-span-1">
@@ -190,6 +193,9 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
                                         className="w-full bg-black/5 dark:bg-black/20 border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary font-mono focus:outline-none focus:border-primary/50 transition-all placeholder:text-text-tertiary"
                                         placeholder="example.com"
                                         required
+                                        autoCapitalize="none"
+                                        autoCorrect="off"
+                                        spellCheck={false}
                                     />
                                 </div>
                                 <div className="space-y-1.5">
@@ -201,6 +207,9 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
                                         className="w-full bg-black/5 dark:bg-black/20 border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary font-mono focus:outline-none focus:border-primary/50 transition-all"
                                         placeholder="443"
                                         required
+                                        autoCapitalize="none"
+                                        autoCorrect="off"
+                                        spellCheck={false}
                                     />
                                 </div>
                             </div>
@@ -216,6 +225,9 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
                                             className="flex-1 bg-black/5 dark:bg-black/20 border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary font-mono focus:outline-none focus:border-primary/50 transition-all"
                                             placeholder="UUID"
                                             required={node.protocol !== "tuic"}
+                                            autoCapitalize="none"
+                                            autoCorrect="off"
+                                            spellCheck={false}
                                         />
                                         <button
                                             type="button"
@@ -239,6 +251,9 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
                                             className="w-full bg-black/5 dark:bg-black/20 border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary font-mono focus:outline-none focus:border-primary/50 transition-all"
                                             placeholder="Password"
                                             required
+                                            autoCapitalize="none"
+                                            autoCorrect="off"
+                                            spellCheck={false}
                                         />
                                     </div>
                                     {node.protocol === "shadowsocks" && (
@@ -270,6 +285,9 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
                                             onChange={e => handleChange("up", e.target.value)}
                                             className="w-full bg-black/5 dark:bg-black/20 border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary font-mono focus:outline-none focus:border-primary/50 transition-all"
                                             placeholder="100"
+                                            autoCapitalize="none"
+                                            autoCorrect="off"
+                                            spellCheck={false}
                                         />
                                     </div>
                                     <div className="space-y-1.5">
@@ -280,6 +298,9 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
                                             onChange={e => handleChange("down", e.target.value)}
                                             className="w-full bg-black/5 dark:bg-black/20 border border-border-color rounded-lg px-3 py-2 text-sm text-text-primary font-mono focus:outline-none focus:border-primary/50 transition-all"
                                             placeholder="100"
+                                            autoCapitalize="none"
+                                            autoCorrect="off"
+                                            spellCheck={false}
                                         />
                                     </div>
                                 </div>
@@ -293,7 +314,7 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
                             <button
                                 type="button"
                                 onClick={() => setShowAdvanced(!showAdvanced)}
-                                className="flex items-center gap-2 text-xs font-bold text-secondary uppercase tracking-[0.1em] hover:text-primary transition-colors focus:outline-none group"
+                                className="flex items-center gap-2 text-xs font-bold text-secondary uppercase tracking-widest hover:text-primary transition-colors focus:outline-none group"
                             >
                                 {showAdvanced ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                                 {t('node_editor.advanced_settings')}
@@ -329,6 +350,9 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
                                                             onChange={e => handleChange("sni", e.target.value)}
                                                             className="w-full bg-black/5 dark:bg-black/20 border border-border-color rounded-lg px-2.5 py-1.5 text-xs text-text-primary font-mono focus:outline-none"
                                                             placeholder="example.com"
+                                                            autoCapitalize="none"
+                                                            autoCorrect="off"
+                                                            spellCheck={false}
                                                         />
                                                     </div>
                                                     <div className="space-y-1.5">
@@ -355,6 +379,9 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
                                                         onChange={e => handleChange("alpn", e.target.value.split(',').map(s => s.trim()))}
                                                         className="w-full bg-black/5 dark:bg-black/20 border border-border-color rounded-lg px-2.5 py-1.5 text-xs text-text-primary font-mono focus:outline-none"
                                                         placeholder="h2, http/1.1"
+                                                        autoCapitalize="none"
+                                                        autoCorrect="off"
+                                                        spellCheck={false}
                                                     />
                                                 </div>
 
@@ -413,6 +440,9 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
                                                         onChange={e => handleChange("path", e.target.value)}
                                                         className="w-full bg-black/5 dark:bg-black/20 border border-border-color rounded-lg px-2.5 py-1.5 text-xs text-text-primary font-mono focus:outline-none"
                                                         placeholder="/"
+                                                        autoCapitalize="none"
+                                                        autoCorrect="off"
+                                                        spellCheck={false}
                                                     />
                                                 </div>
                                                 <div className="space-y-1.5">
@@ -423,6 +453,9 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
                                                         onChange={e => handleChange("host", e.target.value)}
                                                         className="w-full bg-black/5 dark:bg-black/20 border border-border-color rounded-lg px-2.5 py-1.5 text-xs text-text-primary font-mono focus:outline-none"
                                                         placeholder="Host Header"
+                                                        autoCapitalize="none"
+                                                        autoCorrect="off"
+                                                        spellCheck={false}
                                                     />
                                                 </div>
                                             </div>

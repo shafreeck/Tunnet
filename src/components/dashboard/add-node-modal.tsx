@@ -299,6 +299,9 @@ export function AddNodeModal({ isOpen, onClose, onManual, onImport, title }: Add
                                 onChange={e => setUrlInput(e.target.value)}
                                 placeholder={t('paste_link_placeholder')}
                                 className="w-full bg-black/3 dark:bg-white/3 border border-border-color rounded-2xl pl-12 pr-6 py-4 text-xs font-bold text-text-primary focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary/30 transition-all placeholder:text-text-tertiary/60 placeholder:font-medium"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellCheck={false}
                             />
                         </div>
                         <button

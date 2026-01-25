@@ -348,10 +348,16 @@
             "global_proxy": "Global Proxy",
             "global_direct": "Global Direct",
             "bypass_lan_cn": "Bypass LAN & CN",
-            "custom": "Custom Configuration"
+            "custom": "Custom Configuration",
+            "restore": "Discard & Restore Template",
+            "save_to_custom": "Save Current as Custom"
         },
         "add_rule": "Add Rule",
         "search_placeholder": "Search rules...",
+        "pending_title": "Ready to Apply",
+        "pending_desc": "Rules have been modified. Click Apply to restart service and effect changes.",
+        "discard_changes": "Discard Changes",
+        "apply_changes": "Apply Changes",
         "default_policy": "Default Policy",
         "all_other_traffic": "All Other Traffic",
         "no_rules_found": "No rules found",
@@ -372,7 +378,12 @@
             "value_required": "Value is required",
             "rule_updated": "Rule updated",
             "rule_added": "Rule added",
-            "save_failed": "Failed to save rule"
+            "save_failed": "Failed to save rule",
+            "saved_only": "Saved. Changes will take effect on next start or manual apply.",
+            "applied_success": "Changes applied successfully",
+            "apply_failed": "Failed to apply changes",
+            "preset_restored": "Preset restored to template",
+            "saved_to_custom": "Current rules saved as Custom config"
         },
         "policies": {
             "all": "ALL",

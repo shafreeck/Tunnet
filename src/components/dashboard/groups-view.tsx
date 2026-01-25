@@ -412,6 +412,9 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
                                     onChange={e => setDialogName(e.target.value)}
                                     className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/20 rounded-xl py-3 px-4 text-sm text-text-primary focus:outline-none transition-all"
                                     placeholder={t('groups.name_placeholder')}
+                                    autoCapitalize="none"
+                                    autoCorrect="off"
+                                    spellCheck={false}
                                 />
                             </div>
 
@@ -461,6 +464,9 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
                                         onChange={e => setDialogKeywords(e.target.value)}
                                         className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/20 rounded-xl py-3 px-4 text-sm text-text-primary focus:outline-none transition-all"
                                         placeholder={t('groups.keywords_placeholder')} // "e.g. US, Netflix, Premium"
+                                        autoCapitalize="none"
+                                        autoCorrect="off"
+                                        spellCheck={false}
                                     />
                                     <p className="text-[10px] text-text-tertiary">{t('groups.keywords_help')}</p>
                                 </div>

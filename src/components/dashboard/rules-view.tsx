@@ -1,12 +1,15 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { Plus, Search, Trash2, Edit2, Shield, Globe, Monitor, AlertCircle, ChevronUp, ChevronDown, Loader2 } from "lucide-react"
+import { Plus, Search, Trash2, Edit2, Shield, Globe, Monitor, AlertCircle, ChevronUp, ChevronDown, Loader2, GripVertical, Check, RotateCcw, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
+import { emit, listen } from "@tauri-apps/api/event"
 import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
 import { Group } from "./groups-view"
+import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd"
+import { createPortal } from "react-dom"
 
 interface Rule {
     id: string
@@ -85,6 +88,11 @@ export function RulesView() {
     const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null)
     const [openRuleMenuId, setOpenRuleMenuId] = useState<string | null>(null)
     const [ruleMenuPos, setRuleMenuPos] = useState<{ top?: number, bottom?: number, right: number } | null>(null)
+    const [hasPendingChanges, setHasPendingChanges] = useState(false)
+    const [initialRules, setInitialRules] = useState<Rule[]>([])
+    const [initialDefaultPolicy, setInitialDefaultPolicy] = useState<string>("")
+    const [isApplying, setIsApplying] = useState(false)
+    const [proxyStatus, setProxyStatus] = useState<{ is_running: boolean, tun_mode: boolean, routing_mode: string } | null>(null)
     const [dialogData, setDialogData] = useState<Partial<Rule>>({
         type: "DOMAIN",
         value: "",
@@ -93,8 +101,22 @@ export function RulesView() {
         description: ""
     })
     const [isMac, setIsMac] = useState(false)
+    const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null)
+
+    // Check if the current rules/policy deviate from the current preset's template
+    const isModified = React.useMemo(() => {
+        if (currentPreset === "Custom") return false // Custom is always "correct" for itself
+        const template = PRESETS[currentPreset as keyof typeof PRESETS]
+        if (!template) return false
+
+        // Simple comparison: stringify is enough for our Rule objects
+        const isRulesDifferent = JSON.stringify(rules) !== JSON.stringify(template.rules)
+        const isPolicyDifferent = defaultPolicy !== template.defaultPolicy
+        return isRulesDifferent || isPolicyDifferent
+    }, [rules, defaultPolicy, currentPreset])
 
     useEffect(() => {
+        setPortalRoot(document.body)
         if (typeof navigator !== 'undefined') {
             setIsMac(navigator.userAgent.toLowerCase().includes('mac'))
         }
@@ -110,7 +132,25 @@ export function RulesView() {
             handleApplyPreset("Smart Connect")
         }
         fetchGroups()
+        fetchProxyStatus()
+
+        const unlisten = listen("proxy-status-change", (event: any) => {
+            setProxyStatus(event.payload)
+        })
+
+        return () => {
+            unlisten.then(f => f())
+        }
     }, [])
+
+    const fetchProxyStatus = async () => {
+        try {
+            const status = await invoke<any>("get_proxy_status")
+            setProxyStatus(status)
+        } catch (e) {
+            console.error("Failed to fetch proxy status", e)
+        }
+    }
 
     const fetchGroups = async () => {
         try {
@@ -146,13 +186,29 @@ export function RulesView() {
             }
 
             setRules(normalRules)
-            if (finalRule) setDefaultPolicy(finalRule.policy as any)
+            setInitialRules(normalRules)
+            if (finalRule) {
+                setDefaultPolicy(finalRule.policy as any)
+                setInitialDefaultPolicy(finalRule.policy)
+            }
+
+            // Revert current preset selection to the last applied one
+            const savedPreset = localStorage.getItem("tunnet_rules_preset") || "Smart Connect"
+            setCurrentPreset(savedPreset)
+
+            setHasPendingChanges(false)
         } catch (error) {
             console.error("Failed to fetch rules:", error)
         }
     }
 
-    const saveRulesToBackend = async (rulesToSave: Rule[], policy: string) => {
+    const checkPendingChanges = (updatedRules: Rule[], updatedPolicy: string) => {
+        const isRulesDifferent = JSON.stringify(updatedRules) !== JSON.stringify(initialRules)
+        const isPolicyDifferent = updatedPolicy !== initialDefaultPolicy
+        setHasPendingChanges(isRulesDifferent || isPolicyDifferent)
+    }
+
+    const saveRulesToBackend = async (rulesToSave: Rule[], policy: string, isSilent = false) => {
         const finalRule: Rule = {
             id: "final-policy",
             type: "FINAL",
@@ -162,10 +218,73 @@ export function RulesView() {
             description: "rules.description.final_proxy"
         }
         const payload = [...rulesToSave, finalRule]
-        await invoke("save_rules", { rules: payload })
+        try {
+            await invoke("save_rules", { rules: payload })
+            if (!isSilent) {
+                checkPendingChanges(rulesToSave, policy)
+            }
+        } catch (e) {
+            console.error("Failed to save rules:", e)
+            throw e
+        }
     }
 
-    const handleApplyPreset = async (name: string) => {
+    const handleApplyChanges = async () => {
+        if (!proxyStatus?.is_running) {
+            // If proxy not running, just save is enough (backend already did it, but we can call it again to be sure)
+            setHasPendingChanges(false)
+            toast.success(t('rules.toast.saved_only'))
+            return
+        }
+
+        setIsApplying(true)
+        emit("proxy-transition", { state: "connecting" })
+
+        try {
+            // Fetch current active node
+            const settings: any = await invoke("get_app_settings")
+            const nodes: any[] = await invoke("get_nodes")
+            const activeNode = nodes.find(n => n.id === settings.active_target_id) || null
+
+            await invoke("start_proxy", {
+                node: activeNode,
+                tun: proxyStatus.tun_mode,
+                routing: proxyStatus.routing_mode
+            })
+            setInitialRules([...rules])
+            setInitialDefaultPolicy(defaultPolicy)
+            setHasPendingChanges(false)
+            localStorage.setItem("tunnet_rules_preset", currentPreset)
+            toast.success(t('rules.toast.applied_success'))
+        } catch (err) {
+            console.error("Failed to apply rules:", err)
+            toast.error(t('rules.toast.apply_failed'))
+        } finally {
+            setIsApplying(false)
+            emit("proxy-transition", { state: "idle" })
+        }
+    }
+
+    const onDragEnd = (result: DropResult) => {
+        if (!result.destination) return
+        if (result.destination.index === result.source.index) return
+
+        const items = Array.from(rules)
+        const [reorderedItem] = items.splice(result.source.index, 1)
+        items.splice(result.destination.index, 0, reorderedItem)
+
+        setRules(items)
+        setHasPendingChanges(true)
+
+        // Auto-save to backend but marked as pending
+        saveRulesToBackend(items, defaultPolicy, false).catch(() => {
+            toast.error(t('rules.toast.save_failed'))
+        })
+
+        switchToCustom(items, defaultPolicy)
+    }
+
+    const handleApplyPreset = (name: string) => {
         let preset: { rules: Rule[], defaultPolicy: string } | undefined
         if (name === "Custom") {
             const saved = localStorage.getItem("tunnet_rules_custom")
@@ -178,14 +297,6 @@ export function RulesView() {
                 }
             }
             if (!preset) {
-                // If no saved custom rules, use current as custom or defaults?
-                // For now, if empty, maybe just apply nothing or error?
-                // Better: if empty, init with current rules as custom?
-                // Let's assume if it's select from dropdown, it should exist roughly.
-                // But if not, just use empty or current rules is safer.
-                // Actually if I click Custom from dropdown and I have no saved custom rules, I probably expect nothing or previous state.
-                // Let's show error if not found? Or just initialize it.
-                // Let's initialize with empty rules but Proxy default.
                 preset = { rules: [], defaultPolicy: "PROXY" }
             }
         } else {
@@ -193,36 +304,46 @@ export function RulesView() {
         }
 
         if (preset) {
-            setCurrentlyApplying(true)
-            try {
-                // For Custom, we rely on the saved IDs ideally, but generating new ones is fine too to ensure uniqueness if needed.
-                // Actually for Custom we should probably keep IDs if possible?
-                // But `save_rules` doesn't care much about IDs except for identifying.
-                // If we restore custom, we probably want the exact same state.
-                const newRules = preset.rules // Keep original IDs if possible
-                const newPolicy = preset.defaultPolicy
-                await saveRulesToBackend(newRules, newPolicy)
-                setRules(newRules)
-                setDefaultPolicy(newPolicy as any)
-                setCurrentPreset(name)
-                localStorage.setItem("tunnet_rules_preset", name)
-                setIsPresetOpen(false)
-                toast.success(t('rules.toast.applied_preset', { name: getPresetName(name, t) }))
-            } catch (err) {
-                toast.error(t('rules.toast.failed_preset'))
-            } finally {
-                setCurrentlyApplying(false)
-            }
+            const newRules = [...preset.rules]
+            const newPolicy = preset.defaultPolicy
+
+            setRules(newRules)
+            setDefaultPolicy(newPolicy as any)
+            setCurrentPreset(name)
+            setIsPresetOpen(false)
+
+            // Check if this new state differs from what's currently on the server
+            checkPendingChanges(newRules, newPolicy)
+
+            toast.success(t('rules.toast.applied_preset', { name: getPresetName(name, t) }))
         }
     }
 
-    const switchToCustom = (updatedRules: Rule[], updatedPolicy: string) => {
-        setCurrentPreset("Custom")
-        localStorage.setItem("tunnet_rules_preset", "Custom")
+    const handleRestorePreset = () => {
+        const template = PRESETS[currentPreset as keyof typeof PRESETS]
+        if (template) {
+            setRules([...template.rules])
+            setDefaultPolicy(template.defaultPolicy as any)
+            checkPendingChanges(template.rules, template.defaultPolicy)
+            toast.success(t('rules.toast.preset_restored', { defaultValue: 'Preset restored to template' }))
+        }
+    }
+
+    const handleSaveToCustom = () => {
         localStorage.setItem("tunnet_rules_custom", JSON.stringify({
-            rules: updatedRules,
-            defaultPolicy: updatedPolicy
+            rules: rules,
+            defaultPolicy: defaultPolicy
         }))
+        toast.success(t('rules.toast.saved_to_custom', { defaultValue: 'Current rules saved as Custom config' }))
+    }
+
+    const switchToCustom = (updatedRules: Rule[], updatedPolicy: string) => {
+        if (currentPreset === "Custom") {
+            localStorage.setItem("tunnet_rules_custom", JSON.stringify({
+                rules: updatedRules,
+                defaultPolicy: updatedPolicy
+            }))
+        }
     }
 
     const handleDeleteRule = async (id: string, e: React.MouseEvent) => {
@@ -231,8 +352,6 @@ export function RulesView() {
         setDeletingRuleId(id)
         try {
             const newRules = rules.filter(r => r.id !== id)
-            await saveRulesToBackend(newRules, defaultPolicy)
-            await saveRulesToBackend(newRules, defaultPolicy)
             await saveRulesToBackend(newRules, defaultPolicy)
             setRules(newRules)
             switchToCustom(newRules, defaultPolicy)
@@ -343,7 +462,7 @@ export function RulesView() {
         <div className="flex-1 flex flex-col h-full overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
             {/* Unified Header Style */}
             <div className={cn(
-                "border-b border-black/[0.02] dark:border-white/[0.02] bg-transparent p-5 md:px-8 md:pb-6 shrink-0 relative z-20",
+                "border-b border-black/5 dark:border-white/5 bg-transparent p-5 md:px-8 md:pb-6 shrink-0 relative z-20",
                 isMac ? "md:pt-8" : "md:pt-8"
             )}>
                 <div className="absolute inset-0 z-0" data-tauri-drag-region />
@@ -359,35 +478,59 @@ export function RulesView() {
                                     onClick={() => !currentlyApplying && setIsPresetOpen(!isPresetOpen)}
                                     disabled={currentlyApplying}
                                     className={cn(
-                                        "flex items-center gap-2 px-4 py-2 bg-card-bg hover:bg-black/5 dark:hover:bg-white/10 rounded-xl text-xs font-bold transition-all border border-border-color",
-                                        currentlyApplying ? "opacity-70 cursor-wait" : ""
+                                        "flex items-center gap-3 px-5 py-2.5 bg-card-bg border border-border-color rounded-xl hover:bg-white/5 transition-all group relative",
+                                        isPresetOpen ? "ring-2 ring-primary/20 bg-white/5" : ""
                                     )}
                                 >
-                                    <span className="opacity-50">{t('rules.preset.label')}</span>
-                                    <span>{getPresetName(currentPreset, t)}</span>
-                                    {currentlyApplying ? (
-                                        <Loader2 size={14} className="opacity-50 animate-spin" />
-                                    ) : (
-                                        <ChevronDown size={14} className="opacity-50" />
-                                    )}
+                                    <Globe size={14} className="text-primary/70 group-hover:text-primary transition-colors" />
+                                    <div className="flex flex-col items-start gap-0.5">
+                                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{t('rules.preset.label')}</span>
+                                        <span className="text-xs font-bold text-text-primary whitespace-nowrap flex items-center gap-1.5">
+                                            {getPresetName(currentPreset, t)}
+                                            {isModified && <span className="text-amber-500 animate-pulse font-mono">*</span>}
+                                        </span>
+                                    </div>
+                                    {isPresetOpen ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
                                 </button>
                                 {isPresetOpen && (
                                     <>
                                         <div className="fixed inset-0 z-10" onClick={() => setIsPresetOpen(false)} />
-                                        <div className="absolute right-0 top-full mt-2 w-52 bg-white/90 dark:bg-black/80 backdrop-blur-xl border border-border-color rounded-2xl shadow-2xl z-20 py-1 overflow-hidden animate-in zoom-in-95 duration-200">
-                                            {[...Object.keys(PRESETS), "Custom"].map((name) => (
+                                        <div className="absolute top-full right-0 mt-2 w-64 bg-card-bg border border-border-color rounded-2xl shadow-2xl py-3 z-50 animate-in zoom-in-95 duration-200 origin-top-right backdrop-blur-xl">
+                                            {Object.keys(PRESETS).concat(["Custom"]).map(name => (
                                                 <button
                                                     key={name}
                                                     onClick={() => handleApplyPreset(name)}
                                                     className={cn(
-                                                        "w-full text-left px-4 py-3 text-xs hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex items-center justify-between font-bold",
+                                                        "w-full flex items-center justify-between px-5 py-3 text-xs font-bold transition-all hover:bg-white/5",
                                                         currentPreset === name ? "text-primary bg-primary/5" : "text-text-secondary"
                                                     )}
                                                 >
-                                                    {getPresetName(name, t)}
+                                                    <span>{getPresetName(name, t)}</span>
                                                     {currentPreset === name && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
                                                 </button>
                                             ))}
+
+                                            {isModified && (
+                                                <>
+                                                    <div className="mx-4 my-2 border-t border-border-color/50" />
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleRestorePreset(); setIsPresetOpen(false); }}
+                                                        className="w-full flex items-center gap-2 px-5 py-2.5 text-[10px] font-bold text-emerald-500 hover:bg-emerald-500/5 transition-all"
+                                                    >
+                                                        <RotateCcw size={12} />
+                                                        {t('rules.preset.restore', { defaultValue: 'Discard & Restore Template' })}
+                                                    </button>
+                                                    {currentPreset !== "Custom" && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleSaveToCustom(); setIsPresetOpen(false); }}
+                                                            className="w-full flex items-center gap-2 px-5 py-2.5 text-[10px] font-bold text-primary hover:bg-primary/5 transition-all"
+                                                        >
+                                                            <Plus size={12} />
+                                                            {t('rules.preset.save_to_custom', { defaultValue: 'Save Current as Custom' })}
+                                                        </button>
+                                                    )}
+                                                </>
+                                            )}
                                         </div>
                                     </>
                                 )}
@@ -406,10 +549,14 @@ export function RulesView() {
                         <div className="relative flex-1 group">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-text-primary transition-colors" size={16} />
                             <input
+                                type="text"
                                 placeholder={t('rules.search_placeholder')}
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/20 rounded-xl py-2.5 pl-10 pr-4 text-sm text-text-primary focus:outline-none transition-all font-medium placeholder:text-text-tertiary"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellCheck={false}
                             />
                         </div>
                         <div className="flex bg-card-bg p-1 rounded-xl border border-border-color">
@@ -435,89 +582,176 @@ export function RulesView() {
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-8 sidebar-scroll bg-transparent">
                 <div className="max-w-5xl mx-auto w-full space-y-3 pb-32">
+                    {/* Pending Changes Banner */}
+                    {hasPendingChanges && (
+                        <div className="glass-card mb-6 border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.15)] rounded-2xl p-4 flex items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-500">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-amber-500/10 rounded-xl">
+                                    <Zap size={18} className="text-amber-500 animate-pulse" />
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-bold text-text-primary leading-none mb-1">{t('rules.pending_title', { defaultValue: 'Ready to Apply' })}</h4>
+                                    <p className="text-[10px] md:text-xs text-text-secondary font-medium">{t('rules.pending_desc', { defaultValue: 'Some rules have been modified. Apply changes to restart proxy service.' })}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => fetchRules()}
+                                    className="px-4 py-2 text-xs font-bold text-text-secondary hover:text-text-primary transition-colors flex items-center gap-1.5"
+                                >
+                                    <RotateCcw size={14} />
+                                    <span className="hidden sm:inline">{t('rules.discard_changes', { defaultValue: 'Discard' })}</span>
+                                </button>
+                                <button
+                                    onClick={handleApplyChanges}
+                                    disabled={isApplying}
+                                    className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2 scale-100 active:scale-95"
+                                >
+                                    {isApplying ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                        <Check size={14} />
+                                    )}
+                                    {t('rules.apply_changes', { defaultValue: 'Apply Changes' })}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {filteredRules.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-gray-600">
                             <AlertCircle size={40} className="mb-4 opacity-20" />
                             <p className="text-sm font-medium">{t('rules.no_rules_found')}</p>
                         </div>
                     ) : (
-                        filteredRules.map((rule) => (
-                            <div
-                                key={rule.id}
-                                className="glass-card flex items-center justify-between p-4 rounded-2xl hover:bg-black/5 dark:hover:bg-white/8 transition-all duration-300 group border border-transparent hover:border-border-color"
-                            >
-                                <div className="flex items-center gap-3 md:gap-6 flex-1 min-w-0">
-                                    <div className="w-20 md:w-32 shrink-0 hidden sm:block">
-                                        <div className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-xl bg-white/5 border border-white/5 w-fit">
-                                            <Shield size={10} className="md:size-3 text-primary/70" />
-                                            <span className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-widest">{rule.type === 'IP_IS_PRIVATE' ? 'PRIVATE ADDR' : rule.type.replace(/_/g, ' ')}</span>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col flex-1 min-w-0">
-                                        <span className="text-xs md:text-sm font-semibold text-text-primary font-mono truncate">{rule.value}</span>
-                                        {rule.description && <span className="text-[10px] md:text-xs text-text-secondary truncate mt-0.5">{t(rule.description)}</span>}
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2 md:gap-8 shrink-0">
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (openRuleMenuId === rule.id) {
-                                                setOpenRuleMenuId(null);
-                                                return;
-                                            }
-                                            const rect = e.currentTarget.getBoundingClientRect();
-                                            const MENU_HEIGHT = 280; // Approximate max height
-                                            const right = window.innerWidth - rect.right;
+                        <DragDropContext onDragEnd={onDragEnd}>
+                            <Droppable droppableId="rules-list" isDropDisabled={searchQuery !== "" || selectedPolicy !== "ALL"}>
+                                {(provided) => (
+                                    <div
+                                        {...provided.droppableProps}
+                                        ref={provided.innerRef}
+                                        className="space-y-3"
+                                    >
+                                        {filteredRules.map((rule, index) => (
+                                            <Draggable
+                                                key={rule.id}
+                                                draggableId={rule.id}
+                                                index={index}
+                                                isDragDisabled={searchQuery !== "" || selectedPolicy !== "ALL"}
+                                            >
+                                                {(provided, snapshot) => {
+                                                    const content = (
+                                                        <div
+                                                            ref={provided.innerRef}
+                                                            {...provided.draggableProps}
+                                                            style={{
+                                                                ...provided.draggableProps.style,
+                                                                // @ts-ignore
+                                                                width: snapshot.isDragging ? (provided.draggableProps.style?.width || 'calc(100% - 32px)') : 'auto',
+                                                                // @ts-ignore
+                                                                maxWidth: snapshot.isDragging ? '1024px' : 'none',
+                                                            }}
+                                                            className={cn(
+                                                                "glass-card flex items-center justify-between p-4 rounded-2xl group border border-transparent hover:border-border-color",
+                                                                snapshot.isDragging
+                                                                    ? "shadow-2xl border-primary/40 z-50 bg-sidebar-bg/90 backdrop-blur-2xl ring-2 ring-primary/20 scale-[1.02]"
+                                                                    : "transition-all duration-300 hover:bg-black/5 dark:hover:bg-white/8"
+                                                            )}
+                                                        >
+                                                            <div className="flex items-center flex-1 min-w-0">
+                                                                <div
+                                                                    {...provided.dragHandleProps}
+                                                                    className={cn(
+                                                                        "p-0 pr-1 md:pr-2 text-gray-400 hover:text-primary transition-colors cursor-grab active:cursor-grabbing",
+                                                                        (searchQuery !== "" || selectedPolicy !== "ALL") && "hidden"
+                                                                    )}
+                                                                >
+                                                                    <GripVertical size={16} />
+                                                                </div>
+                                                                <div className="w-20 md:w-32 shrink-0 hidden sm:block">
+                                                                    <div className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-xl bg-white/5 border border-white/5 w-fit">
+                                                                        <Shield size={10} className="md:size-3 text-primary/70" />
+                                                                        <span className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-widest">{rule.type === 'IP_IS_PRIVATE' ? 'PRIVATE ADDR' : rule.type.replace(/_/g, ' ')}</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex flex-col flex-1 min-w-0">
+                                                                    <span className="text-xs md:text-sm font-semibold text-text-primary font-mono truncate">{rule.value}</span>
+                                                                    {rule.description && <span className="text-[10px] md:text-xs text-text-secondary truncate mt-0.5">{t(rule.description)}</span>}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 md:gap-8 shrink-0">
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (openRuleMenuId === rule.id) {
+                                                                            setOpenRuleMenuId(null);
+                                                                            return;
+                                                                        }
+                                                                        const rect = e.currentTarget.getBoundingClientRect();
+                                                                        const MENU_HEIGHT = 280; // Approximate max height
+                                                                        const right = window.innerWidth - rect.right;
 
-                                            // Check collision with bottom
-                                            if (rect.bottom + MENU_HEIGHT > window.innerHeight) {
-                                                setRuleMenuPos({
-                                                    bottom: window.innerHeight - rect.top + 8,
-                                                    right
-                                                });
-                                            } else {
-                                                setRuleMenuPos({
-                                                    top: rect.bottom + 8,
-                                                    right
-                                                });
-                                            }
-                                            setOpenRuleMenuId(rule.id);
-                                        }}
-                                        disabled={loadingRuleId === rule.id}
-                                        className={cn(
-                                            "px-2 md:px-3 py-1 rounded-full text-[9px] md:text-[10px] font-bold border tracking-widest uppercase w-16 md:w-20 text-center cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center relative z-0",
-                                            getPolicyColor(rule.policy),
-                                            loadingRuleId === rule.id ? "opacity-70 cursor-wait" : ""
-                                        )}>
-                                        {loadingRuleId === rule.id ? (
-                                            <Loader2 size={10} className="animate-spin" />
-                                        ) : (
-                                            <span className="truncate">{getPolicyLabel(rule.policy)}</span>
-                                        )}
-                                    </button>
-                                    <div className="flex items-center gap-1 md:gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-300 translate-x-0 md:translate-x-2 md:group-hover:translate-x-0">
-                                        <button onClick={(e) => { setEditingRule(rule); setDialogData({ ...rule }); setIsDialogOpen(true); }} className="p-1.5 md:p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><Edit2 size={14} className="md:size-4" /></button>
-                                        <button
-                                            onClick={(e) => handleDeleteRule(rule.id, e)}
-                                            disabled={deletingRuleId === rule.id}
-                                            className={cn(
-                                                "p-1.5 md:p-2 rounded-xl transition-all",
-                                                deletingRuleId === rule.id
-                                                    ? "text-red-400 bg-red-400/10 cursor-wait"
-                                                    : "text-gray-400 hover:text-red-400 hover:bg-red-400/10"
-                                            )}
-                                        >
-                                            {deletingRuleId === rule.id ? (
-                                                <Loader2 size={14} className="md:size-4 animate-spin" />
-                                            ) : (
-                                                <Trash2 size={14} className="md:size-4" />
-                                            )}
-                                        </button>
+                                                                        // Check collision with bottom
+                                                                        if (rect.bottom + MENU_HEIGHT > window.innerHeight) {
+                                                                            setRuleMenuPos({
+                                                                                bottom: window.innerHeight - rect.top + 8,
+                                                                                right
+                                                                            });
+                                                                        } else {
+                                                                            setRuleMenuPos({
+                                                                                top: rect.bottom + 8,
+                                                                                right
+                                                                            });
+                                                                        }
+                                                                        setOpenRuleMenuId(rule.id);
+                                                                    }}
+                                                                    disabled={loadingRuleId === rule.id}
+                                                                    className={cn(
+                                                                        "px-2 md:px-3 py-1 rounded-full text-[9px] md:text-[10px] font-bold border tracking-widest uppercase w-16 md:w-20 text-center cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center relative z-0",
+                                                                        getPolicyColor(rule.policy),
+                                                                        loadingRuleId === rule.id ? "opacity-70 cursor-wait" : ""
+                                                                    )}>
+                                                                    {loadingRuleId === rule.id ? (
+                                                                        <Loader2 size={10} className="animate-spin" />
+                                                                    ) : (
+                                                                        <span className="truncate">{getPolicyLabel(rule.policy)}</span>
+                                                                    )}
+                                                                </button>
+                                                                <div className="flex items-center gap-1 md:gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-300 translate-x-0 md:translate-x-2 md:group-hover:translate-x-0">
+                                                                    <button onClick={(e) => { setEditingRule(rule); setDialogData({ ...rule }); setIsDialogOpen(true); }} className="p-1.5 md:p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><Edit2 size={14} className="md:size-4" /></button>
+                                                                    <button
+                                                                        onClick={(e) => handleDeleteRule(rule.id, e)}
+                                                                        disabled={deletingRuleId === rule.id}
+                                                                        className={cn(
+                                                                            "p-1.5 md:p-2 rounded-xl transition-all",
+                                                                            deletingRuleId === rule.id
+                                                                                ? "text-red-400 bg-red-400/10 cursor-wait"
+                                                                                : "text-gray-400 hover:text-red-400 hover:bg-red-400/10"
+                                                                        )}
+                                                                    >
+                                                                        {deletingRuleId === rule.id ? (
+                                                                            <Loader2 size={14} className="md:size-4 animate-spin" />
+                                                                        ) : (
+                                                                            <Trash2 size={14} className="md:size-4" />
+                                                                        )}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+
+                                                    if (snapshot.isDragging && portalRoot) {
+                                                        return createPortal(content, portalRoot);
+                                                    }
+                                                    return content;
+                                                }}
+                                            </Draggable>
+                                        ))}
+                                        {provided.placeholder}
                                     </div>
-                                </div>
-                            </div>
-                        ))
+                                )}
+                            </Droppable>
+                        </DragDropContext>
                     )}
                 </div>
             </div>
@@ -638,7 +872,7 @@ export function RulesView() {
 
             {/* Modal - Simplified Integration */}
             {isDialogOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-xl bg-black/60 animate-in fade-in duration-500">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-xl bg-black/60 animate-in fade-in duration-500">
                     <div className="fixed inset-0" onClick={() => setIsDialogOpen(false)} />
                     <div className="relative w-full max-w-lg glass-card border border-border-color rounded-[2.5rem] shadow-[0_0_100px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300">
                         <div className="px-10 py-8 border-b border-border-color bg-sidebar-bg">
@@ -656,12 +890,16 @@ export function RulesView() {
                             <div className="space-y-3">
                                 <label className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest pl-1">{t('rules.dialog.value')}</label>
                                 <input
+                                    type="text"
                                     value={dialogData.type === 'IP_IS_PRIVATE' ? 'Match all private addresses' : dialogData.value}
                                     readOnly={dialogData.type === 'IP_IS_PRIVATE'}
                                     autoFocus
                                     onChange={(e) => setDialogData({ ...dialogData, value: e.target.value })}
                                     className={cn("w-full bg-sidebar-bg/50 border border-border-color rounded-2xl px-6 py-4 text-sm text-text-primary focus:outline-none focus:border-primary/50 transition-all font-mono", dialogData.type === 'IP_IS_PRIVATE' && "opacity-50 cursor-not-allowed")}
                                     placeholder={dialogData.type === 'DOMAIN' ? 'example.com' : '1.2.3.4/24'}
+                                    autoCapitalize="none"
+                                    autoCorrect="off"
+                                    spellCheck={false}
                                 />
                             </div>
                             <div className="space-y-3">
@@ -716,10 +954,10 @@ export function RulesView() {
             {/* Rule Policy Context Menu (Fixed Position) */}
             {openRuleMenuId && ruleMenuPos && (
                 <>
-                    <div className="fixed inset-0 z-[100]" onClick={() => setOpenRuleMenuId(null)} />
+                    <div className="fixed inset-0 z-50" onClick={() => setOpenRuleMenuId(null)} />
                     <div
                         className={cn(
-                            "fixed z-[101] w-48 bg-white/90 dark:bg-black/90 backdrop-blur-xl border border-border-color rounded-2xl shadow-xl py-2 overflow-hidden animate-in zoom-in-95 duration-200",
+                            "fixed z-50 w-48 bg-white/90 dark:bg-black/90 backdrop-blur-xl border border-border-color rounded-2xl shadow-xl py-2 overflow-hidden animate-in zoom-in-95 duration-200",
                             ruleMenuPos.bottom ? "origin-bottom-right slide-in-from-bottom-2" : "origin-top-right slide-in-from-top-2"
                         )}
                         style={{
