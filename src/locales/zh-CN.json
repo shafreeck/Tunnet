@@ -372,7 +372,15 @@
             "value": "特征值",
             "policy": "出口动作",
             "cancel": "取消",
-            "save": "确定保存"
+            "save": "确定保存",
+            "placeholders": {
+                "domain": "例如: google.com",
+                "domain_suffix": "例如: apple.com (匹配子域名)",
+                "domain_keyword": "例如: twitter (匹配包含的关键词)",
+                "ip_cidr": "例如: 192.168.1.0/24",
+                "geoip": "例如: cn (国家代码)",
+                "private": "全自动匹配局域网及私有地址"
+            }
         },
         "toast": {
             "applied_preset": "已应用预设: {{name}}",

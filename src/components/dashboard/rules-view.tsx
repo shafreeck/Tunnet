@@ -883,7 +883,23 @@ export function RulesView() {
                                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-1">{t('rules.dialog.type')}</label>
                                 <div className="grid grid-cols-3 gap-2">
                                     {(["DOMAIN", "DOMAIN_SUFFIX", "DOMAIN_KEYWORD", "IP_CIDR", "GEOIP", "IP_IS_PRIVATE"] as const).map(type => (
-                                        <button key={type} onClick={() => setDialogData({ ...dialogData, type, value: type === 'IP_IS_PRIVATE' ? 'true' : dialogData.value })} className={cn("px-2 py-2.5 rounded-xl text-[10px] font-bold border transition-all truncate uppercase tracking-tighter", dialogData.type === type ? "bg-primary border-primary text-white shadow-lg shadow-primary/20" : "bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10")}>{type === 'IP_IS_PRIVATE' ? 'PRIVATE' : type.replace(/_/g, ' ')}</button>
+                                        <button
+                                            key={type}
+                                            onClick={() => {
+                                                let newValue = dialogData.value;
+                                                // If switching to PRIVATE, force value to "true"
+                                                if (type === 'IP_IS_PRIVATE') {
+                                                    newValue = 'true';
+                                                } else if (dialogData.type === 'IP_IS_PRIVATE') {
+                                                    // If switching AWAY from PRIVATE, clear "true" value
+                                                    newValue = '';
+                                                }
+                                                setDialogData({ ...dialogData, type, value: newValue });
+                                            }}
+                                            className={cn("px-2 py-2.5 rounded-xl text-[10px] font-bold border transition-all truncate uppercase tracking-tighter", dialogData.type === type ? "bg-primary border-primary text-white shadow-lg shadow-primary/20" : "bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10")}
+                                        >
+                                            {type === 'IP_IS_PRIVATE' ? 'PRIVATE' : type.replace(/_/g, ' ')}
+                                        </button>
                                     ))}
                                 </div>
                             </div>
@@ -891,12 +907,12 @@ export function RulesView() {
                                 <label className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest pl-1">{t('rules.dialog.value')}</label>
                                 <input
                                     type="text"
-                                    value={dialogData.type === 'IP_IS_PRIVATE' ? 'Match all private addresses' : dialogData.value}
+                                    value={dialogData.type === 'IP_IS_PRIVATE' ? t('rules.dialog.placeholders.private') : dialogData.value}
                                     readOnly={dialogData.type === 'IP_IS_PRIVATE'}
                                     autoFocus
                                     onChange={(e) => setDialogData({ ...dialogData, value: e.target.value })}
                                     className={cn("w-full bg-sidebar-bg/50 border border-border-color rounded-2xl px-6 py-4 text-sm text-text-primary focus:outline-none focus:border-primary/50 transition-all font-mono", dialogData.type === 'IP_IS_PRIVATE' && "opacity-50 cursor-not-allowed")}
-                                    placeholder={dialogData.type === 'DOMAIN' ? 'example.com' : '1.2.3.4/24'}
+                                    placeholder={t(`rules.dialog.placeholders.${(dialogData.type || 'DOMAIN').toLowerCase().replace('ip_is_private', 'private')}` as any)}
                                     autoCapitalize="none"
                                     autoCorrect="off"
                                     spellCheck={false}

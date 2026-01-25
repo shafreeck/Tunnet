@@ -368,7 +368,15 @@
             "value": "Value",
             "policy": "Policy",
             "cancel": "Cancel",
-            "save": "Save"
+            "save": "Save",
+            "placeholders": {
+                "domain": "e.g. google.com",
+                "domain_suffix": "e.g. apple.com (subdomains match)",
+                "domain_keyword": "e.g. twitter (partial match)",
+                "ip_cidr": "e.g. 192.168.1.0/24",
+                "geoip": "e.g. cn (Country Code)",
+                "private": "Auto-matches LAN & Private addresses"
+            }
         },
         "toast": {
             "applied_preset": "Applied preset: {{name}}",
