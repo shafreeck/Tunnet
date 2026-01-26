@@ -938,8 +938,8 @@ export function RulesView({
                 isDialogOpen && (
                     <div className="absolute inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-md bg-black/40 animate-in fade-in duration-500">
                         <div className="absolute inset-0" onClick={() => setIsDialogOpen(false)} />
-                        <div className="relative w-full max-w-lg bg-surface border border-border-color rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300">
-                            <div className="flex items-center justify-between px-8 py-4 border-b border-border-color bg-sidebar-bg/50">
+                        <div className="relative w-full max-w-lg bg-surface border border-border-color rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300 max-h-[85vh] flex flex-col">
+                            <div className="flex items-center justify-between px-8 py-4 border-b border-border-color bg-sidebar-bg/50 shrink-0">
                                 <div className="flex flex-col">
                                     <h3 className="text-lg font-black text-text-primary uppercase tracking-tight">
                                         {editingRule ? t('rules.dialog.edit_title') : t('rules.dialog.add_title')}
@@ -955,7 +955,7 @@ export function RulesView({
                                     <X size={20} />
                                 </button>
                             </div>
-                            <div className="p-8 flex flex-col gap-6">
+                            <div className="p-8 flex flex-col gap-6 flex-1 overflow-y-auto custom-scrollbar">
                                 <div className="space-y-3">
                                     <label className="text-[10px] font-black text-text-tertiary uppercase tracking-widest pl-1">{t('rules.dialog.type')}</label>
                                     <div className="grid grid-cols-3 gap-2">
@@ -1047,7 +1047,7 @@ export function RulesView({
                                     </div>
                                 </div>
                             </div>
-                            <div className="px-8 py-5 border-t border-border-color bg-sidebar-bg/50 flex justify-end gap-3">
+                            <div className="px-8 py-5 border-t border-border-color bg-sidebar-bg/50 flex justify-end gap-3 shrink-0">
                                 <button onClick={() => setIsDialogOpen(false)} disabled={isSavingRule} className="px-5 py-2.5 rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary transition-all uppercase tracking-widest">{t('rules.dialog.cancel')}</button>
                                 <button
                                     onClick={handleSaveRule}
