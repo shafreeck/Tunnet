@@ -622,6 +622,12 @@ export function RulesView({
                                                             {modifiedRuleIds.has(rule.id) && (
                                                                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-amber-500/50 z-20" />
                                                             )}
+                                                            {modifiedRuleIds.has(rule.id) && (
+                                                                <span className="absolute top-2 right-2 flex h-2 w-2 z-20 pointer-events-none">
+                                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                                                                </span>
+                                                            )}
                                                             <div className="flex items-center flex-1 min-w-0">
                                                                 <div
                                                                     {...provided.dragHandleProps}
@@ -639,12 +645,6 @@ export function RulesView({
                                                                     )}>
                                                                         <Shield size={10} className={cn("md:size-3", modifiedRuleIds.has(rule.id) ? "text-amber-500" : "text-primary/70")} />
                                                                         <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-gray-400">{rule.type === 'IP_IS_PRIVATE' ? 'PRIVATE ADDR' : rule.type.replace(/_/g, ' ')}</span>
-                                                                        {modifiedRuleIds.has(rule.id) && (
-                                                                            <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                                                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                                                                                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                                                                            </span>
-                                                                        )}
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex flex-col flex-1 min-w-0">
