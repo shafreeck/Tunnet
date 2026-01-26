@@ -78,7 +78,9 @@
       "resources/geoip-cn.srs",
       "resources/geosite-cn.srs",
       "resources/geosite-category-ads-all.srs",
-      "resources/bin/*"
+      "resources/bin/*",
+      "zh-Hans.lproj",
+      "en.lproj"
     ],
     "macOS": {
       "infoPlist": "Info.plist"
