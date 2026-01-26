@@ -1246,6 +1246,30 @@ impl<R: Runtime> ProxyService<R> {
             }
         }
 
+        // 5. Add MAIN 'proxy' outbound
+        // Collect all proxy-capable outbounds (excluding direct/block)
+        let mut proxy_members = Vec::new();
+        for profile in &profiles {
+            for node in &profile.nodes {
+                if let Some(tag) = id_to_tag.get(&node.id) {
+                     proxy_members.push(tag.clone());
+                }
+            }
+        }
+        for group in &groups {
+             if let Some(tag) = id_to_tag.get(&group.id) {
+                 proxy_members.push(tag.clone());
+             }
+        }
+
+        if proxy_members.is_empty() {
+             proxy_members.push("direct".to_string());
+        }
+
+        // Create 'proxy' selector
+        cfg = cfg.with_selector_outbound("proxy", proxy_members);
+        used_tags.insert("proxy".to_string());
+
         // 3. Add Rules
         let rules = self.manager.load_rules().unwrap_or_default();
         if let Some(route) = &mut cfg.route {
@@ -1272,9 +1296,9 @@ impl<R: Runtime> ProxyService<R> {
                 
                 match rule.rule_type.as_str() {
                     "DOMAIN" => route_rule.domain = Some(vec![rule.value]),
-                    "DOMAIN-SUFFIX" => route_rule.domain_suffix = Some(vec![rule.value]),
-                    "DOMAIN-KEYWORD" => route_rule.domain_keyword = Some(vec![rule.value]),
-                    "IP-CIDR" => route_rule.ip_cidr = Some(vec![rule.value]),
+                    "DOMAIN-SUFFIX" | "DOMAIN_SUFFIX" => route_rule.domain_suffix = Some(vec![rule.value]),
+                    "DOMAIN-KEYWORD" | "DOMAIN_KEYWORD" => route_rule.domain_keyword = Some(vec![rule.value]),
+                    "IP-CIDR" | "IP_CIDR" => route_rule.ip_cidr = Some(vec![rule.value]),
                     // Fix: rule.value (e.g. "geoip-cn") matches the remote rule-set tag, no need to prepend "geoip-"
                     "GEOIP" => route_rule.rule_set = Some(vec![rule.value.to_lowercase()]),
                     _ => continue,
