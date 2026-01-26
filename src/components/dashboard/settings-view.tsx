@@ -344,7 +344,7 @@ function SettingItem({
 }) {
     return (
         <div className={cn(
-            "glass-card flex items-center justify-between p-4 md:p-5 rounded-3xl transition-all duration-500 ring-1 group relative overflow-hidden",
+            "glass-card flex items-center justify-between p-3 md:p-4 rounded-2xl transition-all duration-500 ring-1 group relative overflow-hidden",
             isModified
                 ? "ring-amber-500/50 bg-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.1)]"
                 : "ring-border-color"
@@ -352,10 +352,10 @@ function SettingItem({
             {isModified && (
                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-amber-500/50" />
             )}
-            <div className="flex items-center gap-3 md:gap-5 flex-1 min-w-0 z-10">
+            <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0 z-10">
                 {icon && (
                     <div className={cn(
-                        "size-10 md:size-12 shrink-0 rounded-2xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 relative",
+                        "h-9 w-9 md:h-10 md:w-10 shrink-0 rounded-xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 relative",
                         isModified
                             ? "bg-amber-500/20 text-amber-500"
                             : "bg-black/5 dark:bg-white/5 text-secondary group-hover:text-primary group-hover:bg-primary/10"
@@ -418,27 +418,33 @@ function GeneralSettings({ settings, update, version, modifiedKeys = [] }: Commo
     return (
         <div className="py-2">
             <Section title={t('settings.general.appearance')} icon={<Monitor size={14} />}>
-                <div className="glass-card p-1.5 rounded-2xl flex border border-border-color">
-                    {[
-                        { id: "light", label: t('settings.general.mode.light'), icon: <Sun size={16} /> },
-                        { id: "dark", label: t('settings.general.mode.dark'), icon: <Moon size={16} /> },
-                        { id: "system", label: t('settings.general.mode.system'), icon: <Laptop size={16} /> }
-                    ].map((mode) => (
-                        <button
-                            key={mode.id}
-                            onClick={() => handleThemeChange(mode.id)}
-                            className={cn(
-                                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all",
-                                theme === mode.id
-                                    ? "bg-white dark:bg-white/10 text-black dark:text-white shadow-sm"
-                                    : "text-secondary hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"
-                            )}
-                        >
-                            {mode.icon}
-                            {mode.label}
-                        </button>
-                    ))}
-                </div>
+                <SettingItem
+                    title={t('settings.general.mode.title', { defaultValue: 'Theme Mode' })}
+                    description={t('settings.general.mode.desc', { defaultValue: 'Choose your preferred visual style' })}
+                    icon={<Sun size={20} />}
+                >
+                    <div className="flex items-center p-1 bg-black/10 dark:bg-black/20 rounded-xl border border-white/5">
+                        {[
+                            { id: "light", icon: <Sun size={14} /> },
+                            { id: "dark", icon: <Moon size={14} /> },
+                            { id: "system", icon: <Laptop size={14} /> }
+                        ].map((mode) => (
+                            <button
+                                key={mode.id}
+                                onClick={() => handleThemeChange(mode.id)}
+                                className={cn(
+                                    "p-2 rounded-lg transition-all",
+                                    theme === mode.id
+                                        ? "bg-white dark:bg-white/10 text-primary shadow-sm"
+                                        : "text-tertiary hover:text-secondary hover:bg-white/5"
+                                )}
+                                title={t(`settings.general.mode.${mode.id}`)}
+                            >
+                                {mode.icon}
+                            </button>
+                        ))}
+                    </div>
+                </SettingItem>
 
                 <SettingItem
                     title={t('settings.general.show_sidebar_status.title', { defaultValue: 'Show Status Info' })}
@@ -450,25 +456,31 @@ function GeneralSettings({ settings, update, version, modifiedKeys = [] }: Commo
             </Section>
 
             <Section title={t('settings.language.title')} icon={<Globe size={14} />}>
-                <div className="glass-card p-1.5 rounded-2xl flex border border-border-color">
-                    {[
-                        { id: "en", label: "English" },
-                        { id: "zh-CN", label: "简体中文" }
-                    ].map((lang) => (
-                        <button
-                            key={lang.id}
-                            onClick={() => changeLanguage(lang.id)}
-                            className={cn(
-                                "flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all",
-                                i18n.language === lang.id
-                                    ? "bg-white dark:bg-white/10 text-black dark:text-white shadow-sm"
-                                    : "text-secondary hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"
-                            )}
-                        >
-                            {lang.label}
-                        </button>
-                    ))}
-                </div>
+                <SettingItem
+                    title={t('settings.language.display_language', { defaultValue: 'Display Language' })}
+                    description={t('settings.language.desc', { defaultValue: 'Change the language of the user interface' })}
+                    icon={<Globe size={20} />}
+                >
+                    <div className="flex items-center p-1 bg-black/10 dark:bg-black/20 rounded-xl border border-white/5 gap-1">
+                        {[
+                            { id: "en", label: "EN" },
+                            { id: "zh-CN", label: "中文" }
+                        ].map((lang) => (
+                            <button
+                                key={lang.id}
+                                onClick={() => changeLanguage(lang.id)}
+                                className={cn(
+                                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all min-w-[40px]",
+                                    i18n.language === lang.id
+                                        ? "bg-white dark:bg-white/10 text-primary shadow-sm"
+                                        : "text-tertiary hover:text-secondary hover:bg-white/5"
+                                )}
+                            >
+                                {lang.label}
+                            </button>
+                        ))}
+                    </div>
+                </SettingItem>
             </Section>
 
             <Section title={t('settings.general.launch_behavior')} icon={<Power size={14} />}>
