@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { Plus, Search, Trash2, Edit2, Shield, Globe, Monitor, AlertCircle, ChevronUp, ChevronDown, Loader2, GripVertical, Check, RotateCcw, Zap } from "lucide-react"
+import { Plus, Search, Trash2, Edit2, Shield, Globe, Monitor, AlertCircle, ChevronUp, ChevronDown, Loader2, GripVertical, Check, RotateCcw, Zap, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
 import { emit, listen } from "@tauri-apps/api/event"
@@ -928,15 +928,28 @@ export function RulesView({
             {/* Modal - Simplified Integration */}
             {
                 isDialogOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-sm bg-black/60 animate-in fade-in duration-500">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-200">
                         <div className="fixed inset-0" onClick={() => setIsDialogOpen(false)} />
-                        <div className="relative w-full max-w-lg bg-sidebar-bg border border-border-color rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300">
-                            <div className="px-8 py-5 border-b border-border-color bg-black/10 dark:bg-white/5">
-                                <h3 className="text-lg font-bold text-text-primary tracking-tight">{editingRule ? t('rules.dialog.edit_title') : t('rules.dialog.add_title')}</h3>
+                        <div className="relative w-full max-w-lg bg-surface border border-border-color rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300">
+                            <div className="flex items-center justify-between px-8 py-4 border-b border-border-color bg-sidebar-bg/50">
+                                <div className="flex flex-col">
+                                    <h3 className="text-lg font-black text-text-primary uppercase tracking-tight">
+                                        {editingRule ? t('rules.dialog.edit_title') : t('rules.dialog.add_title')}
+                                    </h3>
+                                    <span className="text-[9px] font-bold text-text-tertiary uppercase tracking-widest mt-0.5">
+                                        {t('rules.dialog.subtitle', { defaultValue: 'Configure rule characteristic and policy' })}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={() => setIsDialogOpen(false)}
+                                    className="p-1.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-text-tertiary hover:text-red-500 transition-all active:scale-90"
+                                >
+                                    <X size={20} />
+                                </button>
                             </div>
                             <div className="p-8 flex flex-col gap-6">
                                 <div className="space-y-3">
-                                    <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest pl-1">{t('rules.dialog.type')}</label>
+                                    <label className="text-[10px] font-black text-text-tertiary uppercase tracking-widest pl-1">{t('rules.dialog.type')}</label>
                                     <div className="grid grid-cols-3 gap-2">
                                         {(["DOMAIN", "DOMAIN_SUFFIX", "DOMAIN_KEYWORD", "IP_CIDR", "GEOIP", "IP_IS_PRIVATE"] as const).map(type => (
                                             <button
@@ -951,10 +964,10 @@ export function RulesView({
                                                     setDialogData({ ...dialogData, type, value: newValue });
                                                 }}
                                                 className={cn(
-                                                    "px-2 py-2.5 rounded-xl text-[10px] font-bold border transition-all truncate uppercase tracking-tighter",
+                                                    "px-2 py-3 rounded-2xl text-[10px] font-bold border transition-all truncate uppercase tracking-tighter shadow-sm",
                                                     dialogData.type === type
                                                         ? "bg-linear-to-br from-primary to-blue-600 border-primary/50 text-white shadow-lg shadow-primary/25 border-t-white/30"
-                                                        : "bg-black/10 dark:bg-black/40 border-border-color text-text-secondary hover:text-text-primary hover:bg-white/10"
+                                                        : "bg-black/3 dark:bg-white/5 border-border-color text-text-secondary hover:text-text-primary hover:bg-white/10"
                                                 )}
                                             >
                                                 {type === 'IP_IS_PRIVATE' ? 'PRIVATE' : type.replace(/_/g, ' ')}
@@ -963,7 +976,7 @@ export function RulesView({
                                     </div>
                                 </div>
                                 <div className="space-y-3">
-                                    <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest pl-1">{t('rules.dialog.value')}</label>
+                                    <label className="text-[10px] font-black text-text-tertiary uppercase tracking-widest pl-1">{t('rules.dialog.value')}</label>
                                     <input
                                         type="text"
                                         value={dialogData.type === 'IP_IS_PRIVATE' ? t('rules.dialog.placeholders.private') : dialogData.value}
@@ -971,7 +984,7 @@ export function RulesView({
                                         autoFocus
                                         onChange={(e) => setDialogData({ ...dialogData, value: e.target.value })}
                                         className={cn(
-                                            "w-full bg-black/10 dark:bg-black/40 border border-border-color rounded-2xl px-6 py-4 text-sm text-text-primary focus:outline-none focus:border-primary/50 transition-all font-mono placeholder:text-text-tertiary",
+                                            "w-full bg-black/3 dark:bg-white/5 border border-border-color rounded-2xl px-6 py-4 text-xs font-bold text-text-primary focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary/30 transition-all font-mono placeholder:text-text-tertiary/60",
                                             dialogData.type === 'IP_IS_PRIVATE' && "opacity-50 cursor-not-allowed text-text-tertiary"
                                         )}
                                         placeholder={t(`rules.dialog.placeholders.${(dialogData.type || 'DOMAIN').toLowerCase().replace('ip_is_private', 'private')}` as any)}
@@ -981,10 +994,10 @@ export function RulesView({
                                     />
                                 </div>
                                 <div className="space-y-3">
-                                    <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest pl-1">{t('rules.dialog.policy')}</label>
+                                    <label className="text-[10px] font-black text-text-tertiary uppercase tracking-widest pl-1">{t('rules.dialog.policy')}</label>
                                     <div className="flex flex-wrap gap-2">
                                         {/* Standard Policies */}
-                                        <div className="flex bg-black/10 dark:bg-black/40 p-1.5 rounded-[1.25rem] border border-border-color/50 flex-1 min-w-[240px]">
+                                        <div className="flex bg-black/3 dark:bg-white/5 p-1.5 rounded-2xl border border-border-color/50 flex-1 min-w-[240px]">
                                             {(["PROXY", "DIRECT", "REJECT"] as const).map(policy => (
                                                 <button
                                                     key={policy}
@@ -1006,16 +1019,16 @@ export function RulesView({
                                         </div>
                                         {/* Groups */}
                                         {groups.length > 0 && (
-                                            <div className="flex flex-wrap gap-2 w-full">
+                                            <div className="flex flex-wrap gap-2 w-full pt-1">
                                                 {groups.map(group => (
                                                     <button
                                                         key={group.id}
                                                         onClick={() => setDialogData({ ...dialogData, policy: group.id })}
                                                         className={cn(
-                                                            "px-4 py-2 rounded-xl text-[10px] font-bold transition-all border",
+                                                            "px-4 py-2.5 rounded-xl text-[10px] font-bold transition-all border shadow-sm",
                                                             dialogData.policy === group.id
-                                                                ? "bg-primary text-white border-primary shadow-lg"
-                                                                : "bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/5 text-text-tertiary hover:text-primary hover:bg-primary/10"
+                                                                ? "bg-primary text-white border-primary shadow-lg shadow-primary/20"
+                                                                : "bg-black/3 dark:bg-white/5 border-border-color text-text-tertiary hover:text-primary hover:bg-primary/5 hover:border-primary/30"
                                                         )}
                                                     >
                                                         {group.name}
@@ -1026,13 +1039,13 @@ export function RulesView({
                                     </div>
                                 </div>
                             </div>
-                            <div className="px-8 py-5 border-t border-border-color bg-black/10 dark:bg-white/5 flex justify-end gap-3">
-                                <button onClick={() => setIsDialogOpen(false)} disabled={isSavingRule} className="px-5 py-2.5 rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary transition-all">{t('rules.dialog.cancel')}</button>
+                            <div className="px-8 py-5 border-t border-border-color bg-sidebar-bg/50 flex justify-end gap-3">
+                                <button onClick={() => setIsDialogOpen(false)} disabled={isSavingRule} className="px-5 py-2.5 rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary transition-all uppercase tracking-widest">{t('rules.dialog.cancel')}</button>
                                 <button
                                     onClick={handleSaveRule}
                                     disabled={isSavingRule}
                                     className={cn(
-                                        "px-7 py-2.5 rounded-xl text-xs font-bold bg-linear-to-br from-primary to-blue-600 text-white transition-all shadow-xl shadow-primary/25 border-t border-t-white/30 scale-100 active:scale-95 flex items-center gap-2",
+                                        "px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] bg-primary hover:bg-primary/90 text-white transition-all shadow-xl shadow-primary/25 border-t border-t-white/30 scale-100 active:scale-95 flex items-center gap-2",
                                         isSavingRule ? "opacity-70 cursor-wait active:scale-100" : ""
                                     )}
                                 >

@@ -537,7 +537,7 @@ export function EditSubscriptionModal({ isOpen, onClose, onSave, initialData }: 
     if (!isOpen) return null
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-200">
             <div className="bg-white dark:bg-[#1a1a1a] border border-border-color w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
                 <h3 className="text-lg font-bold text-text-primary">{t('subscriptions.edit_subscription', { defaultValue: 'Edit Subscription' })}</h3>
 

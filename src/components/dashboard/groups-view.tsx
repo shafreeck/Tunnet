@@ -397,20 +397,33 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
 
             {/* Dialog */}
             {isDialogOpen && (
-                <div className="fixed inset-0 z-100 flex items-center justify-center p-6 backdrop-blur-sm bg-black/60 animate-in fade-in duration-300">
+                <div className="fixed inset-0 z-100 flex items-center justify-center p-6 backdrop-blur-md bg-black/40 animate-in fade-in duration-300">
                     <div className="fixed inset-0" onClick={() => setIsDialogOpen(false)} />
-                    <div className="relative w-full max-w-xl bg-sidebar-bg border border-border-color rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[85vh]">
-                        <div className="px-6 py-4 border-b border-border-color bg-black/10 dark:bg-white/5 shrink-0">
-                            <h3 className="text-base font-bold text-text-primary tracking-tight">{editingGroup ? t('groups.edit') : t('groups.create')}</h3>
+                    <div className="relative w-full max-w-xl bg-surface border border-border-color rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[85vh]">
+                        <div className="flex items-center justify-between px-8 py-4 border-b border-border-color bg-sidebar-bg/50 shrink-0">
+                            <div className="flex flex-col">
+                                <h3 className="text-lg font-black text-text-primary uppercase tracking-tight">
+                                    {editingGroup ? t('groups.edit') : t('groups.create')}
+                                </h3>
+                                <span className="text-[9px] font-bold text-text-tertiary uppercase tracking-widest mt-0.5">
+                                    {t('groups.subtitle_dialog', { defaultValue: 'Define node grouping and selection logic' })}
+                                </span>
+                            </div>
+                            <button
+                                onClick={() => setIsDialogOpen(false)}
+                                className="p-1.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-text-tertiary hover:text-red-500 transition-all active:scale-90"
+                            >
+                                <X size={20} />
+                            </button>
                         </div>
 
-                        <div className="p-6 overflow-y-auto flex-1 flex flex-col gap-5">
+                        <div className="p-8 overflow-y-auto flex-1 flex flex-col gap-6">
                             <div className="space-y-3">
-                                <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest pl-1">{t('groups.name')}</label>
+                                <label className="text-[10px] font-black text-text-tertiary uppercase tracking-widest pl-1">{t('groups.name')}</label>
                                 <input
                                     value={dialogName}
                                     onChange={e => setDialogName(e.target.value)}
-                                    className="w-full bg-black/5 dark:bg-black/40 border border-border-color/50 focus:border-primary/40 rounded-xl py-2.5 px-4 text-sm text-text-primary focus:outline-none transition-all placeholder:text-text-tertiary"
+                                    className="w-full bg-black/3 dark:bg-white/5 border border-border-color rounded-2xl py-4 px-6 text-xs font-bold text-text-primary focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary/30 transition-all placeholder:text-text-tertiary/60"
                                     placeholder={t('groups.name_placeholder')}
                                     autoCapitalize="none"
                                     autoCorrect="off"
@@ -420,66 +433,66 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
 
                             <div className="grid grid-cols-2 gap-6">
                                 <div className="space-y-3">
-                                    <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest pl-1">{t('groups.type')}</label>
-                                    <div className="flex bg-black/10 dark:bg-black/40 p-1 rounded-xl border border-border-color/50">
-                                        <button onClick={() => setDialogType("Selector")} className={cn("flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all", dialogType === "Selector" ? "bg-linear-to-br from-primary to-blue-600 text-white shadow shadow-primary/20" : "text-text-secondary hover:text-text-primary")}>Selector</button>
-                                        <button onClick={() => setDialogType("UrlTest")} className={cn("flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all", dialogType === "UrlTest" ? "bg-linear-to-br from-primary to-blue-600 text-white shadow shadow-primary/20" : "text-text-secondary hover:text-text-primary")}>URL Test</button>
+                                    <label className="text-[10px] font-black text-text-tertiary uppercase tracking-widest pl-1">{t('groups.type')}</label>
+                                    <div className="flex bg-black/3 dark:bg-white/5 p-1.5 rounded-2xl border border-border-color/50">
+                                        <button onClick={() => setDialogType("Selector")} className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-bold transition-all uppercase tracking-widest", dialogType === "Selector" ? "bg-linear-to-br from-primary to-blue-600 text-white shadow-lg shadow-primary/20 border-t border-t-white/30" : "text-text-secondary hover:text-text-primary")}>Selector</button>
+                                        <button onClick={() => setDialogType("UrlTest")} className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-bold transition-all uppercase tracking-widest", dialogType === "UrlTest" ? "bg-linear-to-br from-primary to-blue-600 text-white shadow-lg shadow-primary/20 border-t border-t-white/30" : "text-text-secondary hover:text-text-primary")}>URL Test</button>
                                     </div>
                                 </div>
                                 <div className="space-y-3">
-                                    <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest pl-1">{t('groups.source')}</label>
-                                    <div className="flex bg-black/10 dark:bg-black/40 p-1 rounded-xl border border-border-color/50">
-                                        <button onClick={() => setDialogSourceType("Static")} className={cn("flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all", dialogSourceType === "Static" ? "bg-linear-to-br from-primary to-blue-600 text-white shadow shadow-primary/20" : "text-text-secondary hover:text-text-primary")}>Static</button>
-                                        <button onClick={() => setDialogSourceType("Filter")} className={cn("flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all", dialogSourceType === "Filter" ? "bg-linear-to-br from-primary to-blue-600 text-white shadow shadow-primary/20" : "text-text-secondary hover:text-text-primary")}>Filter</button>
+                                    <label className="text-[10px] font-black text-text-tertiary uppercase tracking-widest pl-1">{t('groups.source')}</label>
+                                    <div className="flex bg-black/3 dark:bg-white/5 p-1.5 rounded-2xl border border-border-color/50">
+                                        <button onClick={() => setDialogSourceType("Static")} className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-bold transition-all uppercase tracking-widest", dialogSourceType === "Static" ? "bg-linear-to-br from-primary to-blue-600 text-white shadow-lg shadow-primary/20 border-t border-t-white/30" : "text-text-secondary hover:text-text-primary")}>Static</button>
+                                        <button onClick={() => setDialogSourceType("Filter")} className={cn("flex-1 py-2.5 rounded-xl text-[10px] font-bold transition-all uppercase tracking-widest", dialogSourceType === "Filter" ? "bg-linear-to-br from-primary to-blue-600 text-white shadow-lg shadow-primary/20 border-t border-t-white/30" : "text-text-secondary hover:text-text-primary")}>Filter</button>
                                     </div>
                                 </div>
                             </div>
 
                             {dialogSourceType === "Static" ? (
-                                <div className="space-y-3 flex-1 flex flex-col min-h-[240px]">
-                                    <label className="text-[10px] font-bold text-text-secondary uppercase tracking-widest pl-1">{t('groups.select_nodes')}</label>
-                                    <div className="flex-1 border border-border-color/50 rounded-xl bg-black/5 dark:bg-black/40 overflow-y-auto p-1.5 space-y-0.5">
+                                <div className="space-y-3 flex-1 flex flex-col min-h-[300px]">
+                                    <label className="text-[10px] font-black text-text-tertiary uppercase tracking-widest pl-1">{t('groups.select_nodes')}</label>
+                                    <div className="flex-1 border border-border-color rounded-2xl bg-black/3 dark:bg-white/5 overflow-y-auto p-2 space-y-1 custom-scrollbar">
                                         {allNodes.map(node => (
                                             <div
                                                 key={node.id}
                                                 onClick={() => toggleNode(node.id)}
-                                                className={cn("flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all", dialogNodeIds.has(node.id) ? "bg-primary/15 border border-primary/20" : "hover:bg-white/5 border border-transparent")}
+                                                className={cn("flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border shadow-sm", dialogNodeIds.has(node.id) ? "bg-primary/10 border-primary/20" : "hover:bg-white/5 border-transparent")}
                                             >
-                                                <div className="flex items-center gap-2.5 overflow-hidden">
-                                                    <div className={cn("size-3.5 rounded-full border flex items-center justify-center shrink-0", dialogNodeIds.has(node.id) ? "border-primary bg-primary" : "border-border-color bg-black/10")}>
-                                                        {dialogNodeIds.has(node.id) && <Check size={8} className="text-white" />}
+                                                <div className="flex items-center gap-3 overflow-hidden">
+                                                    <div className={cn("size-4 rounded-full border flex items-center justify-center shrink-0 transition-colors", dialogNodeIds.has(node.id) ? "border-primary bg-primary" : "border-border-color bg-black/10")}>
+                                                        {dialogNodeIds.has(node.id) && <Check size={10} className="text-white" strokeWidth={3} />}
                                                     </div>
-                                                    <span className="text-xs font-medium truncate">{node.name}</span>
+                                                    <span className={cn("text-xs font-bold truncate", dialogNodeIds.has(node.id) ? "text-primary" : "text-text-secondary")}>{node.name}</span>
                                                 </div>
-                                                <span className="text-[9px] font-bold text-text-tertiary uppercase bg-black/20 px-1.5 py-0.5 rounded shadow-sm">{node.protocol}</span>
+                                                <span className="text-[10px] font-black text-text-tertiary uppercase bg-black/5 dark:bg-white/10 px-2 py-1 rounded shadow-sm">{node.protocol}</span>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
                             ) : (
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold text-text-tertiary uppercase tracking-widest">{t('groups.keywords')}</label>
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black text-text-tertiary uppercase tracking-widest pl-1">{t('groups.keywords')}</label>
                                     <input
                                         value={dialogKeywords}
                                         onChange={e => setDialogKeywords(e.target.value)}
-                                        className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/20 rounded-xl py-3 px-4 text-sm text-text-primary focus:outline-none transition-all"
+                                        className="w-full bg-black/3 dark:bg-white/5 border border-border-color rounded-2xl py-4 px-6 text-xs font-bold text-text-primary focus:outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary/30 transition-all placeholder:text-text-tertiary/60"
                                         placeholder={t('groups.keywords_placeholder')} // "e.g. US, Netflix, Premium"
                                         autoCapitalize="none"
                                         autoCorrect="off"
                                         spellCheck={false}
                                     />
-                                    <p className="text-[10px] text-text-tertiary">{t('groups.keywords_help')}</p>
+                                    <p className="text-[10px] font-medium text-text-tertiary italic pl-1">{t('groups.keywords_help')}</p>
                                 </div>
                             )}
 
                         </div>
 
-                        <div className="px-6 py-4 border-t border-border-color bg-black/10 dark:bg-white/5 flex justify-end gap-3 shrink-0">
-                            <button onClick={() => setIsDialogOpen(false)} className="px-5 py-2.5 rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary transition-all">{t('groups.cancel')}</button>
+                        <div className="px-8 py-5 border-t border-border-color bg-sidebar-bg/50 flex justify-end gap-3 shrink-0">
+                            <button onClick={() => setIsDialogOpen(false)} className="px-5 py-2.5 rounded-xl text-xs font-bold text-text-secondary hover:text-text-primary transition-all uppercase tracking-widest">{t('groups.cancel')}</button>
                             <button
                                 onClick={handleSave}
                                 disabled={isSaving}
-                                className="px-7 py-2.5 rounded-xl text-xs font-bold bg-linear-to-br from-primary to-blue-600 text-white transition-all shadow-xl shadow-primary/25 border-t border-t-white/30 scale-100 active:scale-95 flex items-center gap-2"
+                                className="px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] bg-primary hover:bg-primary/90 text-white transition-all shadow-xl shadow-primary/25 border-t border-t-white/30 scale-100 active:scale-95 flex items-center gap-2"
                             >
                                 {isSaving && <Loader2 size={14} className="animate-spin" />}
                                 {t('groups.save')}
@@ -491,7 +504,7 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
 
             {/* Selection Dialog */}
             {selectionDialogOpen && (
-                <div className="fixed inset-0 z-100 flex items-center justify-center p-6 backdrop-blur-xl bg-black/60 animate-in fade-in duration-300">
+                <div className="fixed inset-0 z-100 flex items-center justify-center p-6 backdrop-blur-md bg-black/40 animate-in fade-in duration-300">
                     <div className="fixed inset-0" onClick={() => setSelectionDialogOpen(false)} />
                     <div className="relative w-full max-w-lg glass-card border border-border-color rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[80vh]">
                         <div className="px-8 py-6 border-b border-border-color bg-sidebar-bg shrink-0 flex justify-between items-center">

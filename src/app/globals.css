@@ -42,7 +42,7 @@
   --app-bg: rgba(245, 245, 247, 0.85);
   --app-bg-gradient: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(242, 242, 247, 0.85) 100%);
 
-  --sidebar-bg: rgba(245, 245, 247, 0.75);
+  --sidebar-bg: rgba(245, 245, 247, 0.8);
   --sidebar-border: rgba(0, 0, 0, 0.05);
 
   --surface: #ffffff;
@@ -68,7 +68,7 @@
   --app-bg: rgba(20, 20, 25, 0.9);
   --app-bg-gradient: linear-gradient(180deg, rgba(28, 28, 46, 0.95) 0%, rgba(15, 15, 20, 0.95) 100%);
 
-  --sidebar-bg: rgba(40, 40, 45, 0.45);
+  --sidebar-bg: rgba(40, 40, 45, 0.8);
   --sidebar-border: rgba(255, 255, 255, 0.12);
 
   --surface: #1c1c1e;
