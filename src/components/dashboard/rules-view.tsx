@@ -69,12 +69,35 @@ export function RulesView({
     const [isMac, setIsMac] = useState(false)
     const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null)
 
+    // Snapshot for reorder detection and soft delete
+    const [snapshotIds, setSnapshotIds] = useState<string[]>([])
+    const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set())
+
+    // Initialize snapshot when initial rules are loaded
+    useEffect(() => {
+        if (initialRules.length > 0 && snapshotIds.length === 0) {
+            setSnapshotIds(initialRules.map(r => r.id))
+        } else if (initialRules.length === 0 && snapshotIds.length > 0) {
+            // Reset snapshot if rules are cleared externally or mostly empty
+            setSnapshotIds([])
+        }
+    }, [initialRules])
+
     // Check if the current rules/policy deviate from what's currently active on the server
     const hasPendingChanges = React.useMemo(() => {
         const isRulesDifferent = !areRuleSetsEqual(rules, initialRules)
         const isPolicyDifferent = defaultPolicy !== initialDefaultPolicy
         return isRulesDifferent || isPolicyDifferent
     }, [rules, initialRules, defaultPolicy, initialDefaultPolicy])
+
+    // Reset snapshot when applying changes - moved here to access hasPendingChanges
+    useEffect(() => {
+        if (!hasPendingChanges) {
+            setPendingDeleteIds(new Set())
+            // Update snapshot to match current rules as they are now "saved"
+            setSnapshotIds(rules.map(r => r.id))
+        }
+    }, [hasPendingChanges, rules])
 
     const isDefaultPolicyModified = React.useMemo(() => {
         return defaultPolicy !== initialDefaultPolicy
@@ -161,7 +184,10 @@ export function RulesView({
         try {
             await invoke("save_rules", { rules: payload })
             if (!isSilent) {
-                checkPendingChanges(rulesToSave, policy)
+                // We don't check pending changes here, as it's computed by useMemo.
+                // But we update the snapshot for reorder detection
+                setSnapshotIds(rulesToSave.map(r => r.id))
+                setPendingDeleteIds(new Set())
             }
         } catch (e) {
             console.error("Failed to save rules:", e)
@@ -171,12 +197,20 @@ export function RulesView({
 
     const handleApplyChanges = async () => {
         if (!proxyStatus?.is_running) {
+            // Apply soft deletes before saving
+            const finalRules = rules.filter(r => !pendingDeleteIds.has(r.id))
+
             // Persist rules to disk first
             try {
-                await saveRulesToBackend(rules, defaultPolicy)
-                setInitialRules([...rules])
+                // Pass true for isSilent to prevent auto-snapshot update, we manage it manually here
+                await saveRulesToBackend(finalRules, defaultPolicy, true)
+                setInitialRules([...finalRules])
+                setRules(finalRules) // Sync local state to remove soft-deleted items visualy
                 setInitialDefaultPolicy(defaultPolicy)
-                // Purely reactive via useMemo(hasPendingChanges)
+                // Manually update snapshot after success
+                setSnapshotIds(finalRules.map(r => r.id))
+                setPendingDeleteIds(new Set())
+
                 toast.success(t('rules.toast.saved_only'))
             } catch (e) {
                 toast.error(t('rules.toast.save_failed'))
@@ -188,8 +222,12 @@ export function RulesView({
         emit("proxy-transition", { state: "connecting" })
 
         try {
+            // Apply soft deletes before saving
+            const finalRules = rules.filter(r => !pendingDeleteIds.has(r.id))
+
             // Ensure rules are saved before restarting
-            await saveRulesToBackend(rules, defaultPolicy)
+            // Pass true for isSilent to prevent auto-snapshot update
+            await saveRulesToBackend(finalRules, defaultPolicy, true)
 
             // Fetch current active node
             const settings: any = await invoke("get_app_settings")
@@ -201,10 +239,18 @@ export function RulesView({
                 tun: proxyStatus.tun_mode,
                 routing: proxyStatus.routing_mode
             })
-            setInitialRules([...rules])
+            setInitialRules([...finalRules])
             setInitialDefaultPolicy(defaultPolicy)
             // Purely reactive via useMemo(hasPendingChanges)
             localStorage.setItem("tunnet_rules_preset", currentPreset)
+
+            // Sync local rules to remove soft-deleted items visually
+            setRules(finalRules)
+
+            // Manually update snapshot after success
+            setSnapshotIds(finalRules.map(r => r.id))
+            setPendingDeleteIds(new Set())
+
             toast.success(t('rules.toast.applied_success'))
         } catch (err) {
             console.error("Failed to apply rules:", err)
@@ -301,17 +347,24 @@ export function RulesView({
     const handleDeleteRule = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation()
         if (deletingRuleId) return
-        setDeletingRuleId(id)
-        try {
-            const newRules = rules.filter(r => r.id !== id)
-            setRules(newRules)
-            switchToCustom(newRules, defaultPolicy)
-            toast.success(t('rules.toast.rule_deleted'))
-        } catch (err) {
-            toast.error(t('rules.toast.delete_failed'))
-        } finally {
-            setDeletingRuleId(null)
-        }
+
+        // Soft delete: just add to pending set
+        setPendingDeleteIds(prev => {
+            const next = new Set(prev)
+            next.add(id)
+            return next
+        })
+        toast.success(t('rules.toast.rule_deleted_pending'))
+    }
+
+    const handleRestoreRule = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation()
+        setPendingDeleteIds(prev => {
+            const next = new Set(prev)
+            next.delete(id)
+            return next
+        })
+        toast.success(t('rules.toast.rule_restored'))
     }
 
     const handleSaveRule = async () => {
@@ -597,6 +650,9 @@ export function RulesView({
                                                 isDragDisabled={searchQuery !== "" || selectedPolicy !== "ALL"}
                                             >
                                                 {(provided, snapshot) => {
+                                                    const isPendingDelete = pendingDeleteIds.has(rule.id)
+                                                    const isMoved = snapshotIds.includes(rule.id) && snapshotIds.indexOf(rule.id) !== index && !isPendingDelete
+
                                                     const content = (
                                                         <div
                                                             ref={provided.innerRef}
@@ -609,31 +665,49 @@ export function RulesView({
                                                                 maxWidth: snapshot.isDragging ? '1024px' : 'none',
                                                             }}
                                                             className={cn(
-                                                                "glass-card flex items-center justify-between p-4 rounded-2xl group border border-transparent hover:border-border-color transition-all duration-500 relative overflow-hidden",
-                                                                modifiedRuleIds.has(rule.id)
-                                                                    ? "ring-1 ring-amber-500/50 bg-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.1)]"
-                                                                    : "hover:border-border-color",
+                                                                "glass-card flex items-center justify-between p-4 rounded-2xl group border border-transparent transition-all duration-500 relative overflow-hidden",
+                                                                isPendingDelete
+                                                                    ? "border-red-500/30 bg-red-500/5 opacity-80"
+                                                                    : modifiedRuleIds.has(rule.id)
+                                                                        ? "ring-1 ring-amber-500/50 bg-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.1)]"
+                                                                        : "hover:border-border-color",
                                                                 snapshot.isDragging
                                                                     ? "shadow-2xl border-primary/40 z-50 bg-sidebar-bg/90 backdrop-blur-2xl ring-2 ring-primary/20 scale-[1.02]"
-                                                                    : "transition-all duration-300 hover:bg-black/5 dark:hover:bg-white/8"
+                                                                    : !isPendingDelete && "transition-all duration-300 hover:bg-black/5 dark:hover:bg-white/8"
                                                             )}
                                                         >
-                                                            {/* Modified Indicator Dot Style */}
-                                                            {modifiedRuleIds.has(rule.id) && (
+                                                            {/* Delete Indicator Bar */}
+                                                            {isPendingDelete && (
+                                                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500/50 z-20" />
+                                                            )}
+
+                                                            {/* Modified Indicator Bar (only if not deleted) */}
+                                                            {!isPendingDelete && modifiedRuleIds.has(rule.id) && (
                                                                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-amber-500/50 z-20" />
                                                             )}
-                                                            {modifiedRuleIds.has(rule.id) && (
+
+                                                            {/* Reorder Indicator (Blue Dot at bottom-left corner) */}
+                                                            {isMoved && !snapshot.isDragging && (
+                                                                <div className="absolute bottom-2 left-2 flex h-1.5 w-1.5 z-20" title="Order changed">
+                                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-500"></span>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Modified Pin Dot (Top Right) */}
+                                                            {!isPendingDelete && modifiedRuleIds.has(rule.id) && (
                                                                 <span className="absolute top-2 right-2 flex h-2 w-2 z-20 pointer-events-none">
                                                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                                                                     <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
                                                                 </span>
                                                             )}
+
                                                             <div className="flex items-center flex-1 min-w-0">
                                                                 <div
                                                                     {...provided.dragHandleProps}
                                                                     className={cn(
                                                                         "p-0 pr-1 md:pr-2 text-gray-400 hover:text-primary transition-colors cursor-grab active:cursor-grabbing",
-                                                                        (searchQuery !== "" || selectedPolicy !== "ALL") && "hidden"
+                                                                        (searchQuery !== "" || selectedPolicy !== "ALL" || isPendingDelete) && "hidden"
                                                                     )}
                                                                 >
                                                                     <GripVertical size={16} />
@@ -643,14 +717,20 @@ export function RulesView({
                                                                         "flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-xl border w-fit transition-all duration-300 relative",
                                                                         "bg-white/5 border-white/5 text-gray-400"
                                                                     )}>
-                                                                        <Shield size={10} className={cn("md:size-3", modifiedRuleIds.has(rule.id) ? "text-amber-500" : "text-primary/70")} />
-                                                                        <span className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-gray-400">{rule.type === 'IP_IS_PRIVATE' ? 'PRIVATE ADDR' : rule.type.replace(/_/g, ' ')}</span>
+                                                                        <Shield size={10} className={cn("md:size-3", !isPendingDelete && modifiedRuleIds.has(rule.id) ? "text-amber-500" : "text-primary/70")} />
+                                                                        <span className={cn(
+                                                                            "text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-gray-400",
+                                                                            isPendingDelete && "line-through opacity-70"
+                                                                        )}>
+                                                                            {rule.type === 'IP_IS_PRIVATE' ? 'PRIVATE ADDR' : rule.type.replace(/_/g, ' ')}
+                                                                        </span>
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex flex-col flex-1 min-w-0">
                                                                     <span className={cn(
                                                                         "text-xs md:text-sm font-semibold font-mono truncate transition-colors",
-                                                                        modifiedRuleIds.has(rule.id) ? "text-amber-500" : "text-text-primary"
+                                                                        isPendingDelete ? "text-red-500 line-through decoration-red-500/50" :
+                                                                            modifiedRuleIds.has(rule.id) ? "text-amber-500" : "text-text-primary"
                                                                     )}>{rule.value}</span>
                                                                     {rule.description && <span className="text-[10px] md:text-xs text-text-secondary truncate mt-0.5">{t(rule.description)}</span>}
                                                                 </div>
@@ -659,32 +739,25 @@ export function RulesView({
                                                                 <button
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
+                                                                        // ... existing logic ...
                                                                         if (openRuleMenuId === rule.id) {
                                                                             setOpenRuleMenuId(null);
                                                                             return;
                                                                         }
                                                                         const rect = e.currentTarget.getBoundingClientRect();
-                                                                        const MENU_HEIGHT = 280; // Approximate max height
+                                                                        const MENU_HEIGHT = 280;
                                                                         const right = window.innerWidth - rect.right;
-
-                                                                        // Check collision with bottom
                                                                         if (rect.bottom + MENU_HEIGHT > window.innerHeight) {
-                                                                            setRuleMenuPos({
-                                                                                bottom: window.innerHeight - rect.top + 8,
-                                                                                right
-                                                                            });
+                                                                            setRuleMenuPos({ bottom: window.innerHeight - rect.top + 8, right });
                                                                         } else {
-                                                                            setRuleMenuPos({
-                                                                                top: rect.bottom + 8,
-                                                                                right
-                                                                            });
+                                                                            setRuleMenuPos({ top: rect.bottom + 8, right });
                                                                         }
                                                                         setOpenRuleMenuId(rule.id);
                                                                     }}
-                                                                    disabled={loadingRuleId === rule.id}
+                                                                    disabled={loadingRuleId === rule.id || isPendingDelete}
                                                                     className={cn(
                                                                         "px-2 md:px-3 py-1 rounded-full text-[9px] md:text-[10px] font-bold border tracking-widest uppercase w-16 md:w-20 text-center cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-sm hover:shadow-md flex items-center justify-center relative z-0",
-                                                                        getPolicyColor(rule.policy),
+                                                                        isPendingDelete ? "opacity-50 grayscale cursor-not-allowed" : getPolicyColor(rule.policy),
                                                                         loadingRuleId === rule.id ? "opacity-70 cursor-wait" : ""
                                                                     )}>
                                                                     {loadingRuleId === rule.id ? (
@@ -694,23 +767,37 @@ export function RulesView({
                                                                     )}
                                                                 </button>
                                                                 <div className="flex items-center gap-1 md:gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-300 translate-x-0 md:translate-x-2 md:group-hover:translate-x-0">
-                                                                    <button onClick={(e) => { setEditingRule(rule); setDialogData({ ...rule }); setIsDialogOpen(true); }} className="p-1.5 md:p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><Edit2 size={14} className="md:size-4" /></button>
-                                                                    <button
-                                                                        onClick={(e) => handleDeleteRule(rule.id, e)}
-                                                                        disabled={deletingRuleId === rule.id}
-                                                                        className={cn(
-                                                                            "p-1.5 md:p-2 rounded-xl transition-all",
-                                                                            deletingRuleId === rule.id
-                                                                                ? "text-red-400 bg-red-400/10 cursor-wait"
-                                                                                : "text-gray-400 hover:text-red-400 hover:bg-red-400/10"
-                                                                        )}
-                                                                    >
-                                                                        {deletingRuleId === rule.id ? (
-                                                                            <Loader2 size={14} className="md:size-4 animate-spin" />
-                                                                        ) : (
-                                                                            <Trash2 size={14} className="md:size-4" />
-                                                                        )}
-                                                                    </button>
+                                                                    {!isPendingDelete && (
+                                                                        <button onClick={(e) => { setEditingRule(rule); setDialogData({ ...rule }); setIsDialogOpen(true); }} className="p-1.5 md:p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><Edit2 size={14} className="md:size-4" /></button>
+                                                                    )}
+                                                                    {isPendingDelete ? (
+                                                                        <button
+                                                                            onClick={(e) => handleRestoreRule(rule.id, e)}
+                                                                            className={cn(
+                                                                                "p-1.5 md:p-2 rounded-xl transition-all text-emerald-500 hover:bg-emerald-500/10"
+                                                                            )}
+                                                                            title={t('rules.restore')}
+                                                                        >
+                                                                            <RotateCcw size={14} className="md:size-4" />
+                                                                        </button>
+                                                                    ) : (
+                                                                        <button
+                                                                            onClick={(e) => handleDeleteRule(rule.id, e)}
+                                                                            disabled={deletingRuleId === rule.id}
+                                                                            className={cn(
+                                                                                "p-1.5 md:p-2 rounded-xl transition-all",
+                                                                                deletingRuleId === rule.id
+                                                                                    ? "text-red-400 bg-red-400/10 cursor-wait"
+                                                                                    : "text-gray-400 hover:text-red-400 hover:bg-red-400/10"
+                                                                            )}
+                                                                        >
+                                                                            {deletingRuleId === rule.id ? (
+                                                                                <Loader2 size={14} className="md:size-4 animate-spin" />
+                                                                            ) : (
+                                                                                <Trash2 size={14} className="md:size-4" />
+                                                                            )}
+                                                                        </button>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         </div>
