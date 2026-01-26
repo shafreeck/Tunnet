@@ -1411,6 +1411,8 @@ impl<R: Runtime> ProxyService<R> {
 
         // Trigger updates
         self.app.emit("profiles-update", ()).ok();
+        self.app.emit("groups-updated", ()).ok();
+        self.app.emit("rules-updated", ()).ok();
         self.app.emit("settings-update", self.manager.load_settings().unwrap_or_default()).ok();
         
         Ok(())

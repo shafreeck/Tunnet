@@ -973,11 +973,30 @@ export default function Home() {
                   handleImportRef.current(decoded.trim(), t('qr_import'));
                 }
               } else {
-                // Legacy: treat as text file
+                // Read file content
                 const { readTextFile } = await import('@tauri-apps/plugin-fs');
                 const content = await readTextFile(path);
                 if (content) {
                   const filename = path.split(/[\/\\]/).pop() || "";
+
+                  // Check if it's a Tunnet backup file
+                  try {
+                    const parsed = JSON.parse(content);
+                    if (parsed.version && (parsed.profiles || parsed.groups || parsed.rules || parsed.settings)) {
+                      // It's a Tunnet backup file
+                      await invoke("import_tunnet_backup", { json: content });
+                      toast.success(t('settings.advanced.data.restore_success', { defaultValue: "Tunnet backup restored successfully" }));
+                      // Reload window to refresh all state
+                      setTimeout(() => {
+                        window.location.reload();
+                      }, 500);
+                      return;
+                    }
+                  } catch (e) {
+                    // Not a JSON file or not a Tunnet backup, treat as Sing-box config
+                  }
+
+                  // Treat as Sing-box configuration or subscription URL
                   handleImportRef.current(content, filename.replace(/\.[^/.]+$/, ""));
                 }
               }

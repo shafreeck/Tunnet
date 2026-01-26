@@ -884,10 +884,11 @@ interface AdvancedProps extends CommonProps {
 function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modifiedKeys = [] }: AdvancedProps) {
     const { t } = useTranslation()
     const [refreshingGeoData, setRefreshingGeoData] = useState(false)
-    const [isExporting, setIsExporting] = useState(false)
+    const [isExportingSingbox, setIsExportingSingbox] = useState(false)
+    const [isExportingBackup, setIsExportingBackup] = useState(false)
 
     const handleExportSingbox = async () => {
-        setIsExporting(true)
+        setIsExportingSingbox(true)
         try {
             const content = await invoke<string>("export_singbox_config")
             const path = await save({
@@ -902,17 +903,22 @@ function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modif
             console.error(e)
             toast.error(t('export.failed'))
         } finally {
-            setIsExporting(false)
+            setIsExportingSingbox(false)
         }
     }
 
     const handleExportBackup = async () => {
-        setIsExporting(true)
+        setIsExportingBackup(true)
         try {
             const content = await invoke<string>("export_tunnet_backup")
-            const now = new Date().toISOString().split('T')[0]
+            // Use local timezone for filename
+            const now = new Date()
+            const year = now.getFullYear()
+            const month = String(now.getMonth() + 1).padStart(2, '0')
+            const day = String(now.getDate()).padStart(2, '0')
+            const dateStr = `${year}-${month}-${day}`
             const path = await save({
-                defaultPath: `tunnet_backup_${now}.json`,
+                defaultPath: `tunnet_backup_${dateStr}.json`,
                 filters: [{ name: "JSON", extensions: ["json"] }]
             })
             if (path) {
@@ -923,7 +929,7 @@ function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modif
             console.error(e)
             toast.error(t('export.failed'))
         } finally {
-            setIsExporting(false)
+            setIsExportingBackup(false)
         }
     }
 
@@ -937,6 +943,11 @@ function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modif
                 const content = await readTextFile(selected)
                 await invoke("import_tunnet_backup", { json: content })
                 toast.success(t('settings.advanced.data.restore_success', { defaultValue: "Restore successful" }))
+
+                // Reload window to refresh all state after restore
+                setTimeout(() => {
+                    window.location.reload()
+                }, 500)
             }
         } catch (e) {
             console.error(e)
@@ -1013,10 +1024,10 @@ function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modif
                 >
                     <button
                         onClick={handleExportSingbox}
-                        disabled={isExporting}
+                        disabled={isExportingSingbox}
                         className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-all text-xs font-bold disabled:opacity-50"
                     >
-                        {isExporting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                        {isExportingSingbox ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
                         {t('settings.advanced.data.export', { defaultValue: "Export" })}
                     </button>
                 </SettingItem>
@@ -1035,10 +1046,10 @@ function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modif
                         </button>
                         <button
                             onClick={handleExportBackup}
-                            disabled={isExporting}
+                            disabled={isExportingBackup}
                             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-all text-xs font-bold disabled:opacity-50"
                         >
-                            {isExporting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                            {isExportingBackup ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
                             {t('settings.advanced.data.backup', { defaultValue: "Backup" })}
                         </button>
                     </div>
