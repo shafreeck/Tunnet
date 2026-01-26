@@ -365,6 +365,7 @@ export default function Home() {
 
       const isOnlyTunUpdate = lastAppliedConfigRef.current &&
         currentConfigKey &&
+        lastAppliedConfigRef.current !== currentConfigKey &&
         lastAppliedConfigRef.current.split(':').slice(0, 2).join(':') === currentConfigKey.split(':').slice(0, 2).join(':');
 
       const promise = invoke("start_proxy", {
@@ -378,6 +379,7 @@ export default function Home() {
         if (lastAppliedConfigRef.current) {
           const [prevId] = lastAppliedConfigRef.current.split(':');
           if (prevId !== node.id) return t('toast.connecting_to', { server: node.name });
+          if (isPulseRestart) return t('status.restarting'); // Standard restart message
           return t('toast.updating_to', { mode: proxyMode });
         }
         return t('toast.connecting_to', { server: node.name });
@@ -388,6 +390,7 @@ export default function Home() {
         if (lastAppliedConfigRef.current) {
           const [prevId] = lastAppliedConfigRef.current.split(':');
           if (prevId !== node.id) return t('toast.connected_to', { server: node.name });
+          if (isPulseRestart) return t('toast.connected_to', { server: node.name }); // Use standard success message for restart
           return t('toast.updated_to', { mode: proxyMode });
         }
         return t('toast.connected_to', { server: node.name });
