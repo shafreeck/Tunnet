@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppSettings {
     // General
@@ -56,8 +60,4 @@ impl Default for AppSettings {
             active_target_id: None,
         }
     }
-}
-
-fn default_true() -> bool {
-    true
 }
