@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { listen, emit } from "@tauri-apps/api/event"
 import { AppSettings, defaultSettings, getAppSettings, saveAppSettings } from "@/lib/settings"
-import { Power, Settings, Globe, Shield, Zap, LayoutDashboard, Server, Loader2 } from "lucide-react"
+import { Power, Settings, Globe, Shield, Zap, LayoutDashboard, Server, Loader2, ArrowUp, ArrowDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "next-themes"
 import { useCallback } from "react"
@@ -613,8 +613,14 @@ export default function TrayPage() {
                     {status.is_running && (
                         <div className="px-1 pt-2 border-t border-white/3 flex flex-col gap-1">
                             <div className="flex items-center justify-between text-[10px] font-mono">
-                                <span className="text-emerald-500">↑ {formatSpeed(traffic.up)}</span>
-                                <span className="text-primary">↓ {formatSpeed(traffic.down)}</span>
+                                <div className={cn("flex items-center gap-1.5 transition-colors", traffic.up > 0 ? "text-emerald-500 font-bold" : "text-text-tertiary opacity-60")}>
+                                    <ArrowUp size={10} className={cn("transition-transform", traffic.up > 0 && "animate-pulse")} />
+                                    <span>{formatSpeed(traffic.up)}</span>
+                                </div>
+                                <div className={cn("flex items-center gap-1.5 transition-colors", traffic.down > 0 ? "text-primary font-bold" : "text-text-tertiary opacity-60")}>
+                                    <ArrowDown size={10} className={cn("transition-transform", traffic.down > 0 && "animate-pulse")} />
+                                    <span>{formatSpeed(traffic.down)}</span>
+                                </div>
                             </div>
                             <div className="h-8 flex items-end gap-px opacity-80">
                                 {trafficHistory.map((val, i) => {

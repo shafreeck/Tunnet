@@ -1,6 +1,8 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import { ArrowUp, ArrowDown } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 const formatSpeed = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B/s`
@@ -31,9 +33,15 @@ export function TrafficMonitor({ isRunning, traffic }: TrafficMonitorProps) {
 
     return (
         <div className="flex flex-col gap-1 w-full px-2 mt-2 mb-6 animate-in fade-in slide-in-from-bottom-2">
-            <div className="flex items-center justify-between text-[11px] font-mono font-medium px-1 opacity-80">
-                <span className="text-emerald-500">↑ {formatSpeed(traffic.up)}</span>
-                <span className="text-primary">↓ {formatSpeed(traffic.down)}</span>
+            <div className="flex items-center justify-between text-[10px] font-mono px-1">
+                <div className={cn("flex items-center gap-1.5 transition-colors", traffic.up > 0 ? "text-emerald-500 font-bold" : "text-tertiary opacity-60")}>
+                    <ArrowUp size={12} className={cn("transition-transform", traffic.up > 0 && "animate-pulse")} />
+                    <span>{formatSpeed(traffic.up)}</span>
+                </div>
+                <div className={cn("flex items-center gap-1.5 transition-colors", traffic.down > 0 ? "text-primary font-bold" : "text-tertiary opacity-60")}>
+                    <ArrowDown size={12} className={cn("transition-transform", traffic.down > 0 && "animate-pulse")} />
+                    <span>{formatSpeed(traffic.down)}</span>
+                </div>
             </div>
             <div className="h-12 flex items-end gap-[3px] opacity-80">
                 {trafficHistory.map((val, i) => {
