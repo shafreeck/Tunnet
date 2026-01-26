@@ -80,6 +80,10 @@
                 "dark": "暗色",
                 "system": "跟随系统"
             },
+            "show_sidebar_status": {
+                "title": "显示侧边栏状态",
+                "desc": "在侧边栏底部显示实时连接状态和网速图表。"
+            },
             "launch_behavior": "启动行为",
             "launch_at_login": {
                 "title": "开机自启动",

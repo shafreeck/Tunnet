@@ -9,6 +9,8 @@ pub struct AppSettings {
     pub auto_update: bool,
     #[serde(default)]
     pub auto_connect: bool,
+    #[serde(default = "default_true")]
+    pub show_sidebar_status: bool,
 
     // Connection
     pub system_proxy: bool,
@@ -38,6 +40,7 @@ impl Default for AppSettings {
             start_minimized: false,
             auto_update: true,
             auto_connect: false,
+            show_sidebar_status: true,
             system_proxy: true,
             allow_lan: false,
             mixed_port: 2080,
@@ -53,4 +56,8 @@ impl Default for AppSettings {
             active_target_id: None,
         }
     }
+}
+
+fn default_true() -> bool {
+    true
 }

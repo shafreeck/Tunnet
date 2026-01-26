@@ -8,6 +8,7 @@ export interface AppSettings {
     start_minimized: boolean
     auto_update: boolean
     auto_connect: boolean
+    show_sidebar_status: boolean
 
     // Connection
     system_proxy: boolean
@@ -35,6 +36,7 @@ export const defaultSettings: AppSettings = {
     start_minimized: false,
     auto_update: true,
     auto_connect: false,
+    show_sidebar_status: true,
     system_proxy: true,
     allow_lan: false,
     mixed_port: 2080,

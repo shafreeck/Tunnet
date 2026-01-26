@@ -2011,6 +2011,7 @@ export default function Home() {
         isLoading={isLoading}
         onToggle={toggleProxy}
         connectionState={connectionState}
+        showStatusWidget={settings.show_sidebar_status}
       />
 
       {/* Search Dialog */}

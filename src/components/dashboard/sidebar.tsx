@@ -27,9 +27,10 @@ interface SidebarProps {
     isLoading?: boolean
     onToggle?: (restart?: boolean) => void
     connectionState?: "idle" | "connecting" | "disconnecting"
+    showStatusWidget?: boolean
 }
 
-export function Sidebar({ currentView, onViewChange, subscription, onSearchClick, traffic, isLoading, onToggle, connectionState }: SidebarProps) {
+export function Sidebar({ currentView, onViewChange, subscription, onSearchClick, traffic, isLoading, onToggle, connectionState, showStatusWidget = true }: SidebarProps) {
     const { t } = useTranslation()
     const [modifier, setModifier] = React.useState("⌘")
 
@@ -140,12 +141,14 @@ export function Sidebar({ currentView, onViewChange, subscription, onSearchClick
             </nav>
 
             <div className="px-3 pb-3 pt-1 mt-auto space-y-2">
-                <SidebarStatusWidget
-                    traffic={traffic}
-                    isLoading={isLoading}
-                    onToggle={onToggle}
-                    connectionState={connectionState}
-                />
+                {showStatusWidget && (
+                    <SidebarStatusWidget
+                        traffic={traffic}
+                        isLoading={isLoading}
+                        onToggle={onToggle}
+                        connectionState={connectionState}
+                    />
+                )}
 
                 <div
                     onClick={() => onViewChange("proxies")}

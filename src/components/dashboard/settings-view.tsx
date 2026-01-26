@@ -24,7 +24,8 @@ import {
     Loader2,
     RotateCcw,
     Check,
-    AlertCircle
+    AlertCircle,
+    Activity
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
@@ -438,6 +439,14 @@ function GeneralSettings({ settings, update, version, modifiedKeys = [] }: Commo
                         </button>
                     ))}
                 </div>
+
+                <SettingItem
+                    title={t('settings.general.show_sidebar_status.title', { defaultValue: 'Show Status Info' })}
+                    description={t('settings.general.show_sidebar_status.desc', { defaultValue: 'Show connection status and speed graph in sidebar.' })}
+                    icon={<Activity size={20} />}
+                >
+                    <Switch checked={settings.show_sidebar_status} onCheckedChange={(v) => update("show_sidebar_status", v)} />
+                </SettingItem>
             </Section>
 
             <Section title={t('settings.language.title')} icon={<Globe size={14} />}>
@@ -826,7 +835,7 @@ function DnsSettings({ settings, update, save, modifiedKeys = [] }: CommonProps)
                 </SettingItem>
             </Section>
 
-            <Section title={t('settings.dns.upstream')}>
+            <Section title={t('settings.dns.upstream')} icon={<Server size={14} />}>
                 <div className="glass-card p-6 rounded-3xl border border-border-color">
                     <div className="flex items-center justify-between mb-4">
                         <span className="text-xs font-bold text-secondary uppercase tracking-wider">{t('settings.dns.server_list')}</span>
