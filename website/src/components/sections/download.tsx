@@ -4,45 +4,57 @@ import { useState } from "react";
 
 import { motion } from "framer-motion";
 import { Apple, Monitor, Terminal } from "lucide-react";
+import { useGithubLatestRelease } from "@/hooks/use-github-release";
 
-const CURRENT_VERSION = "0.2.2";
-const RELEASE_BASE_URL = `https://github.com/shafreeck/Tunnet/releases/download/v${CURRENT_VERSION}`;
+// Fallback configuration if API fails
+const FALLBACK_VERSION = "0.2.2";
+const FALLBACK_BASE_URL = `https://github.com/shafreeck/Tunnet/releases/download/v${FALLBACK_VERSION}`;
 
 const platformConfig = {
     macos: {
         icon: Apple,
-        version: `v${CURRENT_VERSION}`,
-        links: [
-            { url: `${RELEASE_BASE_URL}/Tunnet_${CURRENT_VERSION}_aarch64.dmg` },
+        // Match pattern for dynamic assets
+        assetPattern: /aarch64\.dmg$/,
+        fallbackLinks: [
+            { url: `${FALLBACK_BASE_URL}/Tunnet_${FALLBACK_VERSION}_aarch64.dmg` },
         ],
     },
     windows: {
         icon: Monitor,
-        version: `v${CURRENT_VERSION}`,
-        links: [
-            { url: `${RELEASE_BASE_URL}/Tunnet_${CURRENT_VERSION}_x64_en-US.msi` },
+        assetPattern: /x64_en-US\.msi$/,
+        fallbackLinks: [
+            { url: `${FALLBACK_BASE_URL}/Tunnet_${FALLBACK_VERSION}_x64_en-US.msi` },
         ],
     },
     linux: {
         icon: Terminal,
-        version: `v${CURRENT_VERSION}`,
         architectures: {
-            x64: [
-                { url: `${RELEASE_BASE_URL}/Tunnet_${CURRENT_VERSION}_amd64.deb` },
-                { url: `${RELEASE_BASE_URL}/Tunnet-${CURRENT_VERSION}-1.x86_64.rpm` },
-            ],
-            arm64: [
-                { url: `${RELEASE_BASE_URL}/Tunnet_${CURRENT_VERSION}_arm64.deb` },
-                { url: `${RELEASE_BASE_URL}/Tunnet-${CURRENT_VERSION}-1.aarch64.rpm` },
-            ]
+            x64: {
+                patterns: [/amd64\.deb$/, /\.x86_64\.rpm$/],
+                fallbackLinks: [
+                    { url: `${FALLBACK_BASE_URL}/Tunnet_${FALLBACK_VERSION}_amd64.deb` },
+                    { url: `${FALLBACK_BASE_URL}/Tunnet-${FALLBACK_VERSION}-1.x86_64.rpm` },
+                ]
+            },
+            arm64: {
+                patterns: [/arm64\.deb$/, /\.aarch64\.rpm$/],
+                fallbackLinks: [
+                    { url: `${FALLBACK_BASE_URL}/Tunnet_${FALLBACK_VERSION}_arm64.deb` },
+                    { url: `${FALLBACK_BASE_URL}/Tunnet-${FALLBACK_VERSION}-1.aarch64.rpm` },
+                ]
+            }
         }
     },
 };
 
 export function Download({ dict }: { dict: any }) {
     const [linuxArch, setLinuxArch] = useState<"x64" | "arm64">("x64");
+    const { release, loading } = useGithubLatestRelease();
 
-    // Reconstruct platforms using dict data and static config
+    // Determine version to display
+    const displayVersion = release ? release.tag_name : `v${FALLBACK_VERSION}`;
+
+    // Reconstruct platforms using dict data and dynamic/static config
     const platforms = Object.keys(dict.platforms).map((key) => {
         const platformKey = key as keyof typeof platformConfig;
         const dictPlatform = dict.platforms[platformKey];
@@ -52,19 +64,48 @@ export function Download({ dict }: { dict: any }) {
 
         if (platformKey === 'linux') {
             // Special handling for Linux to support architecture toggle
-            // Map labels from dict to urls from config by index
-            const archLinks = (configPlatform as any).architectures[linuxArch];
-            links = dictPlatform.links[linuxArch].map((link: { label: string }, index: number) => ({
-                label: link.label,
-                url: archLinks[index].url,
-            }));
+            const archKey = linuxArch as "x64" | "arm64";
+            const archConfig = (configPlatform as any).architectures[archKey];
+
+            links = dictPlatform.links[archKey].map((link: { label: string }, index: number) => {
+                let url = archConfig.fallbackLinks[index]?.url;
+
+                // Try to find matching asset in release
+                if (release && archConfig.patterns[index]) {
+                    const asset = release.assets.find(a => archConfig.patterns[index].test(a.name));
+                    if (asset) {
+                        url = asset.browser_download_url;
+                    }
+                }
+
+                return {
+                    label: link.label,
+                    url: url || "#",
+                };
+            });
         } else {
             // Standard handling for macOS and Windows
-            // Map labels from dict to urls from config by index
-            links = dictPlatform.links.map((link: { label: string }, index: number) => ({
-                label: link.label,
-                url: (configPlatform as any).links[index].url,
-            }));
+            links = dictPlatform.links.map((link: { label: string }, index: number) => {
+                // Default to fallback
+                let url = (configPlatform as any).fallbackLinks[index]?.url;
+
+                // Try to find matching asset
+                if (release && (configPlatform as any).assetPattern) {
+                    // For macOS/Windows, we assume single link maps to the pattern
+                    // or strictly index based. 
+                    // Current logic: simple pattern match
+                    const pattern = (configPlatform as any).assetPattern;
+                    const asset = release.assets.find(a => pattern.test(a.name));
+                    if (asset) {
+                        url = asset.browser_download_url;
+                    }
+                }
+
+                return {
+                    label: link.label,
+                    url: url || "#",
+                };
+            });
         }
 
         return {
@@ -72,7 +113,7 @@ export function Download({ dict }: { dict: any }) {
             name: dictPlatform.name,
             description: dictPlatform.desc,
             icon: configPlatform.icon,
-            version: configPlatform.version,
+            version: displayVersion,
             links: links,
         };
     });
@@ -95,7 +136,9 @@ export function Download({ dict }: { dict: any }) {
                                 <platform.icon className="w-8 h-8 text-white" />
                             </div>
                             <h3 className="text-2xl font-bold mb-2">{platform.name}</h3>
-                            <p className="text-blue-400 font-mono text-sm mb-4">{platform.version}</p>
+                            <p className="text-blue-400 font-mono text-sm mb-4">
+                                {loading && !release ? <span className="animate-pulse">Loading...</span> : platform.version}
+                            </p>
 
                             {/* Architecture Toggle for Linux */}
                             {platform.id === 'linux' ? (
