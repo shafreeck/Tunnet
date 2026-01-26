@@ -89,7 +89,7 @@ impl<R: Runtime> CoreManager<R> {
         &self,
         url: &str,
         name: Option<String>,
-    ) -> Result<crate::profile::Profile, String> {
+    ) -> Result<(crate::profile::Profile, crate::profile::ParsedContent), String> {
         let url = url.trim();
         if url.starts_with("http://") || url.starts_with("https://") {
             let client = Client::new();
@@ -198,24 +198,28 @@ impl<R: Runtime> CoreManager<R> {
             }
 
             let text = res.text().await.map_err(|e| e.to_string())?;
-            profile.nodes = crate::profile::parser::parse_subscription(&text);
-            Ok(profile)
+            let parsed = crate::profile::parser::parse_subscription_full(&text);
+            profile.nodes = parsed.nodes.clone();
+            Ok((profile, parsed))
         } else {
             // Treat as raw content/link (e.g. vmess://, ss://, or base64)
-            let nodes = crate::profile::parser::parse_subscription(url);
-            Ok(crate::profile::Profile {
-                id: uuid::Uuid::new_v4().to_string(),
-                name: name.unwrap_or("Local Import".to_string()),
-                url: None, // Raw import usually has no update URL
-                nodes,
-                upload: None,
-                download: None,
-                total: None,
-                expire: None,
-                web_page_url: None,
-                update_interval: None,
-                header_update_interval: None,
-            })
+            let parsed = crate::profile::parser::parse_subscription_full(url);
+            Ok((
+                crate::profile::Profile {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    name: name.unwrap_or("Local Import".to_string()),
+                    url: None, // Raw import usually has no update URL
+                    nodes: parsed.nodes.clone(),
+                    upload: None,
+                    download: None,
+                    total: None,
+                    expire: None,
+                    web_page_url: None,
+                    update_interval: None,
+                    header_update_interval: None,
+                },
+                parsed,
+            ))
         }
     }
 

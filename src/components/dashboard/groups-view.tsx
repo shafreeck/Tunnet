@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react"
 import { Plus, Search, Trash2, Edit2, LayoutGrid, Check, X, Loader2, Play, Zap, Target, ArrowUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
 import { ConfirmationModal } from "@/components/ui/confirmation-modal"
@@ -98,6 +99,16 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
 
     useEffect(() => {
         fetchGroups()
+
+        // Listen for groups updates from backend (e.g., after import)
+        const unlistenGroupsUpdate = listen("groups-updated", () => {
+            console.log("Groups updated event received, reloading...")
+            fetchGroups()
+        })
+
+        return () => {
+            unlistenGroupsUpdate.then(f => f())
+        }
     }, [])
 
     const fetchGroups = async () => {

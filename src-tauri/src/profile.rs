@@ -537,6 +537,13 @@ where
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ParsedContent {
+    pub nodes: Vec<Node>,
+    pub groups: Vec<Group>,
+    pub rules: Vec<Rule>,
+}
+
 pub mod parser {
     use super::*;
     use base64::{engine::general_purpose, Engine as _};
@@ -1453,5 +1460,401 @@ pub mod parser {
             }
         }
         None
+    }
+
+    // New function for full parsing including groups and rules
+    pub fn parse_subscription_full(content: &str) -> ParsedContent {
+        let mut content = content.trim();
+        if content.is_empty() {
+            return ParsedContent::default();
+        }
+
+        if content.as_bytes().starts_with(b"\xef\xbb\xbf") {
+            content = &content[3..];
+        }
+
+        //Try JSON (Sing-box format)
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(content) {
+            if v.get("outbounds").is_some() || v.get("route").is_some() {
+                return parse_singbox_config(&v);
+            }
+        }
+
+        // Try YAML (Clash format)
+        if let Ok(v) = serde_yaml::from_str::<serde_json::Value>(content) {
+            if v.get("proxies").is_some() || v.get("proxy-groups").is_some() {
+                return parse_clash_config(&v);
+            }
+        }
+
+        // Fallback: parse as simple node list
+        let nodes = parse_subscription(content);
+        ParsedContent {
+            nodes,
+            groups: vec![],
+            rules: vec![],
+        }
+    }
+
+    fn parse_singbox_config(v: &serde_json::Value) -> ParsedContent {
+        let mut content = ParsedContent::default();
+        let mut tag_to_id = std::collections::HashMap::new();
+
+        // Parse outbounds
+        if let Some(outbounds) = v.get("outbounds").and_then(|o| o.as_array()) {
+            for o in outbounds {
+                let tag = o.get("tag").and_then(|t| t.as_str()).unwrap_or("unnamed");
+                let otype = o.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                let otype_lower = otype.to_lowercase();
+
+                match otype_lower.as_str() {
+                    "selector" | "urltest" => {
+                        let id = Uuid::new_v4().to_string();
+                        tag_to_id.insert(tag.to_string(), id.clone());
+
+                        let gt = if otype_lower == "urltest" {
+                            GroupType::UrlTest {
+                                interval: o
+                                    .get("interval")
+                                    .and_then(|s| s.as_str())
+                                    .and_then(|s| s.trim_end_matches('s').parse().ok())
+                                    .or_else(|| o.get("interval").and_then(|i| i.as_u64()))
+                                    .unwrap_or(600),
+                                tolerance: o
+                                    .get("tolerance")
+                                    .and_then(|t| t.as_u64())
+                                    .unwrap_or(50),
+                            }
+                        } else {
+                            GroupType::Selector
+                        };
+
+                        content.groups.push(Group {
+                            id,
+                            name: tag.to_string(),
+                            group_type: gt,
+                            source: GroupSource::Static {
+                                node_ids: o
+                                    .get("outbounds")
+                                    .and_then(|a| a.as_array())
+                                    .map(|arr| {
+                                        arr.iter()
+                                            .filter_map(|m| {
+                                                m.as_str().and_then(|tag_str| {
+                                                    // Convert Sing-box tag to internal node UUID
+                                                    tag_to_id.get(tag_str).cloned()
+                                                })
+                                            })
+                                            .collect()
+                                    })
+                                    .unwrap_or_default(),
+                            },
+                            icon: None,
+                            selected: None,
+                        });
+                    }
+                    "direct" | "block" | "dns" => continue,
+                    _ => {
+                        let server = o.get("server").and_then(|s| s.as_str()).unwrap_or("");
+                        if server.is_empty() {
+                            continue;
+                        }
+
+                        let port = o
+                            .get("server_port")
+                            .or(o.get("port"))
+                            .and_then(|p| p.as_u64())
+                            .unwrap_or(0) as u16;
+                        let node_id = Uuid::new_v4().to_string();
+                        tag_to_id.insert(tag.to_string(), node_id.clone());
+
+                        content.nodes.push(Node {
+                            id: node_id,
+                            name: tag.to_string(),
+                            protocol: otype_lower,
+                            server: server.to_string(),
+                            port,
+                            uuid: o
+                                .get("uuid")
+                                .and_then(|u| u.as_str())
+                                .map(|s| s.to_string()),
+                            cipher: o
+                                .get("method")
+                                .or(o.get("cipher"))
+                                .and_then(|m| m.as_str())
+                                .map(|s| s.to_string()),
+                            password: o
+                                .get("password")
+                                .and_then(|p| p.as_str())
+                                .map(|s| s.to_string()),
+                            tls: o.get("tls").is_some(),
+                            network: o
+                                .get("transport")
+                                .and_then(|t| t.get("type"))
+                                .and_then(|t| t.as_str())
+                                .map(|s| s.to_string())
+                                .filter(|s| s != "tcp"),
+                            path: o
+                                .get("transport")
+                                .and_then(|t| t.get("path"))
+                                .and_then(|p| p.as_str())
+                                .map(|s| s.to_string()),
+                            host: o
+                                .get("transport")
+                                .and_then(|t| t.get("headers"))
+                                .and_then(|h| h.get("Host"))
+                                .and_then(|h| h.as_str())
+                                .map(|s| s.to_string()),
+                            sni: o
+                                .get("tls")
+                                .and_then(|t| t.get("server_name"))
+                                .and_then(|s| s.as_str())
+                                .filter(|s| !s.is_empty())
+                                .map(|s| s.to_string()),
+                            ..Default::default()
+                        });
+                    }
+                }
+            }
+        }
+
+        // Resolve group members
+        for group in &mut content.groups {
+            if let GroupSource::Static { node_ids } = &mut group.source {
+                let mut resolved = Vec::new();
+                for tag in node_ids.iter() {
+                    if let Some(id) = tag_to_id.get(tag) {
+                        resolved.push(id.clone());
+                    }
+                }
+                *node_ids = resolved;
+            }
+        }
+
+        // Parse rules
+        if let Some(rules) = v
+            .get("route")
+            .and_then(|r| r.get("rules"))
+            .and_then(|a| a.as_array())
+        {
+            for r in rules {
+                let outbound = r.get("outbound").and_then(|o| o.as_str()).unwrap_or("");
+                if outbound.is_empty() {
+                    continue;
+                }
+
+                let policy = match outbound {
+                    "direct" => "DIRECT".to_string(),
+                    "block" => "REJECT".to_string(),
+                    _ => outbound.to_string(),
+                };
+
+                let base_rule = Rule {
+                    id: Uuid::new_v4().to_string(),
+                    description: None,
+                    rule_type: String::new(),
+                    value: String::new(),
+                    policy,
+                    enabled: true,
+                };
+
+                // Domain rules
+                if let Some(domains) = r.get("domain").and_then(|a| a.as_array()) {
+                    for d in domains {
+                        if let Some(s) = d.as_str() {
+                            let mut rule = base_rule.clone();
+                            rule.rule_type = "DOMAIN".to_string();
+                            rule.value = s.to_string();
+                            content.rules.push(rule);
+                        }
+                    }
+                }
+
+                // Domain suffix rules
+                if let Some(suffixes) = r.get("domain_suffix").and_then(|a| a.as_array()) {
+                    for s_val in suffixes {
+                        if let Some(s) = s_val.as_str() {
+                            let mut rule = base_rule.clone();
+                            rule.rule_type = "DOMAIN_SUFFIX".to_string();
+                            rule.value = s.to_string();
+                            content.rules.push(rule);
+                        }
+                    }
+                }
+
+                // Domain keyword rules
+                if let Some(keywords) = r.get("domain_keyword").and_then(|a| a.as_array()) {
+                    for k in keywords {
+                        if let Some(s) = k.as_str() {
+                            let mut rule = base_rule.clone();
+                            rule.rule_type = "DOMAIN_KEYWORD".to_string();
+                            rule.value = s.to_string();
+                            content.rules.push(rule);
+                        }
+                    }
+                }
+
+                // IP CIDR rules
+                if let Some(ip_cidr) = r.get("ip_cidr").and_then(|a| a.as_array()) {
+                    for i in ip_cidr {
+                        if let Some(s) = i.as_str() {
+                            let mut rule = base_rule.clone();
+                            rule.rule_type = "IP_CIDR".to_string();
+                            rule.value = s.to_string();
+                            content.rules.push(rule);
+                        }
+                    }
+                }
+
+                // GEOIP rules
+                if let Some(geoip) = r.get("geoip").and_then(|a| a.as_array()) {
+                    for g in geoip {
+                        if let Some(s) = g.as_str() {
+                            let mut rule = base_rule.clone();
+                            rule.rule_type = "GEOIP".to_string();
+                            rule.value = s.to_string();
+                            content.rules.push(rule);
+                        }
+                    }
+                }
+            }
+        }
+
+        content
+    }
+
+    fn parse_clash_config(v: &serde_json::Value) -> ParsedContent {
+        let mut content = ParsedContent::default();
+        let mut tag_to_id = std::collections::HashMap::new();
+
+        // Parse proxies (nodes)
+        if let Some(proxies) = v.get("proxies").and_then(|a| a.as_array()) {
+            for p in proxies {
+                let name = p.get("name").and_then(|n| n.as_str()).unwrap_or("unnamed");
+                let proxy_type = p.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                let server = p.get("server").and_then(|s| s.as_str()).unwrap_or("");
+                let port = p.get("port").and_then(|p| p.as_u64()).unwrap_or(0) as u16;
+
+                let id = Uuid::new_v4().to_string();
+                tag_to_id.insert(name.to_string(), id.clone());
+
+                content.nodes.push(Node {
+                    id,
+                    name: name.to_string(),
+                    protocol: proxy_type.to_lowercase(),
+                    server: server.to_string(),
+                    port,
+                    uuid: p
+                        .get("uuid")
+                        .and_then(|u| u.as_str())
+                        .map(|s| s.to_string()),
+                    cipher: p
+                        .get("cipher")
+                        .and_then(|c| c.as_str())
+                        .map(|s| s.to_string()),
+                    password: p
+                        .get("password")
+                        .and_then(|pw| pw.as_str())
+                        .map(|s| s.to_string()),
+                    tls: p.get("tls").and_then(|t| t.as_bool()).unwrap_or(false),
+                    insecure: p
+                        .get("skip-cert-verify")
+                        .and_then(|s| s.as_bool())
+                        .unwrap_or(false),
+                    sni: p.get("sni").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                    ..Default::default()
+                });
+            }
+        }
+
+        // Parse proxy-groups
+        if let Some(groups) = v.get("proxy-groups").and_then(|a| a.as_array()) {
+            // First pass: assign IDs
+            for g in groups {
+                let name = g.get("name").and_then(|n| n.as_str()).unwrap_or("unnamed");
+                let id = Uuid::new_v4().to_string();
+                tag_to_id.insert(name.to_string(), id);
+            }
+
+            // Second pass: create groups
+            for g in groups {
+                let name = g.get("name").and_then(|n| n.as_str()).unwrap_or("unnamed");
+                let gtype = g.get("type").and_then(|t| t.as_str()).unwrap_or("select");
+                let id = tag_to_id
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+                let gt = match gtype.to_lowercase().as_str() {
+                    "url-test" | "fallback" | "load-balance" => GroupType::UrlTest {
+                        interval: g.get("interval").and_then(|i| i.as_u64()).unwrap_or(600),
+                        tolerance: g.get("tolerance").and_then(|t| t.as_u64()).unwrap_or(50),
+                    },
+                    _ => GroupType::Selector,
+                };
+
+                let mut node_ids = Vec::new();
+                if let Some(members) = g.get("proxies").and_then(|a| a.as_array()) {
+                    for m in members {
+                        if let Some(member_name) = m.as_str() {
+                            if let Some(mid) = tag_to_id.get(member_name) {
+                                node_ids.push(mid.clone());
+                            }
+                        }
+                    }
+                }
+
+                content.groups.push(Group {
+                    id,
+                    name: name.to_string(),
+                    group_type: gt,
+                    source: GroupSource::Static { node_ids },
+                    icon: None,
+                    selected: None,
+                });
+            }
+        }
+
+        // Parse rules
+        if let Some(rules) = v.get("rules").and_then(|a| a.as_array()) {
+            for rule_val in rules {
+                if let Some(line) = rule_val.as_str() {
+                    let parts: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
+                    if parts.len() < 3 {
+                        continue;
+                    }
+
+                    let rule_type = parts[0].to_uppercase();
+                    let value = parts[1].to_string();
+                    let policy = match parts[2] {
+                        "DIRECT" => "DIRECT".to_string(),
+                        "REJECT" => "REJECT".to_string(),
+                        other => other.to_string(),
+                    };
+
+                    let tunnet_type = match rule_type.as_str() {
+                        "DOMAIN" => Some("DOMAIN"),
+                        "DOMAIN-SUFFIX" => Some("DOMAIN_SUFFIX"),
+                        "DOMAIN-KEYWORD" => Some("DOMAIN_KEYWORD"),
+                        "IP-CIDR" | "IP-CIDR6" => Some("IP_CIDR"),
+                        "GEOIP" => Some("GEOIP"),
+                        _ => None,
+                    };
+
+                    if let Some(rt) = tunnet_type {
+                        content.rules.push(Rule {
+                            id: Uuid::new_v4().to_string(),
+                            description: None,
+                            rule_type: rt.to_string(),
+                            value,
+                            policy,
+                            enabled: true,
+                        });
+                    }
+                }
+            }
+        }
+
+        content
     }
 }

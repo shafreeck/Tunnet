@@ -7,7 +7,9 @@ pub struct SingBoxConfig {
     pub log: Option<LogConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dns: Option<DnsConfig>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub inbounds: Vec<Inbound>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub outbounds: Vec<Outbound>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub route: Option<Route>,

@@ -142,12 +142,19 @@ export function RulesView({
         fetchGroups()
         fetchProxyStatus()
 
-        const unlisten = listen("proxy-status-change", (event: any) => {
+        const unlistenProxyStatus = listen("proxy-status-change", (event: any) => {
             setProxyStatus(event.payload)
         })
 
+        // Listen for rules updates from backend (e.g., after import)
+        const unlistenRulesUpdate = listen("rules-updated", () => {
+            console.log("Rules updated event received, reloading...")
+            onReload()
+        })
+
         return () => {
-            unlisten.then(f => f())
+            unlistenProxyStatus.then(f => f())
+            unlistenRulesUpdate.then(f => f())
         }
     }, [isLoaded, onReload])
 

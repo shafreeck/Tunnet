@@ -1058,10 +1058,68 @@ impl<R: Runtime> ProxyService<R> {
                 Ok(links)
             }
             "json" | "sing-box" => {
-                serde_json::to_string_pretty(&nodes).map_err(|e| e.to_string())
+                // Generate standard Sing-box config using helper function
+                self.build_singbox_config_from_nodes(nodes)
             }
             _ => Err("Unknown format".to_string())
         }
+    }
+
+    // Helper function to build Sing-box config from a list of nodes
+    // Reuses the same ID-to-tag mapping logic as export_singbox_config
+    fn build_singbox_config_from_nodes(&self, nodes: Vec<crate::profile::Node>) -> Result<String, String> {
+        // Build ID to tag mapping with collision handling
+        let mut id_to_tag = std::collections::HashMap::new();
+        let mut used_tags = std::collections::HashSet::new();
+        
+        // Reserve system tags
+        used_tags.insert("direct".to_string());
+        used_tags.insert("block".to_string());
+
+        // Map node IDs to unique tags
+        for node in &nodes {
+            let base_name = if node.name.is_empty() { 
+                "unnamed".to_string() 
+            } else { 
+                node.name.clone() 
+            };
+            let mut tag = base_name.clone();
+            let mut counter = 1;
+            while used_tags.contains(&tag) {
+                tag = format!("{} ({})", base_name, counter);
+                counter += 1;
+            }
+            id_to_tag.insert(node.id.clone(), tag.clone());
+            used_tags.insert(tag);
+        }
+
+        // Build outbounds - only actual nodes, no system outbounds
+        let mut outbounds = Vec::new();
+
+        // Convert nodes to outbounds with mapped tags
+        for node in &nodes {
+            let mut outbound = self.node_to_outbound(node);
+            if let Some(tag) = id_to_tag.get(&node.id) {
+                outbound.tag = tag.clone();
+            }
+            outbounds.push(outbound);
+        }
+
+        // Don't auto-generate proxy selector - let the importing client decide
+        // This avoids creating useless groups when reimporting
+
+        // Create the most minimal Sing-box config for node sharing
+        // Only outbounds field - maximum compatibility and clarity
+        let config = crate::config::SingBoxConfig {
+            log: None,
+            dns: None,
+            inbounds: vec![],
+            outbounds,
+            route: None,
+            experimental: None,
+        };
+
+        serde_json::to_string_pretty(&config).map_err(|e| e.to_string())
     }
 
     pub fn export_group_content(&self, group_id: String, format: String) -> Result<String, String> {
@@ -2728,7 +2786,7 @@ impl<R: Runtime> ProxyService<R> {
         url: &str,
         name: Option<String>,
     ) -> Result<String, String> {
-        let new_profile = self.manager.fetch_subscription(url, name).await?;
+        let (new_profile, parsed_content) = self.manager.fetch_subscription(url, name).await?;
 
         if new_profile.nodes.is_empty() {
             return Err("No valid nodes found in this subscription".to_string());
@@ -2743,6 +2801,50 @@ impl<R: Runtime> ProxyService<R> {
         profiles.push(new_profile);
         info!("Imported subscription. Total profiles: {}", profiles.len());
         self.manager.save_profiles(&profiles)?;
+
+        // Import Groups to global groups.json if any
+        if !parsed_content.groups.is_empty() {
+            let mut global_groups = self.manager.load_groups()?;
+            let mut imported_count = 0;
+
+            for mut group in parsed_content.groups {
+                // Check for name conflicts and auto-rename
+                let original_name = group.name.clone();
+                let mut counter = 1;
+                while global_groups.iter().any(|g| g.name == group.name) {
+                    group.name = format!("{} ({})", original_name, counter);
+                    counter += 1;
+                }
+
+                global_groups.push(group);
+                imported_count += 1;
+            }
+
+            self.manager.save_groups(&global_groups)?;
+            info!("Imported {} groups to global groups", imported_count);
+            
+            // Notify frontend to refresh groups UI
+            let _ = self.app.emit("groups-updated", ());
+        }
+
+        // Import Rules to global rules.json if any
+        if !parsed_content.rules.is_empty() {
+            let mut global_rules = self.manager.load_rules()?;
+            let mut imported_count = 0;
+
+            for rule in parsed_content.rules {
+                // Rules don't have unique names, just append them
+                // User can manage duplicates via UI if needed
+                global_rules.push(rule);
+                imported_count += 1;
+            }
+
+            self.manager.save_rules(&global_rules)?;
+            info!("Imported {} rules to global rules", imported_count);
+            
+            // Notify frontend to refresh rules UI
+            let _ = self.app.emit("rules-updated", ());
+        }
 
         // Probes are now triggered by the frontend to ensure UI consistency and avoid race conditions
 
@@ -2840,7 +2942,7 @@ impl<R: Runtime> ProxyService<R> {
                 let name = profiles[pos].name.clone();
                 let user_interval = profiles[pos].update_interval;
 
-                let updated_profile = self.manager.fetch_subscription(url, Some(name)).await?;
+                let (updated_profile, _parsed_content) = self.manager.fetch_subscription(url, Some(name)).await?;
 
                 if updated_profile.nodes.is_empty() {
                     return Err("No valid nodes found in this subscription".to_string());
