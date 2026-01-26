@@ -47,7 +47,7 @@ export function InputModal({
     }
 
     return (
-        <div className="absolute inset-0 z-60 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-200 rounded-[24px]">
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-md bg-black/40 animate-in fade-in duration-500">
             <div className="w-full max-w-sm bg-surface border border-border-color rounded-3xl shadow-floating overflow-hidden flex flex-col scale-100 animate-in zoom-in-95 duration-300 ease-out">
                 <div className="p-8 flex flex-col gap-6">
                     <div className="flex items-center gap-4">

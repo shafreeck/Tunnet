@@ -537,76 +537,84 @@ export function EditSubscriptionModal({ isOpen, onClose, onSave, initialData }: 
     if (!isOpen) return null
 
     return (
-        <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-200 rounded-[24px]">
-            <div className="bg-white dark:bg-[#1a1a1a] border border-border-color w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
-                <h3 className="text-lg font-bold text-text-primary">{t('subscriptions.edit_subscription', { defaultValue: 'Edit Subscription' })}</h3>
-
-                <div className="space-y-3">
-                    <div className="space-y-1">
-                        <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{t('subscriptions.name', { defaultValue: "Name" })}</label>
-                        <input
-                            value={name}
-                            onChange={e => setName(e.target.value)}
-                            className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/50 rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none transition-all"
-                            placeholder={t('subscriptions.name_placeholder', { defaultValue: "My Subscription" })}
-                            autoCapitalize="none"
-                            autoCorrect="off"
-                            spellCheck={false}
-                        />
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-md bg-black/40 animate-in fade-in duration-500">
+            <div className="bg-surface border border-border-color w-full max-w-md rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col animate-in zoom-in-95 duration-500">
+                <div className="flex items-center justify-between px-8 py-4 border-b border-border-color bg-sidebar-bg/50">
+                    <div className="flex flex-col">
+                        <h3 className="text-lg font-black text-text-primary uppercase tracking-tight">
+                            {t('subscriptions.edit_subscription', { defaultValue: 'Edit Subscription' })}
+                        </h3>
                     </div>
+                </div>
+                <div className="p-8 space-y-4">
 
-                    {initialData.url && (
-                        <>
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{t('subscriptions.url', { defaultValue: "Subscription URL" })}</label>
-                                <input
-                                    value={url}
-                                    onChange={e => setUrl(e.target.value)}
-                                    className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/50 rounded-xl px-4 py-2 text-xs text-text-primary focus:outline-none transition-all font-mono"
-                                    placeholder="https://example.com/sub"
-                                    autoCapitalize="none"
-                                    autoCorrect="off"
-                                    spellCheck={false}
-                                />
-                            </div>
+                    <div className="space-y-3">
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{t('subscriptions.name', { defaultValue: "Name" })}</label>
+                            <input
+                                value={name}
+                                onChange={e => setName(e.target.value)}
+                                className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/50 rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none transition-all"
+                                placeholder={t('subscriptions.name_placeholder', { defaultValue: "My Subscription" })}
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellCheck={false}
+                            />
+                        </div>
 
-                            <div className="space-y-1">
-                                <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{t('subscriptions.auto_update', { defaultValue: "Auto Update Interval (Min)" })}</label>
-                                <div className="relative">
+                        {initialData.url && (
+                            <>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{t('subscriptions.url', { defaultValue: "Subscription URL" })}</label>
                                     <input
-                                        type="number"
-                                        value={interval}
-                                        onChange={e => setInterval(e.target.value)}
-                                        className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/50 rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none transition-all"
-                                        placeholder={
-                                            initialData.header_update_interval
-                                                ? t('subscriptions.default_interval', { count: Math.round(initialData.header_update_interval / 60), defaultValue: `Default: ${Math.round(initialData.header_update_interval / 60)} min` })
-                                                : t('subscriptions.interval_placeholder', { defaultValue: "e.g. 60 (Empty to disable)" })
-                                        }
+                                        value={url}
+                                        onChange={e => setUrl(e.target.value)}
+                                        className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/50 rounded-xl px-4 py-2 text-xs text-text-primary focus:outline-none transition-all font-mono"
+                                        placeholder="https://example.com/sub"
                                         autoCapitalize="none"
                                         autoCorrect="off"
                                         spellCheck={false}
                                     />
                                 </div>
-                                <p className="text-[10px] text-text-tertiary">{t('subscriptions.interval_hint', { defaultValue: "Leave empty to use default. Set to 0 to disable." })}</p>
-                            </div>
-                        </>
-                    )}
-                </div>
 
-                <div className="flex justify-end gap-2 pt-2">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 rounded-xl text-sm font-medium text-text-secondary hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-                    >
-                        {t('common.cancel', { defaultValue: 'Cancel' })}
-                    </button>
-                    <button
-                        onClick={handleSave}
-                        className="px-4 py-2 rounded-xl text-sm font-bold text-white bg-primary hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all active:scale-95"
-                    >
-                        {t('common.save', { defaultValue: 'Save' })}
-                    </button>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-text-secondary uppercase tracking-wider">{t('subscriptions.auto_update', { defaultValue: "Auto Update Interval (Min)" })}</label>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            value={interval}
+                                            onChange={e => setInterval(e.target.value)}
+                                            className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-primary/50 rounded-xl px-4 py-2 text-sm text-text-primary focus:outline-none transition-all"
+                                            placeholder={
+                                                initialData.header_update_interval
+                                                    ? t('subscriptions.default_interval', { count: Math.round(initialData.header_update_interval / 60), defaultValue: `Default: ${Math.round(initialData.header_update_interval / 60)} min` })
+                                                    : t('subscriptions.interval_placeholder', { defaultValue: "e.g. 60 (Empty to disable)" })
+                                            }
+                                            autoCapitalize="none"
+                                            autoCorrect="off"
+                                            spellCheck={false}
+                                        />
+                                    </div>
+                                    <p className="text-[10px] text-text-tertiary">{t('subscriptions.interval_hint', { defaultValue: "Leave empty to use default. Set to 0 to disable." })}</p>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-6 border-t border-border-color mt-6">
+                        <button
+                            onClick={onClose}
+                            className="px-5 py-2.5 rounded-2xl text-sm font-bold text-text-secondary hover:bg-black/5 dark:hover:bg-white/5 transition-all active:scale-95"
+                        >
+                            {t('common.cancel', { defaultValue: 'Cancel' })}
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            className="px-6 py-2.5 rounded-2xl text-sm font-black text-white bg-primary hover:bg-primary/90 shadow-xl shadow-primary/20 transition-all active:scale-95 uppercase tracking-tight"
+                        >
+                            {t('common.save', { defaultValue: 'Save' })}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

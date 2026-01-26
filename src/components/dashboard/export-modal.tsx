@@ -74,12 +74,19 @@ export function ExportModal({ isOpen, onClose, targetId, targetName, targetType 
     return (
         <>
             <Dialog open={isOpen} onOpenChange={onClose}>
-                <DialogContent className="sm:max-w-md bg-white dark:bg-[#1a1a1a] border-border-color">
-                    <DialogHeader>
-                        <DialogTitle>{t('export.title', { defaultValue: "Export" })}: {targetName}</DialogTitle>
-                    </DialogHeader>
+                <DialogContent className="sm:max-w-md p-0">
+                    <div className="flex items-center justify-between px-8 py-5 border-b border-border-color bg-sidebar-bg/50">
+                        <div className="flex flex-col">
+                            <DialogTitle className="text-lg font-black text-text-primary uppercase tracking-tight">
+                                {t('export.title', { defaultValue: "Export" })}
+                            </DialogTitle>
+                            <span className="text-[10px] font-bold text-text-tertiary tracking-widest mt-0.5">
+                                <span className="uppercase">{t(`export.target_${targetType}`)}:</span> {targetName.toLowerCase() === "local import" || targetName.toLowerCase() === "本地导入" ? t('subscriptions.local_import') : targetName}
+                            </span>
+                        </div>
+                    </div>
 
-                    <div className="flex flex-col gap-6 py-4">
+                    <div className="flex flex-col gap-8 px-8 py-8">
                         {/* Format Selection */}
                         <div className="space-y-3">
                             <label className="text-xs font-bold text-text-tertiary uppercase tracking-wider">{t('export.format', { defaultValue: "Format" })}</label>

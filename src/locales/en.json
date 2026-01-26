@@ -565,7 +565,10 @@
         "type_json": "JSON",
         "type_json_desc": "Sing-box JSON outbound config, ideal for experts and manual setups.",
         "filter_links": "Subscription Links",
-        "filter_json": "Sing-box Config"
+        "filter_json": "Sing-box Config",
+        "target_node": "Node",
+        "target_profile": "Profile",
+        "target_group": "Group"
     },
     "connections": {
         "title": "Connections",

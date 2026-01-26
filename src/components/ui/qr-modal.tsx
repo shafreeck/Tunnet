@@ -30,10 +30,14 @@ export function QRModal({ isOpen, onClose, value, title }: QRModalProps) {
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-md bg-white dark:bg-[#1a1a1a] border-border-color">
-                <DialogHeader className="flex flex-row items-center justify-between">
-                    <DialogTitle className="text-xl font-bold">{title || t('common.scan_qr', { defaultValue: "Scan QR Code" })}</DialogTitle>
-                </DialogHeader>
+            <DialogContent className="sm:max-w-md p-0">
+                <div className="flex items-center justify-between px-8 py-5 border-b border-border-color bg-sidebar-bg/50">
+                    <div className="flex flex-col">
+                        <DialogTitle className="text-lg font-black text-text-primary uppercase tracking-tight">
+                            {title || t('common.scan_qr', { defaultValue: "Scan QR Code" })}
+                        </DialogTitle>
+                    </div>
+                </div>
 
                 <div className="flex flex-col items-center justify-center p-6 gap-6 overflow-hidden">
                     <div className="p-4 bg-white rounded-2xl border border-border-color shadow-sm shrink-0">
