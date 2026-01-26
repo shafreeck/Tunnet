@@ -618,6 +618,7 @@ export function RulesView({
                                                                     : "transition-all duration-300 hover:bg-black/5 dark:hover:bg-white/8"
                                                             )}
                                                         >
+                                                            {/* Modified Indicator Dot Style */}
                                                             {modifiedRuleIds.has(rule.id) && (
                                                                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-amber-500/50 z-20" />
                                                             )}
@@ -631,14 +632,28 @@ export function RulesView({
                                                                 >
                                                                     <GripVertical size={16} />
                                                                 </div>
-                                                                <div className="w-20 md:w-32 shrink-0 hidden sm:block">
-                                                                    <div className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-xl bg-white/5 border border-white/5 w-fit">
-                                                                        <Shield size={10} className="md:size-3 text-primary/70" />
-                                                                        <span className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-widest">{rule.type === 'IP_IS_PRIVATE' ? 'PRIVATE ADDR' : rule.type.replace(/_/g, ' ')}</span>
+                                                                <div className="w-20 md:w-32 shrink-0 hidden sm:block pointer-events-none select-none">
+                                                                    <div className={cn(
+                                                                        "flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-xl border w-fit transition-all duration-300 relative",
+                                                                        modifiedRuleIds.has(rule.id)
+                                                                            ? "bg-amber-500/20 border-amber-500/10 text-amber-500"
+                                                                            : "bg-white/5 border-white/5 text-gray-400"
+                                                                    )}>
+                                                                        <Shield size={10} className={cn("md:size-3", modifiedRuleIds.has(rule.id) ? "text-amber-500" : "text-primary/70")} />
+                                                                        <span className={cn("text-[9px] md:text-[10px] font-bold uppercase tracking-widest", modifiedRuleIds.has(rule.id) ? "text-amber-500" : "text-gray-400")}>{rule.type === 'IP_IS_PRIVATE' ? 'PRIVATE ADDR' : rule.type.replace(/_/g, ' ')}</span>
+                                                                        {modifiedRuleIds.has(rule.id) && (
+                                                                            <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                                                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                                                                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                                                                            </span>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex flex-col flex-1 min-w-0">
-                                                                    <span className="text-xs md:text-sm font-semibold text-text-primary font-mono truncate">{rule.value}</span>
+                                                                    <span className={cn(
+                                                                        "text-xs md:text-sm font-semibold font-mono truncate transition-colors",
+                                                                        modifiedRuleIds.has(rule.id) ? "text-amber-500" : "text-text-primary"
+                                                                    )}>{rule.value}</span>
                                                                     {rule.description && <span className="text-[10px] md:text-xs text-text-secondary truncate mt-0.5">{t(rule.description)}</span>}
                                                                 </div>
                                                             </div>
@@ -792,11 +807,16 @@ export function RulesView({
                     <div className="flex flex-col items-start min-w-0" onClick={() => setIsFallbackOpen(!isFallbackOpen)}>
                         <span className="text-[9px] md:text-[10px] font-bold text-text-tertiary uppercase tracking-widest leading-none mb-1">{t('rules.default_policy')}</span>
                         <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-xs md:text-sm font-bold text-text-primary truncate">{t('rules.all_other_traffic')}</span>
-                            <div className={cn(
-                                "size-1 md:size-1.5 rounded-full animate-pulse shrink-0",
-                                isDefaultPolicyModified ? "bg-amber-500" : "bg-primary"
-                            )} />
+                            <span className={cn(
+                                "text-xs md:text-sm font-bold truncate transition-colors",
+                                isDefaultPolicyModified ? "text-amber-500" : "text-text-primary"
+                            )}>{t('rules.all_other_traffic')}</span>
+                            {isDefaultPolicyModified && (
+                                <span className="flex h-2 w-2 relative ml-1">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                                </span>
+                            )}
                         </div>
                     </div>
                     <div className="h-8 w-px bg-white/10 mx-1 md:mx-2 shrink-0" />
