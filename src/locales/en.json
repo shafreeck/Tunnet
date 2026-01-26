@@ -24,7 +24,9 @@
         "scan_qr": "Scan QR Code",
         "qr_too_long": "Data too long",
         "use_copy": "Please use Copy Text",
-        "share_tooltip": "Share"
+        "share_tooltip": "Share",
+        "default": "Default",
+        "recommended": "Recommended"
     },
     "delete_node_title": "Delete Node",
     "delete_node_message": "Are you sure you want to delete this connection? This action cannot be undone.",
@@ -138,7 +140,10 @@
             },
             "strategy": {
                 "title": "Resolution Strategy",
-                "desc": "Choose whether to prefer IPv4 or IPv6 for domain resolution."
+                "desc": "Choose whether to prefer IPv4 or IPv6 for domain resolution.",
+                "prefer_ipv4": "Prefer IPv4",
+                "prefer_ipv6": "Prefer IPv6",
+                "only_ipv4": "Only IPv4"
             },
             "upstream": "Upstream Configuration",
             "server_list": "DNS Server List",
@@ -171,11 +176,22 @@
                 "latest": "Latest Version",
                 "error": "Error",
                 "update": "Update",
-                "new": "New"
+                "new": "New",
+                "downloading": "Downloading",
+                "restart": "Restart to Apply",
+                "sim_title": "Simulation Hint",
+                "sim_desc": "Application would restart now in simulation mode."
+            },
+            "about": {
+                "alpha_access": "Alpha Access",
+                "main_controller": "Main",
+                "helper_controller": "Helper",
+                "sim_auto_update": "Simulating Auto Update: {{version}} found"
             }
         },
         "language": {
             "title": "Language",
+            "display_language": "Display Language",
             "desc": "Change the display language of the application."
         }
     },
@@ -578,5 +594,15 @@
             "closed_all": "All connections closed",
             "close_all_failed": "Failed to close all: {{error}}"
         }
+    },
+    "update": {
+        "ready_title": "Update Ready",
+        "restart_desc": "Restart to apply update.",
+        "ready_desc": "New version {{version}} has been downloaded. Restart to apply.",
+        "restart": "Restart",
+        "downloading": "Downloading",
+        "found": "New version {{version}} available",
+        "install_now": "Install {{version}} Now",
+        "sim_found": "Update found: {{version}} (Simulation)"
     }
 }

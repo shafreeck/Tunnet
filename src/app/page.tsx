@@ -644,11 +644,13 @@ export default function Home() {
         await new Promise(r => setTimeout(r, 2000))
         if (!active) return
 
-        toast.success(t('update.ready_title', { defaultValue: 'New Version Ready' }), {
-          description: t('update.ready_desc', { defaultValue: `v${displayVer} has been downloaded. Restart to apply.` }),
+        toast.success(t('update.ready_title'), {
+          description: t('update.ready_desc', { version: `v${displayVer}` }),
           action: {
-            label: t('update.restart', { defaultValue: 'Restart' }),
-            onClick: () => toast.info("This is a simulation. App would restart now.")
+            label: t('update.restart'),
+            onClick: () => toast.info(t('settings.advanced.core.sim_title'), {
+              description: t('settings.advanced.core.sim_desc')
+            })
           },
           duration: Infinity,
         })
@@ -662,10 +664,10 @@ export default function Home() {
           await update.downloadAndInstall()
           if (!active) return
 
-          toast.success(t('update.ready_title', { defaultValue: 'New Version Ready' }), {
-            description: t('update.ready_desc', { defaultValue: `v${version} has been downloaded. Restart to apply.` }),
+          toast.success(t('update.ready_title'), {
+            description: t('update.ready_desc', { version: `v${version}` }),
             action: {
-              label: t('update.restart', { defaultValue: 'Restart' }),
+              label: t('update.restart'),
               onClick: () => invoke("restart_app")
             },
             duration: Infinity,

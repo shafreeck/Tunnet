@@ -25,7 +25,9 @@
         "scan_qr": "扫描二维码",
         "qr_too_long": "数据过长",
         "use_copy": "请使用复制文本",
-        "share_tooltip": "分享"
+        "share_tooltip": "分享",
+        "default": "默认",
+        "recommended": "推荐"
     },
     "delete_node_title": "删除节点",
     "delete_node_message": "确定要删除这个连接吗？此操作无法撤销。",
@@ -144,8 +146,11 @@
                 "desc": "拦截并在本地解析所有发往标准 DNS 端口 (53) 的请求。"
             },
             "strategy": {
-                "title": "解析优先策略",
-                "desc": "选择优先使用 IPv4 还是 IPv6 进行域名解析。"
+                "title": "解析策略",
+                "desc": "选择域名解析时优先使用 IPv4 还是 IPv6。",
+                "prefer_ipv4": "优先 IPv4",
+                "prefer_ipv6": "优先 IPv6",
+                "only_ipv4": "仅 IPv4"
             },
             "upstream": "上游服务器配置",
             "server_list": "DNS 服务器列表",
@@ -180,7 +185,15 @@
                 "update": "更新",
                 "new": "新版本",
                 "downloading": "下载中",
-                "restart": "重启以应用"
+                "restart": "重启以应用",
+                "sim_title": "模拟提示",
+                "sim_desc": "由于处于模拟模式，应用现在应该重启。"
+            },
+            "about": {
+                "alpha_access": "内部测试",
+                "main_controller": "主控制台",
+                "helper_controller": "辅助控制",
+                "sim_auto_update": "模拟自动更新：发现 {{version}}"
             }
         },
         "language": {
@@ -566,9 +579,12 @@
     "update": {
         "ready_title": "新版本就绪",
         "restart_desc": "重启以应用更新。",
-        "ready_desc": "新版本已下载。重启以应用。",
+        "ready_desc": "新版本 {{version}} 已下载。建议重启以应用更新。",
         "restart": "重启",
-        "downloading": "下载中"
+        "downloading": "下载中",
+        "found": "发现新版本 {{version}}",
+        "install_now": "立即安装 {{version}}",
+        "sim_found": "发现更新：{{version}} (模拟)"
     },
     "connections": {
         "title": "连接管理",

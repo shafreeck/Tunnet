@@ -544,7 +544,9 @@ function CheckUpdateBtn() {
         // Step 3: Restart (Ready)
         if (status === 'ready') {
             if (isSimulation) {
-                toast.info("This is a simulation. App would restart now.")
+                toast.info(t('settings.advanced.core.sim_title'), {
+                    description: t('settings.advanced.core.sim_desc')
+                })
                 setTimeout(() => {
                     setStatus('idle')
                     setIsSimulation(false)
@@ -611,9 +613,10 @@ function CheckUpdateBtn() {
             setIsSimulation(true)
             setStatus('checking')
             setTimeout(() => {
-                setUpdateVersion("TEST-2.0.0")
+                const testVersion = "TEST-2.0.0"
+                setUpdateVersion(testVersion)
                 setStatus('found')
-                toast.info("Update found: vTEST-2.0.0 (Simulation)")
+                toast.info(t('update.sim_found', { version: testVersion }))
             }, 1000)
             return
         }
@@ -754,7 +757,7 @@ function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle, m
                         onChange={(e) => update("tun_stack", e.target.value)}
                         className="bg-card-bg border border-border-color rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-primary/50 transition-all cursor-pointer text-foreground"
                     >
-                        <option value="gvisor">gVisor (推荐)</option>
+                        <option value="gvisor">gVisor ({t('common.recommended')})</option>
                         <option value="system">System</option>
                         <option value="mixed">Mixed</option>
                     </select>
@@ -840,9 +843,9 @@ function DnsSettings({ settings, update, save, modifiedKeys = [] }: CommonProps)
                         onChange={(e) => update("dns_strategy", e.target.value)}
                         className="bg-card-bg border border-border-color rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-primary/50 transition-all cursor-pointer text-foreground"
                     >
-                        <option value="ipv4">Prefer IPv4</option>
-                        <option value="ipv6">Prefer IPv6</option>
-                        <option value="only4">Only IPv4</option>
+                        <option value="ipv4">{t('settings.dns.strategy.prefer_ipv4')}</option>
+                        <option value="ipv6">{t('settings.dns.strategy.prefer_ipv6')}</option>
+                        <option value="only4">{t('settings.dns.strategy.only_ipv4')}</option>
                     </select>
                 </SettingItem>
             </Section>
@@ -904,7 +907,7 @@ function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modif
                         onChange={(e) => update("log_level", e.target.value)}
                         className="bg-card-bg border border-border-color rounded-xl px-4 py-2 text-xs font-semibold focus:outline-none focus:border-primary/50 transition-all cursor-pointer text-foreground"
                     >
-                        <option value="info">Info (默认)</option>
+                        <option value="info">Info ({t('common.default')})</option>
                         <option value="debug">Debug</option>
                         <option value="trace">Trace</option>
                         <option value="warn">Warn</option>
@@ -947,7 +950,7 @@ function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modif
                     <div className="flex flex-col gap-2 items-end">
                         {clashApiPort && (
                             <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Main</span>
+                                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{t('settings.about.main_controller')}</span>
                                 <code className="text-[11px] font-mono bg-primary/10 text-primary px-2 py-1 rounded select-all cursor-text min-w-[160px] text-center">
                                     http://127.0.0.1:{clashApiPort}
                                 </code>
@@ -955,7 +958,7 @@ function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modif
                         )}
                         {helperApiPort && (
                             <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">Helper</span>
+                                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{t('settings.about.helper_controller')}</span>
                                 <code className="text-[11px] font-mono bg-accent-green/10 text-accent-green px-2 py-1 rounded select-all cursor-text min-w-[160px] text-center">
                                     http://127.0.0.1:{helperApiPort}
                                 </code>
@@ -982,9 +985,10 @@ function AboutSection({ version }: { version: string }) {
         setClicks(newClicks)
         if (newClicks >= 5) {
             setClicks(0)
+            const testVersion = "TEST-0.9.9"
             import("@tauri-apps/api/event").then(({ emit }) => {
-                emit("update-available", "TEST-0.9.9")
-                toast.info("Simulating Auto Update: TEST-0.9.9 found")
+                emit("update-available", testVersion)
+                toast.info(t('settings.about.sim_auto_update', { version: testVersion }))
             })
         }
     }
@@ -1001,7 +1005,7 @@ function AboutSection({ version }: { version: string }) {
             <div className="flex flex-col items-center gap-2 text-center relative z-10">
                 <h2 className="text-4xl font-extrabold tracking-tighter text-foreground">Tunnet</h2>
                 <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">Alpha Access</span>
+                    <span className="text-xs font-bold text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">{t('settings.about.alpha_access')}</span>
                     <span
                         onClick={handleTestUpdate}
                         className="text-[10px] text-secondary font-mono uppercase tracking-widest cursor-pointer hover:text-primary transition-colors select-none"
