@@ -712,14 +712,14 @@ export function RulesView({
                                                                 >
                                                                     <GripVertical size={16} />
                                                                 </div>
-                                                                <div className="w-20 md:w-32 shrink-0 hidden sm:block pointer-events-none select-none">
+                                                                <div className="w-20 md:w-24 shrink-0 hidden sm:block pointer-events-none select-none mr-2 md:mr-4">
                                                                     <div className={cn(
-                                                                        "flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-xl border w-fit transition-all duration-300 relative",
+                                                                        "flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-xl border w-full justify-center transition-all duration-300 relative",
                                                                         "bg-white/5 border-white/5 text-gray-400"
                                                                     )}>
-                                                                        <Shield size={10} className={cn("md:size-3", !isPendingDelete && modifiedRuleIds.has(rule.id) ? "text-amber-500" : "text-primary/70")} />
+                                                                        <Shield size={10} className={cn("md:size-3 shrink-0", !isPendingDelete && modifiedRuleIds.has(rule.id) ? "text-amber-500" : "text-primary/70")} />
                                                                         <span className={cn(
-                                                                            "text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-gray-400",
+                                                                            "text-[9px] md:text-[10px] font-bold uppercase tracking-wider text-gray-400 text-center",
                                                                             isPendingDelete && "line-through opacity-70"
                                                                         )}>
                                                                             {rule.type === 'IP_IS_PRIVATE' ? 'PRIVATE ADDR' : rule.type.replace(/_/g, ' ')}
