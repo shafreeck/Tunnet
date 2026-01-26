@@ -78,18 +78,35 @@ export function LocationsView({
         }
     }
 
+    const [lastSelectedCountryCode, setLastSelectedCountryCode] = useState<string | null>(null)
+
+    // Keep track of the last selected country to prevent UI flash during closing animation
+    useEffect(() => {
+        if (selectedCountryCode) {
+            setLastSelectedCountryCode(selectedCountryCode)
+        }
+    }, [selectedCountryCode])
+
     const filteredServersForList = useMemo(() => {
         let list = servers
-        if (selectedCountryCode) {
-            const code = selectedCountryCode.toLowerCase()
+        // Use current selection or fallback to last selection to keep list populated during close animation
+        const code = (selectedCountryCode || lastSelectedCountryCode || "").toLowerCase()
+
+        if (code) {
             list = list.filter(s => (s.countryCode || "").toLowerCase() === code)
+        } else if (searchQuery) {
+            // Only filter by search if no country is "active" (visually)
+            // But wait, if we have a lastSelectedCountryCode, we are filtering by it.
+            // If the drawer is hidden, this logic doesn't matter much effectively, 
+            // but for correct exit animation, we want it to look like the country list.
         }
+
         if (searchQuery) {
             list = list.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 s.country?.toLowerCase().includes(searchQuery.toLowerCase()))
         }
         return list
-    }, [servers, selectedCountryCode, searchQuery])
+    }, [servers, selectedCountryCode, lastSelectedCountryCode, searchQuery])
 
     const handleAutoSelect = async () => {
         // Collect current filtered nodes
@@ -101,7 +118,9 @@ export function LocationsView({
         }
 
         const ids = currentList.map(n => n.id)
-        const countryName = selectedCountryCode ? getCountryName(selectedCountryCode, i18n.language) : t('locations.all_regions')
+
+        const effectiveCode = selectedCountryCode || lastSelectedCountryCode
+        const countryName = effectiveCode ? getCountryName(effectiveCode, i18n.language) : t('locations.all_regions')
 
         const name = `${t('auto_select_prefix', { defaultValue: 'Auto' })} - ${countryName}`
 
@@ -119,8 +138,8 @@ export function LocationsView({
             }
         }
 
-        const systemId = selectedCountryCode
-            ? `system:region:${selectedCountryCode.toUpperCase()}`
+        const systemId = effectiveCode
+            ? `system:region:${effectiveCode.toUpperCase()}`
             : "system:global"
 
         onSelect(systemId)
@@ -134,11 +153,12 @@ export function LocationsView({
     }, [servers])
 
     const isAutoActive = React.useMemo(() => {
-        if (selectedCountryCode) {
-            return activeServerId === `system:region:${selectedCountryCode.toUpperCase()}`
+        const effectiveCode = selectedCountryCode || lastSelectedCountryCode
+        if (effectiveCode) {
+            return activeServerId === `system:region:${effectiveCode.toUpperCase()}`
         }
         return activeServerId === "system:global"
-    }, [activeServerId, selectedCountryCode])
+    }, [activeServerId, selectedCountryCode, lastSelectedCountryCode])
 
     const activeAutoNode = useMemo(() => {
         if (!activeAutoNodeId) return null
@@ -282,12 +302,15 @@ export function LocationsView({
                     />
                 )}
 
+                {/* Backdrop to close drawer on click outside - REMOVED to allow interactivity with Map/Grid */}
+                {/* The "close on empty click" logic is now handled within the Child views (Map/Grid containers) */}
+
                 {/* Shared Server List Sidebar/Drawer - Re-styled */}
                 <div className={cn(
                     "absolute top-0 bottom-0 right-0 md:top-6 md:bottom-6 md:right-6 w-full sm:w-[400px] glass-card border-l md:border border-border-color md:rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden transition-all duration-300 transform z-40",
                     "bg-white/80 dark:bg-black/80 backdrop-blur-md", // Default: More transparent
                     "hover:bg-white/95 hover:dark:bg-black/95 hover:backdrop-blur-xl hover:shadow-2xl", // Hover: Solid & Focused
-                    (showListValues || (viewMode === 'map' && selectedCountryCode)) ? "translate-x-0 opacity-100" : "translate-x-full md:translate-x-[120%] opacity-0"
+                    (showListValues || (viewMode === 'map' && selectedCountryCode)) ? "translate-x-0" : "translate-x-full md:translate-x-[120%]"
                 )}>
                     <div className="px-6 py-4 border-b border-border-color bg-card-bg flex items-center justify-between shrink-0">
                         <div className="flex items-center gap-3 overflow-hidden">
@@ -296,7 +319,7 @@ export function LocationsView({
                             </div>
                             <div className="flex flex-col overflow-hidden">
                                 <span className="text-sm font-black text-text-primary uppercase tracking-tight flex items-center gap-2 truncate">
-                                    {selectedCountryCode ? getCountryName(selectedCountryCode, i18n.language) : t('locations.drawer.region_nodes')}
+                                    {(selectedCountryCode || lastSelectedCountryCode) ? getCountryName((selectedCountryCode || lastSelectedCountryCode)!, i18n.language) : t('locations.drawer.region_nodes')}
                                     {activeAutoNode && (
                                         <span className="text-[9px] font-normal normal-case bg-accent-green/10 text-accent-green px-1.5 py-0.5 rounded opacity-80 whitespace-nowrap">
                                             {activeAutoNode.name}
@@ -343,10 +366,11 @@ export function LocationsView({
                                 {/* Share / Export Group */}
                                 <button
                                     onClick={() => {
-                                        const systemId = selectedCountryCode
-                                            ? `system:region:${selectedCountryCode.toUpperCase()}`
+                                        const effectiveCode = selectedCountryCode || lastSelectedCountryCode
+                                        const systemId = effectiveCode
+                                            ? `system:region:${effectiveCode.toUpperCase()}`
                                             : "system:global"
-                                        const name = selectedCountryCode ? getCountryName(selectedCountryCode, i18n.language) : t('locations.all_regions')
+                                        const name = effectiveCode ? getCountryName(effectiveCode, i18n.language) : t('locations.all_regions')
                                         setExportTarget({
                                             id: systemId,
                                             name: name,

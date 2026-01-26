@@ -296,7 +296,7 @@ export function LocationsMap({
             {tooltip && typeof document !== 'undefined' && createPortal(
                 <div
                     className={cn(
-                        "fixed z-[9999] px-3 py-1.5 bg-zinc-900/90 backdrop-blur-md border border-white/10 text-xs text-white rounded-lg shadow-xl pointer-events-none whitespace-nowrap transition-[transform,opacity] duration-75",
+                        "fixed z-9999 px-3 py-1.5 bg-zinc-900/90 backdrop-blur-md border border-white/10 text-xs text-white rounded-lg shadow-xl pointer-events-none whitespace-nowrap transition-[transform,opacity] duration-75",
                     )}
                     style={{
                         left: tooltip.x,
