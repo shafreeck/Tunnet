@@ -134,7 +134,7 @@ export function NodeEditor({ isOpen, initialNode, onClose, onSave }: NodeEditorP
     const hasReality = node.protocol === "vless" // simple assumption for Reality
 
     return (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-200">
+        <div className="absolute inset-0 z-60 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-200 rounded-[24px]">
             <div className="w-full max-w-lg bg-white/95 dark:bg-[#1a1b26]/95 backdrop-blur-xl border border-border-color rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-border-color bg-sidebar-bg">

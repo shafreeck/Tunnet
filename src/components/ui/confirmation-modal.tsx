@@ -35,7 +35,7 @@ export function ConfirmationModal({
     if (!isOpen) return null
 
     return (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-200">
+        <div className="absolute inset-0 z-60 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-200 rounded-[24px]">
             <div className="w-full max-w-sm bg-surface border border-border-color rounded-3xl shadow-floating overflow-hidden flex flex-col scale-100 animate-in zoom-in-95 duration-300 ease-out">
                 <div className="p-8 flex flex-col items-center text-center gap-6">
                     <div className={`p-4 rounded-2xl ${isDanger ? 'bg-red-500/10 text-red-500' : 'bg-primary/10 text-primary'}`}>

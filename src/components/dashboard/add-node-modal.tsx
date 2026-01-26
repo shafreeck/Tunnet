@@ -170,7 +170,7 @@ export function AddNodeModal({ isOpen, onClose, onManual, onImport, title }: Add
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-md bg-black/40 animate-in fade-in duration-500"
+            className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-300 rounded-[24px]"
             onDragOver={handleDragOver}
             onDragEnter={handleDragOver}
             onDragLeave={handleDragLeave}

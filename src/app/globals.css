@@ -97,7 +97,7 @@ body {
 }
 
 .app-window {
-  @apply font-sans h-screen w-screen overflow-hidden selection:bg-primary/30 antialiased;
+  @apply font-sans h-screen w-screen overflow-hidden selection:bg-primary/30 antialiased relative;
   background: var(--app-bg);
   background-image: var(--app-bg-gradient);
   border-radius: 24px;

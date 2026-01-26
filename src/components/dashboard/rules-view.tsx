@@ -928,7 +928,7 @@ export function RulesView({
             {/* Modal - Simplified Integration */}
             {
                 isDialogOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="absolute inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-md bg-black/40 animate-in fade-in duration-500 rounded-[24px]">
                         <div className="fixed inset-0" onClick={() => setIsDialogOpen(false)} />
                         <div className="relative w-full max-w-lg bg-surface border border-border-color rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in zoom-in-95 duration-300">
                             <div className="flex items-center justify-between px-8 py-4 border-b border-border-color bg-sidebar-bg/50">

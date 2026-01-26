@@ -2005,7 +2005,7 @@ export default function Home() {
   if (!mounted) return null
 
   return (
-    <div className="h-dvh flex md:gap-2 md:p-2 overflow-hidden bg-background text-foreground" data-tauri-drag-region>
+    <div className="h-dvh flex md:gap-2 md:p-2 overflow-hidden bg-background text-foreground relative" data-tauri-drag-region>
       <WindowControls className="hidden md:flex" />
       <Sidebar
         currentView={currentView}
