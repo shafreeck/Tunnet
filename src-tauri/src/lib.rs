@@ -758,6 +758,10 @@ pub fn run() {
             export_node_content,
             export_profile_content,
             export_group_content,
+            export_all_nodes,
+            export_singbox_config,
+            export_tunnet_backup,
+            import_tunnet_backup,
             decode_qr,
             get_connections,
             close_connection,
@@ -892,6 +896,36 @@ async fn export_node_content(
     format: String,
 ) -> Result<String, String> {
     service.export_node_content(id, format)
+}
+
+#[tauri::command]
+async fn export_all_nodes(
+    service: State<'_, ProxyService<tauri::Wry>>,
+    format: String,
+) -> Result<String, String> {
+    service.export_all_nodes(format)
+}
+
+#[tauri::command]
+async fn export_singbox_config(
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<String, String> {
+    service.export_singbox_config()
+}
+
+#[tauri::command]
+async fn export_tunnet_backup(
+    service: State<'_, ProxyService<tauri::Wry>>,
+) -> Result<String, String> {
+    service.export_tunnet_backup()
+}
+
+#[tauri::command]
+async fn import_tunnet_backup(
+    service: State<'_, ProxyService<tauri::Wry>>,
+    json: String,
+) -> Result<(), String> {
+    service.import_tunnet_backup(json).await
 }
 
 #[tauri::command]

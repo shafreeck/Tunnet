@@ -22,7 +22,7 @@ pub enum ConfigMode {
     Combined,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct LogConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub level: Option<String>,
@@ -32,7 +32,7 @@ pub struct LogConfig {
     pub timestamp: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Inbound {
     #[serde(rename = "type")]
     pub inbound_type: String,
@@ -76,7 +76,7 @@ pub struct Inbound {
     pub sniff_override_destination: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Outbound {
     #[serde(rename = "type")]
     pub outbound_type: String,
@@ -182,7 +182,7 @@ pub struct RealityConfig {
     pub short_id: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Route {
     pub rules: Vec<RouteRule>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -221,7 +221,7 @@ pub struct RouteRule {
     pub action: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct RuleSet {
     #[serde(rename = "type")]
     pub rule_set_type: String,
@@ -237,7 +237,7 @@ pub struct RuleSet {
     pub update_interval: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ExperimentalConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_file: Option<CacheFileConfig>,
@@ -254,14 +254,14 @@ pub struct ClashApiConfig {
     pub secret: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct CacheFileConfig {
     pub enabled: bool,
     pub path: String,
 }
 
 // Add dns struct
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct DnsConfig {
     pub servers: Vec<DnsServer>,
     pub rules: Vec<DnsRule>,

@@ -25,13 +25,18 @@ import {
     RotateCcw,
     Check,
     AlertCircle,
-    Activity
+    Activity,
+    FileJson,
+    FileDown,
+    FileUp
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Switch } from "@/components/ui/switch"
 import { AppSettings, defaultSettings, getAppSettings, saveAppSettings } from "@/lib/settings"
 import { getVersion } from "@tauri-apps/api/app"
 import { invoke } from "@tauri-apps/api/core"
+import { save, open as openDialog } from "@tauri-apps/plugin-dialog"
+import { writeTextFile, readTextFile } from "@tauri-apps/plugin-fs"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner" // Assuming you have sonner or some toast, if not I should remove it or check. 
 // Note: I don't see sonner in imports but it's common. I'll stick to console if not standard.
@@ -879,6 +884,65 @@ interface AdvancedProps extends CommonProps {
 function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modifiedKeys = [] }: AdvancedProps) {
     const { t } = useTranslation()
     const [refreshingGeoData, setRefreshingGeoData] = useState(false)
+    const [isExporting, setIsExporting] = useState(false)
+
+    const handleExportSingbox = async () => {
+        setIsExporting(true)
+        try {
+            const content = await invoke<string>("export_singbox_config")
+            const path = await save({
+                defaultPath: "sing-box_config.json",
+                filters: [{ name: "JSON", extensions: ["json"] }]
+            })
+            if (path) {
+                await writeTextFile(path, content)
+                toast.success(t('export.saved_file'))
+            }
+        } catch (e) {
+            console.error(e)
+            toast.error(t('export.failed'))
+        } finally {
+            setIsExporting(false)
+        }
+    }
+
+    const handleExportBackup = async () => {
+        setIsExporting(true)
+        try {
+            const content = await invoke<string>("export_tunnet_backup")
+            const now = new Date().toISOString().split('T')[0]
+            const path = await save({
+                defaultPath: `tunnet_backup_${now}.json`,
+                filters: [{ name: "JSON", extensions: ["json"] }]
+            })
+            if (path) {
+                await writeTextFile(path, content)
+                toast.success(t('export.saved_file'))
+            }
+        } catch (e) {
+            console.error(e)
+            toast.error(t('export.failed'))
+        } finally {
+            setIsExporting(false)
+        }
+    }
+
+    const handleRestoreBackup = async () => {
+        try {
+            const selected = await openDialog({
+                filters: [{ name: "JSON", extensions: ["json"] }],
+                multiple: false
+            })
+            if (selected && typeof selected === 'string') {
+                const content = await readTextFile(selected)
+                await invoke("import_tunnet_backup", { json: content })
+                toast.success(t('settings.advanced.data.restore_success', { defaultValue: "Restore successful" }))
+            }
+        } catch (e) {
+            console.error(e)
+            toast.error(t('settings.advanced.data.restore_failed', { defaultValue: "Restore failed" }))
+        }
+    }
 
     const handleRefreshGeoData = async () => {
         setRefreshingGeoData(true)
@@ -941,6 +1005,46 @@ function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modif
                 </SettingItem>
             </Section>
 
+            <Section title={t('settings.advanced.data.title', { defaultValue: "Data Management" })} icon={<Database size={14} />}>
+                <SettingItem
+                    title={t('settings.advanced.data.singbox_export.title', { defaultValue: "Export Sing-box Config" })}
+                    description={t('settings.advanced.data.singbox_export.desc', { defaultValue: "Export as a pure sing-box compatible JSON file." })}
+                    icon={<FileJson size={20} />}
+                >
+                    <button
+                        onClick={handleExportSingbox}
+                        disabled={isExporting}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-all text-xs font-bold disabled:opacity-50"
+                    >
+                        {isExporting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                        {t('settings.advanced.data.export', { defaultValue: "Export" })}
+                    </button>
+                </SettingItem>
+                <SettingItem
+                    title={t('settings.advanced.data.tunnet_backup.title', { defaultValue: "Full Tunnet Backup" })}
+                    description={t('settings.advanced.data.tunnet_backup.desc', { defaultValue: "Export all nodes, groups, rules and settings for migration." })}
+                    icon={<Database size={20} />}
+                >
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleRestoreBackup}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-black/5 dark:bg-white/5 text-secondary hover:text-foreground transition-all text-xs font-bold"
+                        >
+                            <FileUp size={14} />
+                            {t('settings.advanced.data.restore', { defaultValue: "Restore" })}
+                        </button>
+                        <button
+                            onClick={handleExportBackup}
+                            disabled={isExporting}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-all text-xs font-bold disabled:opacity-50"
+                        >
+                            {isExporting ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+                            {t('settings.advanced.data.backup', { defaultValue: "Backup" })}
+                        </button>
+                    </div>
+                </SettingItem>
+            </Section>
+
             <Section title={t('settings.advanced.component')} icon={<Server size={14} />}>
                 <SettingItem
                     title={t('settings.advanced.core.title')}
@@ -950,7 +1054,7 @@ function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modif
                     <div className="flex flex-col gap-2 items-end">
                         {clashApiPort && (
                             <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{t('settings.about.main_controller')}</span>
+                                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{t('settings.advanced.core.main_controller')}</span>
                                 <code className="text-[11px] font-mono bg-primary/10 text-primary px-2 py-1 rounded select-all cursor-text min-w-[160px] text-center">
                                     http://127.0.0.1:{clashApiPort}
                                 </code>
@@ -958,7 +1062,7 @@ function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modif
                         )}
                         {helperApiPort && (
                             <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{t('settings.about.helper_controller')}</span>
+                                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{t('settings.advanced.core.helper_controller')}</span>
                                 <code className="text-[11px] font-mono bg-accent-green/10 text-accent-green px-2 py-1 rounded select-all cursor-text min-w-[160px] text-center">
                                     http://127.0.0.1:{helperApiPort}
                                 </code>

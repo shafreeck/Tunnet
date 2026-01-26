@@ -255,6 +255,16 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                                 <span>{t('subscriptions.update_all')}</span>
                             </button>
                         )}
+                        {profiles.length > 0 && (
+                            <button
+                                onClick={() => setTargetProfile({ id: "all", name: t('export.all_nodes_name', { defaultValue: "All Nodes" }) })}
+                                className="flex items-center gap-2 px-4 py-2 bg-card-bg border border-border-color text-text-secondary rounded-xl hover:text-text-primary hover:bg-black/5 dark:hover:bg-white/5 transition-all font-medium text-sm"
+                                title={t('export.all_nodes_tooltip', { defaultValue: "Export all nodes from all subscriptions" })}
+                            >
+                                <Share2 size={18} />
+                                <span>{t('export.all_nodes_button', { defaultValue: "Export All" })}</span>
+                            </button>
+                        )}
                         {onAdd && (
                             <button
                                 onClick={onAdd}
@@ -486,7 +496,7 @@ export function SubscriptionsView({ profiles, onUpdate, onDelete, onAdd, onSelec
                     onClose={() => setTargetProfile(null)}
                     targetId={targetProfile.id}
                     targetName={targetProfile.name}
-                    targetType="profile"
+                    targetType={targetProfile.id === "all" ? "all-nodes" : "profile"}
                 />
             )}
         </div >

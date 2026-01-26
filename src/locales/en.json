@@ -11,6 +11,9 @@
     "sort_tooltip": "Sort",
     "sort_by_name": "Name",
     "sort_by_latency": "Latency",
+    "sort_by_usage": "Usage",
+    "sort_by_nodes": "Nodes",
+    "sort_by_expiry": "Expiry",
     "add_node_tooltip": "Add New Node",
     "test_latency_tooltip": "Test Latency",
     "edit_tooltip": "Edit",
@@ -180,14 +183,30 @@
                 "downloading": "Downloading",
                 "restart": "Restart to Apply",
                 "sim_title": "Simulation Hint",
-                "sim_desc": "Application would restart now in simulation mode."
-            },
-            "about": {
-                "alpha_access": "Alpha Access",
+                "sim_desc": "Application would restart now in simulation mode.",
                 "main_controller": "Main",
-                "helper_controller": "Helper",
-                "sim_auto_update": "Simulating Auto Update: {{version}} found"
+                "helper_controller": "Helper"
+            },
+            "data": {
+                "title": "Data Management",
+                "singbox_export": {
+                    "title": "Export Sing-box Config",
+                    "desc": "Export as a pure sing-box compatible JSON file."
+                },
+                "tunnet_backup": {
+                    "title": "Full Tunnet Backup",
+                    "desc": "Export all nodes, groups, rules and settings for migration."
+                },
+                "export": "Export",
+                "backup": "Backup",
+                "restore": "Restore",
+                "restore_success": "Restore successful",
+                "restore_failed": "Restore failed"
             }
+        },
+        "about": {
+            "alpha_access": "Alpha Access",
+            "sim_auto_update": "Simulating Auto Update: {{version}} found"
         },
         "language": {
             "title": "Language",
@@ -444,6 +463,7 @@
     "auto_select_success": "Auto selected {{name}} ({{ping}}ms)",
     "auto_select_no_data": "No latency data available. Please check latency first.",
     "auto_select_empty": "No available nodes.",
+    "auto_select_cancelled": "Switched to manual selection",
     "groups": {
         "title": "Server Groups",
         "subtitle": "Create custom groups for advanced routing",
@@ -568,7 +588,11 @@
         "filter_json": "Sing-box Config",
         "target_node": "Node",
         "target_profile": "Profile",
-        "target_group": "Group"
+        "target_group": "Group",
+        "target_all-nodes": "All Available Nodes",
+        "all_nodes_name": "All Available Nodes",
+        "all_nodes_tooltip": "Export all nodes from all subscriptions",
+        "all_nodes_button": "Export All"
     },
     "connections": {
         "title": "Connections",

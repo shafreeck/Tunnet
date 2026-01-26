@@ -15,7 +15,7 @@ interface ExportModalProps {
     onClose: () => void
     targetId: string
     targetName: string
-    targetType: "node" | "profile" | "group"
+    targetType: "node" | "profile" | "group" | "all-nodes"
 }
 
 export function ExportModal({ isOpen, onClose, targetId, targetName, targetType }: ExportModalProps) {
@@ -30,10 +30,12 @@ export function ExportModal({ isOpen, onClose, targetId, targetName, targetType 
             const commandMap = {
                 "node": "export_node_content",
                 "profile": "export_profile_content",
-                "group": "export_group_content"
+                "group": "export_group_content",
+                "all-nodes": "export_all_nodes"
             }
             const command = commandMap[targetType]
-            const content = await invoke<string>(command, { id: targetId, format })
+            const invokeArgs = targetType === "all-nodes" ? { format } : { id: targetId, format }
+            const content = await invoke<string>(command, invokeArgs)
 
             if (action === "copy") {
                 await writeText(content)
@@ -81,7 +83,7 @@ export function ExportModal({ isOpen, onClose, targetId, targetName, targetType 
                                 {t('export.title', { defaultValue: "Export" })}
                             </DialogTitle>
                             <span className="text-[10px] font-bold text-text-tertiary tracking-widest mt-0.5">
-                                <span className="uppercase">{t(`export.target_${targetType}`)}:</span> {targetName.toLowerCase() === "local import" || targetName.toLowerCase() === "本地导入" ? t('subscriptions.local_import') : targetName}
+                                <span className="uppercase">{t(`export.target_${targetType}`)}:</span> {targetType === "all-nodes" ? t('export.all_nodes_name', { defaultValue: "All Available Nodes" }) : (targetName.toLowerCase() === "local import" || targetName.toLowerCase() === "本地导入" ? t('subscriptions.local_import') : targetName)}
                             </span>
                         </div>
                     </div>

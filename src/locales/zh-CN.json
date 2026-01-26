@@ -12,6 +12,9 @@
     "sort_by_name": "名称",
     "sort_by_type": "策略类型",
     "sort_by_latency": "延迟",
+    "sort_by_usage": "使用量",
+    "sort_by_nodes": "节点数",
+    "sort_by_expiry": "过期时间",
     "add_node_tooltip": "添加节点",
     "test_latency_tooltip": "测试延迟",
     "edit_tooltip": "编辑",
@@ -187,14 +190,30 @@
                 "downloading": "下载中",
                 "restart": "重启以应用",
                 "sim_title": "模拟提示",
-                "sim_desc": "由于处于模拟模式，应用现在应该重启。"
-            },
-            "about": {
-                "alpha_access": "内部测试",
+                "sim_desc": "由于处于模拟模式，应用现在应该重启。",
                 "main_controller": "主控制台",
-                "helper_controller": "辅助控制",
-                "sim_auto_update": "模拟自动更新：发现 {{version}}"
+                "helper_controller": "辅助控制"
+            },
+            "data": {
+                "title": "数据管理",
+                "singbox_export": {
+                    "title": "导出 Sing-box 配置",
+                    "desc": "导出为纯净的 Sing-box 兼容 JSON 文件。"
+                },
+                "tunnet_backup": {
+                    "title": "Tunnet 全量备份",
+                    "desc": "导出所有节点、分组、规则和设置以进行迁移。"
+                },
+                "export": "导出",
+                "backup": "备份",
+                "restore": "恢复",
+                "restore_success": "恢复成功",
+                "restore_failed": "恢复失败"
             }
+        },
+        "about": {
+            "alpha_access": "内部测试",
+            "sim_auto_update": "模拟自动更新：发现 {{version}}"
         },
         "language": {
             "title": "语言",
@@ -453,6 +472,7 @@
     "auto_select_success": "已自动优选 {{name}} ({{ping}}ms)",
     "auto_select_no_data": "无可用延迟数据，请先进行测速。",
     "auto_select_empty": "无可用节点。",
+    "auto_select_cancelled": "已切换为手动选择",
     "groups": {
         "title": "节点组管理",
         "subtitle": "创建自定义节点组以实现高级分流",
@@ -577,7 +597,11 @@
         "filter_json": "Sing-box 配置文件",
         "target_node": "节点",
         "target_profile": "配置",
-        "target_group": "分组"
+        "target_group": "分组",
+        "target_all-nodes": "所有可用节点",
+        "all_nodes_name": "所有可用节点",
+        "all_nodes_tooltip": "导出所有订阅中的全部节点",
+        "all_nodes_button": "导出全部"
     },
     "update": {
         "ready_title": "新版本就绪",

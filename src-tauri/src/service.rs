@@ -1006,14 +1006,38 @@ impl<R: Runtime> ProxyService<R> {
         Err("Node not found".to_string())
     }
 
+    pub fn export_all_nodes(&self, format: String) -> Result<String, String> {
+        let profiles = self.manager.load_profiles().map_err(|e| e.to_string())?;
+        let mut all_nodes = Vec::new();
+        for p in profiles {
+            all_nodes.extend(p.nodes);
+        }
+
+        self.export_nodes_content(all_nodes, format)
+    }
+
     pub fn export_profile_content(&self, profile_id: String, format: String) -> Result<String, String> {
         let profiles = self.manager.load_profiles().map_err(|e| e.to_string())?;
         let profile = profiles.iter().find(|p| p.id == profile_id).ok_or("Profile not found")?;
 
+        self.export_nodes_content(profile.nodes.clone(), format)
+    }
+
+    pub fn export_node_content(&self, node_id: String, format: String) -> Result<String, String> {
+        let profiles = self.manager.load_profiles().map_err(|e| e.to_string())?;
+        let node = profiles.iter()
+            .flat_map(|p| &p.nodes)
+            .find(|n| n.id == node_id)
+            .ok_or("Node not found")?;
+
+        self.export_nodes_content(vec![node.clone()], format)
+    }
+
+    fn export_nodes_content(&self, nodes: Vec<crate::profile::Node>, format: String) -> Result<String, String> {
         match format.as_str() {
             "sip002" | "base64" => {
                 let mut links = String::new();
-                for node in &profile.nodes {
+                for node in nodes {
                     let link = node.to_link();
                     if !link.is_empty() {
                         links.push_str(&link);
@@ -1026,7 +1050,7 @@ impl<R: Runtime> ProxyService<R> {
             }
             "tunnet" => {
                 let mut links = String::new();
-                for node in &profile.nodes {
+                for node in nodes {
                     let link = node.to_tunnet_link();
                     links.push_str(&link);
                     links.push('\n');
@@ -1034,41 +1058,15 @@ impl<R: Runtime> ProxyService<R> {
                 Ok(links)
             }
             "json" | "sing-box" => {
-                // Return just the nodes list or a full outbound config?
-                // For "Export Profile", usually users want the Node List in JSON format (Sing-box friendly).
-                // Let's return the nodes array directly for now.
-                serde_json::to_string_pretty(&profile.nodes).map_err(|e| e.to_string())
-            }
-            "yaml" | "clash" => {
-                Err("Clash export not implemented yet".to_string())
+                serde_json::to_string_pretty(&nodes).map_err(|e| e.to_string())
             }
             _ => Err("Unknown format".to_string())
         }
     }
 
-    pub fn export_node_content(&self, node_id: String, format: String) -> Result<String, String> {
-        let profiles = self.manager.load_profiles().map_err(|e| e.to_string())?;
-        let node = profiles.iter()
-            .flat_map(|p| &p.nodes)
-            .find(|n| n.id == node_id)
-            .ok_or("Node not found")?;
-
-        match format.as_str() {
-            "sip002" | "base64" => {
-                let link = node.to_link();
-                if link.is_empty() {
-                    return Err("Failed to generate link for node".to_string());
-                }
-                Ok(link)
-            }
-            "tunnet" => {
-                Ok(node.to_tunnet_link())
-            }
-            "json" | "sing-box" => {
-                serde_json::to_string_pretty(&node).map_err(|e| e.to_string())
-            }
-            _ => Err("Unknown format".to_string())
-        }
+    pub fn export_group_content(&self, group_id: String, format: String) -> Result<String, String> {
+        let nodes = self.resolve_group_nodes(&group_id)?;
+        self.export_nodes_content(nodes, format)
     }
 
     // New Helper: Resolve all nodes for a group (System or User-defined)
@@ -1101,37 +1099,239 @@ impl<R: Runtime> ProxyService<R> {
         Ok(member_nodes)
     }
 
-    pub fn export_group_content(&self, group_id: String, format: String) -> Result<String, String> {
-        let nodes = self.resolve_group_nodes(&group_id)?;
+    pub fn export_singbox_config(&self) -> Result<String, String> {
+        let settings = self.manager.load_settings().unwrap_or_default();
+        let mode = if settings.tun_mode {
+            crate::config::ConfigMode::Combined
+        } else {
+            crate::config::ConfigMode::SystemProxyOnly
+        };
+        
+        let mut cfg = crate::config::SingBoxConfig::new(None, mode, &settings.dns_servers);
+        
+        // Use remote rule-sets for portability
+        if let Some(route) = &mut cfg.route {
+            route.rule_set = Some(vec![
+                crate::config::RuleSet {
+                    rule_set_type: "remote".to_string(),
+                    tag: "geoip-cn".to_string(),
+                    format: "binary".to_string(),
+                    path: None,
+                    url: Some("https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-cn.srs".to_string()),
+                    download_detour: Some("direct".to_string()),
+                    update_interval: Some("1d".to_string()),
+                },
+                crate::config::RuleSet {
+                    rule_set_type: "remote".to_string(),
+                    tag: "geosite-cn".to_string(),
+                    format: "binary".to_string(),
+                    path: None,
+                    url: Some("https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs".to_string()),
+                    download_detour: Some("direct".to_string()),
+                    update_interval: Some("1d".to_string()),
+                },
+                crate::config::RuleSet {
+                    rule_set_type: "remote".to_string(),
+                    tag: "geosite-ads".to_string(),
+                    format: "binary".to_string(),
+                    path: None,
+                    url: Some("https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ads-all.srs".to_string()),
+                    download_detour: Some("direct".to_string()),
+                    update_interval: Some("1d".to_string()),
+                },
+            ]);
+        }
 
-        match format.as_str() {
-             "sip002" | "base64" => {
-                let mut links = String::new();
-                for node in nodes {
-                    let link = node.to_link();
-                    if !link.is_empty() {
-                        links.push_str(&link);
-                        links.push('\n');
+        // Add outbounds (Nodes & Groups)
+        let profiles = self.manager.load_profiles().unwrap_or_default();
+        let groups = self.get_groups().unwrap_or_default();
+        // 1. Map IDs to readable Tags and handle collisions
+        let mut id_to_tag = std::collections::HashMap::new();
+        let mut used_tags = std::collections::HashSet::new();
+        used_tags.insert("direct".to_string());
+        used_tags.insert("block".to_string());
+        used_tags.insert("dns".to_string());
+        used_tags.insert("geoip-cn".to_string());
+        used_tags.insert("geosite-cn".to_string());
+        used_tags.insert("geosite-ads".to_string());
+
+        // Node tags
+        for profile in &profiles {
+            for node in &profile.nodes {
+                let base_name = if node.name.is_empty() { "unnamed".to_string() } else { node.name.clone() };
+                let mut tag = base_name.clone();
+                let mut counter = 1;
+                while used_tags.contains(&tag) {
+                    tag = format!("{} ({})", base_name, counter);
+                    counter += 1;
+                }
+                id_to_tag.insert(node.id.clone(), tag.clone());
+                used_tags.insert(tag);
+            }
+        }
+
+        // Group tags
+        for group in &groups {
+            let base_name = if group.name.is_empty() { "unnamed-group".to_string() } else { group.name.clone() };
+            let mut tag = base_name.clone();
+            let mut counter = 1;
+            while used_tags.contains(&tag) {
+                tag = format!("{} ({})", base_name, counter);
+                counter += 1;
+            }
+            id_to_tag.insert(group.id.clone(), tag.clone());
+            used_tags.insert(tag);
+        }
+
+        // 2. Build Outbounds
+        cfg = cfg.with_direct().with_block();
+
+        // Nodes
+        for profile in &profiles {
+            for node in &profile.nodes {
+                let mut outbound = self.node_to_outbound(node);
+                if let Some(tag) = id_to_tag.get(&node.id) {
+                    outbound.tag = tag.clone();
+                }
+                cfg.outbounds.push(outbound);
+            }
+        }
+
+        // Groups
+        for group in &groups {
+            let mut members = Vec::new();
+            match &group.source {
+                crate::profile::GroupSource::Static { node_ids } => {
+                    for id in node_ids {
+                        if let Some(tag) = id_to_tag.get(id) {
+                            members.push(tag.clone());
+                        }
                     }
                 }
-                 use base64::{engine::general_purpose, Engine as _};
-                 let b64 = general_purpose::STANDARD.encode(links);
-                 Ok(b64)
-            }
-            "tunnet" => {
-                let mut links = String::new();
-                for node in nodes {
-                    let link = node.to_tunnet_link();
-                    links.push_str(&link);
-                    links.push('\n');
+                crate::profile::GroupSource::Filter { criteria } => {
+                    let keywords = criteria.keywords.as_deref().unwrap_or(&[]);
+                    for profile in &profiles {
+                        for node in &profile.nodes {
+                            if keywords.is_empty() || keywords.iter().any(|k| node.name.contains(k)) {
+                                if let Some(tag) = id_to_tag.get(&node.id) {
+                                    members.push(tag.clone());
+                                }
+                            }
+                        }
+                    }
                 }
-                Ok(links)
             }
-            "json" | "sing-box" => {
-                 serde_json::to_string_pretty(&nodes).map_err(|e| e.to_string())
+
+            if !members.is_empty() {
+                let outbound_type = match group.group_type {
+                    crate::profile::GroupType::Selector => "selector",
+                    crate::profile::GroupType::UrlTest { .. } => "urltest",
+                };
+
+                let tag = id_to_tag.get(&group.id).cloned().unwrap_or_else(|| group.id.clone());
+                let mut outbound = crate::config::Outbound {
+                    outbound_type: outbound_type.to_string(),
+                    tag,
+                    outbounds: Some(members),
+                    ..Default::default()
+                };
+
+                if let crate::profile::GroupType::UrlTest { interval, tolerance } = group.group_type {
+                    outbound.url = Some("https://www.gstatic.com/generate_204".to_string());
+                    outbound.interval = Some(format!("{}s", interval));
+                    outbound.tolerance = Some(tolerance as u16);
+                }
+
+                cfg.outbounds.push(outbound);
             }
-            _ => Err("Unknown format".to_string())
         }
+
+        // 3. Add Rules
+        let rules = self.manager.load_rules().unwrap_or_default();
+        if let Some(route) = &mut cfg.route {
+            use std::collections::HashSet;
+            let used_tags_set: HashSet<_> = used_tags.into_iter().collect();
+            for rule in rules {
+                if !rule.enabled { continue; }
+                let mut route_rule = crate::config::RouteRule::default();
+                
+                // Normalize policy: Tunnet uses uppercase DIRECT/REJECT, sing-box uses direct/block
+                let policy_lower = rule.policy.to_lowercase();
+                let policy_tag = if policy_lower == "direct" {
+                    "direct".to_string()
+                } else if policy_lower == "reject" {
+                    "block".to_string()
+                } else {
+                     // Check mapped tags first, then used tags, fallback to proxy
+                     id_to_tag.get(&rule.policy).cloned().unwrap_or_else(|| {
+                        if used_tags_set.contains(&rule.policy) { rule.policy.clone() } else { "proxy".to_string() }
+                     })
+                };
+
+                route_rule.outbound = Some(policy_tag);
+                
+                match rule.rule_type.as_str() {
+                    "DOMAIN" => route_rule.domain = Some(vec![rule.value]),
+                    "DOMAIN-SUFFIX" => route_rule.domain_suffix = Some(vec![rule.value]),
+                    "DOMAIN-KEYWORD" => route_rule.domain_keyword = Some(vec![rule.value]),
+                    "IP-CIDR" => route_rule.ip_cidr = Some(vec![rule.value]),
+                    // Fix: rule.value (e.g. "geoip-cn") matches the remote rule-set tag, no need to prepend "geoip-"
+                    "GEOIP" => route_rule.rule_set = Some(vec![rule.value.to_lowercase()]),
+                    _ => continue,
+                }
+                // Fix: Push to end to preserve order (was insert(0) which reversed it)
+                route.rules.push(route_rule);
+            }
+        }
+
+        serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())
+    }
+
+    pub fn export_tunnet_backup(&self) -> Result<String, String> {
+        let profiles = self.manager.load_profiles().map_err(|e| e.to_string())?;
+        let groups = self.manager.load_groups().map_err(|e| e.to_string())?;
+        let rules = self.manager.load_rules().map_err(|e| e.to_string())?;
+        let settings = self.manager.load_settings().map_err(|e| e.to_string())?;
+
+        let backup = serde_json::json!({
+            "version": env!("CARGO_PKG_VERSION"),
+            "profiles": profiles,
+            "groups": groups,
+            "rules": rules,
+            "settings": settings,
+        });
+
+        serde_json::to_string_pretty(&backup).map_err(|e| e.to_string())
+    }
+
+    pub async fn import_tunnet_backup(&self, json: String) -> Result<(), String> {
+        let v: serde_json::Value = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+        
+        if let Some(profiles) = v.get("profiles") {
+            let p: Vec<crate::profile::Profile> = serde_json::from_value(profiles.clone()).map_err(|e| e.to_string())?;
+            self.manager.save_profiles(&p).map_err(|e| e.to_string())?;
+        }
+        
+        if let Some(groups) = v.get("groups") {
+            let g: Vec<crate::profile::Group> = serde_json::from_value(groups.clone()).map_err(|e| e.to_string())?;
+            self.manager.save_groups(&g).map_err(|e| e.to_string())?;
+        }
+        
+        if let Some(rules) = v.get("rules") {
+            let r: Vec<crate::profile::Rule> = serde_json::from_value(rules.clone()).map_err(|e| e.to_string())?;
+            self.manager.save_rules(&r).map_err(|e| e.to_string())?;
+        }
+        
+        if let Some(settings) = v.get("settings") {
+            let s: crate::settings::AppSettings = serde_json::from_value(settings.clone()).map_err(|e| e.to_string())?;
+            self.manager.save_settings(&s).map_err(|e| e.to_string())?;
+        }
+
+        // Trigger updates
+        self.app.emit("profiles-update", ()).ok();
+        self.app.emit("settings-update", self.manager.load_settings().unwrap_or_default()).ok();
+        
+        Ok(())
     }
 
     pub async fn get_connections(&self) -> Result<ConnectionsResponse, String> {
