@@ -85,10 +85,12 @@ export function RulesView({
 
     // Check if the current rules/policy deviate from what's currently active on the server
     const hasPendingChanges = React.useMemo(() => {
-        const isRulesDifferent = !areRuleSetsEqual(rules, initialRules)
+        // Filter out soft-deleted rules to compare effective state
+        const effectiveRules = rules.filter(r => !pendingDeleteIds.has(r.id))
+        const isRulesDifferent = !areRuleSetsEqual(effectiveRules, initialRules)
         const isPolicyDifferent = defaultPolicy !== initialDefaultPolicy
         return isRulesDifferent || isPolicyDifferent
-    }, [rules, initialRules, defaultPolicy, initialDefaultPolicy])
+    }, [rules, initialRules, defaultPolicy, initialDefaultPolicy, pendingDeleteIds])
 
     // Reset snapshot when applying changes - moved here to access hasPendingChanges
     useEffect(() => {
@@ -120,10 +122,11 @@ export function RulesView({
         const template = PRESETS[currentPreset as keyof typeof PRESETS]
         if (!template) return false
 
-        const isRulesDifferent = !areRuleSetsEqual(rules, template.rules)
+        const effectiveRules = rules.filter(r => !pendingDeleteIds.has(r.id))
+        const isRulesDifferent = !areRuleSetsEqual(effectiveRules, template.rules)
         const isPolicyDifferent = defaultPolicy !== template.defaultPolicy
         return isRulesDifferent || isPolicyDifferent
-    }, [rules, defaultPolicy, currentPreset])
+    }, [rules, defaultPolicy, currentPreset, pendingDeleteIds])
 
     useEffect(() => {
         setPortalRoot(document.body)
@@ -309,6 +312,7 @@ export function RulesView({
             setDefaultPolicy(newPolicy as any)
             setCurrentPreset(name)
             setIsPresetOpen(false)
+            setPendingDeleteIds(new Set())
 
             // Check if this new state differs from what's currently on the server
             checkPendingChanges(newRules, newPolicy)
@@ -323,6 +327,7 @@ export function RulesView({
         if (template) {
             setRules([...template.rules])
             setDefaultPolicy(template.defaultPolicy as any)
+            setPendingDeleteIds(new Set())
             toast.success(t('rules.toast.preset_restored'))
         }
     }
@@ -595,7 +600,10 @@ export function RulesView({
                         </div>
                         <div className="flex items-center gap-2">
                             <button
-                                onClick={() => onReload()}
+                                onClick={() => {
+                                    setPendingDeleteIds(new Set())
+                                    onReload()
+                                }}
                                 className="px-3 py-1.5 text-[10px] font-bold text-text-secondary hover:text-text-primary transition-colors flex items-center gap-1.5"
                             >
                                 <RotateCcw size={12} />
