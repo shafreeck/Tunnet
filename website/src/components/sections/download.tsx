@@ -5,7 +5,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Apple, Monitor, Terminal } from "lucide-react";
 
-const CURRENT_VERSION = "0.2.1";
+const CURRENT_VERSION = "0.2.2";
 const RELEASE_BASE_URL = `https://github.com/shafreeck/Tunnet/releases/download/v${CURRENT_VERSION}`;
 
 const platformConfig = {
