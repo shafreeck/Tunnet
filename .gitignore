@@ -56,3 +56,7 @@ core_library/libbox-c-shared/libbox.def
 
 # Test target
 core_library/libbox-ffi-test/target/
+
+# Runtime DB
+cache.db
+cache_tun.db
