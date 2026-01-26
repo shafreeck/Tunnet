@@ -715,11 +715,11 @@ export function RulesView({
                                                                 <div className="w-20 md:w-24 shrink-0 hidden sm:block pointer-events-none select-none mr-2 md:mr-4">
                                                                     <div className={cn(
                                                                         "flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-xl border w-full justify-center transition-all duration-300 relative",
-                                                                        "bg-white/5 border-white/5 text-gray-400"
+                                                                        "bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/10 text-text-tertiary"
                                                                     )}>
                                                                         <Shield size={10} className={cn("md:size-3 shrink-0", !isPendingDelete && modifiedRuleIds.has(rule.id) ? "text-amber-500" : "text-primary/70")} />
                                                                         <span className={cn(
-                                                                            "text-[9px] md:text-[10px] font-bold uppercase tracking-wider text-gray-400 text-center",
+                                                                            "text-[9px] md:text-[10px] font-bold uppercase tracking-wider text-text-tertiary text-center",
                                                                             isPendingDelete && "line-through opacity-70"
                                                                         )}>
                                                                             {rule.type === 'IP_IS_PRIVATE' ? 'PRIVATE ADDR' : rule.type.replace(/_/g, ' ')}
@@ -739,7 +739,6 @@ export function RulesView({
                                                                 <button
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
-                                                                        // ... existing logic ...
                                                                         if (openRuleMenuId === rule.id) {
                                                                             setOpenRuleMenuId(null);
                                                                             return;
@@ -768,14 +767,17 @@ export function RulesView({
                                                                 </button>
                                                                 <div className="flex items-center gap-1 md:gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-300 translate-x-0 md:translate-x-2 md:group-hover:translate-x-0">
                                                                     {!isPendingDelete && (
-                                                                        <button onClick={(e) => { setEditingRule(rule); setDialogData({ ...rule }); setIsDialogOpen(true); }} className="p-1.5 md:p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-xl transition-all"><Edit2 size={14} className="md:size-4" /></button>
+                                                                        <button
+                                                                            onClick={(e) => { setEditingRule(rule); setDialogData({ ...rule }); setIsDialogOpen(true); }}
+                                                                            className="p-1.5 md:p-2 text-text-tertiary hover:text-primary hover:bg-primary/10 rounded-xl transition-all"
+                                                                        >
+                                                                            <Edit2 size={14} className="md:size-4" />
+                                                                        </button>
                                                                     )}
                                                                     {isPendingDelete ? (
                                                                         <button
                                                                             onClick={(e) => handleRestoreRule(rule.id, e)}
-                                                                            className={cn(
-                                                                                "p-1.5 md:p-2 rounded-xl transition-all text-emerald-500 hover:bg-emerald-500/10"
-                                                                            )}
+                                                                            className="p-1.5 md:p-2 rounded-xl transition-all text-emerald-500 hover:bg-emerald-500/10"
                                                                             title={t('rules.restore')}
                                                                         >
                                                                             <RotateCcw size={14} className="md:size-4" />
@@ -787,8 +789,8 @@ export function RulesView({
                                                                             className={cn(
                                                                                 "p-1.5 md:p-2 rounded-xl transition-all",
                                                                                 deletingRuleId === rule.id
-                                                                                    ? "text-red-400 bg-red-400/10 cursor-wait"
-                                                                                    : "text-gray-400 hover:text-red-400 hover:bg-red-400/10"
+                                                                                    ? "text-accent-red bg-accent-red/10 cursor-wait"
+                                                                                    : "text-text-tertiary hover:text-accent-red hover:bg-accent-red/10"
                                                                             )}
                                                                         >
                                                                             {deletingRuleId === rule.id ? (
@@ -1012,8 +1014,8 @@ export function RulesView({
                                                         className={cn(
                                                             "px-4 py-2 rounded-xl text-[10px] font-bold transition-all border",
                                                             dialogData.policy === group.id
-                                                                ? "bg-blue-500 text-white border-blue-500 shadow-lg"
-                                                                : "bg-white/5 border-white/5 text-gray-400 hover:text-white hover:bg-white/10"
+                                                                ? "bg-primary text-white border-primary shadow-lg"
+                                                                : "bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/5 text-text-tertiary hover:text-primary hover:bg-primary/10"
                                                         )}
                                                     >
                                                         {group.name}
