@@ -377,10 +377,10 @@ fn create_named_pipe_with_security(
     }
 
     // Convert raw handle to tokio NamedPipeServer
+    // SAFETY: handle is valid and we're immediately wrapping it
+    use std::os::windows::io::{FromRawHandle, RawHandle};
     let server = unsafe {
-        tokio::net::windows::named_pipe::NamedPipeServer::from_raw_handle(
-            handle as *mut std::ffi::c_void,
-        )
+        tokio::net::windows::named_pipe::NamedPipeServer::from_raw_handle(handle as RawHandle)
     };
 
     Ok(server)
