@@ -567,7 +567,7 @@ pub fn run() {
                     Menu::with_items(app.handle(), &[&quit_i]).expect("Failed to create tray menu");
 
                 use tauri::Listener; // Import Listener trait
-                let tray = TrayIconBuilder::with_id("tray")
+                let _tray = TrayIconBuilder::with_id("tray")
                     .icon(tray_icon)
                     .menu(&menu)
                     .show_menu_on_left_click(false)
