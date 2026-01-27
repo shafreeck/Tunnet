@@ -1670,8 +1670,6 @@ impl<R: Runtime> ProxyService<R> {
     /// Uses ShellExecuteW with "runas" verb to trigger UAC elevation.
     #[cfg(target_os = "windows")]
     fn ensure_windows_helper(&self) -> Result<(), String> {
-        use std::path::PathBuf;
-        
         // Check if Helper is already running by trying to connect to the Named Pipe
         info!("Checking if Windows Helper is already running...");
         
@@ -1749,9 +1747,10 @@ impl<R: Runtime> ProxyService<R> {
         info!("UAC elevation requested, waiting for Helper to start...");
         
         // Wait for Helper to be ready (poll Named Pipe)
+        let pipe_path = r"\\.\pipe\tunnet";
         for i in 0..30 {
             std::thread::sleep(std::time::Duration::from_millis(500));
-            if client.check_status().is_ok() {
+            if std::fs::OpenOptions::new().read(true).write(true).open(pipe_path).is_ok() {
                 info!("Windows Helper is ready after {}ms", (i + 1) * 500);
                 return Ok(());
             }
