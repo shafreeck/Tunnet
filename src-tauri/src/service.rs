@@ -1673,9 +1673,9 @@ impl<R: Runtime> ProxyService<R> {
         info!("Checking if Windows Helper is already running...");
         
         // Try to connect to Named Pipe to check if helper is running
-        // Note: Due to Windows security, admin-created pipes may not be accessible from non-admin process
+        // The Named Pipe is created with NULL DACL so non-admin can connect to admin-created pipe
         
-        // First, try the HelperClient to send a request and verify it's responsive
+        // Try the HelperClient to send a request and verify it's responsive
         let client = crate::helper_client::HelperClient::new();
         match client.check_status() {
             Ok(_) => {
@@ -1683,13 +1683,9 @@ impl<R: Runtime> ProxyService<R> {
                 return Ok(());
             }
             Err(e) => {
-                info!("Helper not responsive: {} - will restart", e);
+                info!("Helper not responsive: {} - will start new helper", e);
             }
         }
-        
-        // Kill any existing helper processes before starting a new one
-        // This avoids the "Access Denied" error when a stale helper holds the pipe
-        Self::kill_existing_helpers();
         
         info!("Starting Windows Helper with UAC elevation...");
         
@@ -1791,39 +1787,6 @@ impl<R: Runtime> ProxyService<R> {
         }
         
         Ok((helper, bin_dir))
-    }
-    
-    /// Kill any existing tunnet-helper.exe processes
-    /// This is needed because admin-created Named Pipes may not be accessible from non-admin process
-    #[cfg(target_os = "windows")]
-    fn kill_existing_helpers() {
-        use std::process::Command;
-        
-        info!("Killing any existing tunnet-helper.exe processes...");
-        
-        // Use taskkill to terminate all instances of tunnet-helper.exe
-        // /F = force, /IM = image name, /T = terminate child processes
-        let result = Command::new("taskkill")
-            .args(["/F", "/IM", "tunnet-helper.exe", "/T"])
-            .output();
-        
-        match result {
-            Ok(output) => {
-                if output.status.success() {
-                    info!("Successfully killed existing helper processes");
-                } else {
-                    // This is fine - likely means no process was running
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    info!("No helper processes to kill (or already terminated): {}", stderr.trim());
-                }
-            }
-            Err(e) => {
-                warn!("Failed to run taskkill: {}", e);
-            }
-        }
-        
-        // Give Windows time to release the Named Pipe
-        std::thread::sleep(std::time::Duration::from_millis(500));
     }
 
     fn write_config(

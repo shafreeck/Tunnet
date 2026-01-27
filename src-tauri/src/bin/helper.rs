@@ -171,7 +171,8 @@ async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
 
 #[cfg(windows)]
 async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
-    use tokio::net::windows::named_pipe::ServerOptions;
+    use std::os::windows::io::FromRawHandle;
+    use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 
     log(
         &app_state,
@@ -179,24 +180,15 @@ async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
     );
     println!("Helper listening on Named Pipe: {}", PIPE_NAME);
 
-    let mut first_instance = true;
+    // Create the first Named Pipe instance with permissive security
+    // This allows non-admin processes to connect to admin-created pipe
+    let mut server = create_named_pipe_with_security(PIPE_NAME, true)?;
+    log(
+        &app_state,
+        "Named Pipe created with open security descriptor",
+    );
 
     loop {
-        let server_result = ServerOptions::new()
-            .first_pipe_instance(first_instance)
-            .create(PIPE_NAME);
-
-        let mut server = match server_result {
-            Ok(s) => s,
-            Err(e) => {
-                log(&app_state, &format!("Failed to create Named Pipe: {}", e));
-                return Err(e.into());
-            }
-        };
-
-        // After first successful creation, subsequent instances should not use first_pipe_instance
-        first_instance = false;
-
         log(&app_state, "Waiting for client connection...");
 
         // Wait for a client to connect
@@ -208,31 +200,190 @@ async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
         log(&app_state, "Client connected!");
 
         let state = app_state.clone();
-        tokio::spawn(async move {
-            let mut request_str = String::new();
-            match server.read_to_string(&mut request_str).await {
-                Ok(size) => {
-                    log(
-                        &state,
-                        &format!("Received {} bytes: {}", size, &request_str),
-                    );
-                    if size > 0 {
-                        let response = match serde_json::from_str::<Request>(&request_str) {
-                            Ok(req) => handle_request(req, &state),
-                            Err(e) => Response {
-                                status: "error".into(),
-                                message: format!("JSON error: {}", e),
-                            },
-                        };
-                        let response_str = serde_json::to_string(&response).unwrap();
-                        log(&state, &format!("Sending response: {}", &response_str));
-                        let _ = server.write_all(response_str.as_bytes()).await;
-                    }
-                }
-                Err(e) => log(&state, &format!("Read error: {}", e)),
+
+        // Create the next server instance before handling the current connection
+        let next_server = match create_named_pipe_with_security(PIPE_NAME, false) {
+            Ok(s) => s,
+            Err(e) => {
+                log(
+                    &state,
+                    &format!("Failed to create next pipe instance: {}", e),
+                );
+                // Try to continue with the current connection
+                handle_connection(server, state).await;
+                return Err(e);
             }
+        };
+
+        // Spawn handler for current connection and swap servers
+        let current_server = std::mem::replace(&mut server, next_server);
+        tokio::spawn(async move {
+            handle_connection(current_server, state).await;
         });
     }
+}
+
+#[cfg(windows)]
+async fn handle_connection(
+    mut server: tokio::net::windows::named_pipe::NamedPipeServer,
+    state: Arc<AppState>,
+) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let mut request_str = String::new();
+    match server.read_to_string(&mut request_str).await {
+        Ok(size) => {
+            log(
+                &state,
+                &format!("Received {} bytes: {}", size, &request_str),
+            );
+            if size > 0 {
+                let response = match serde_json::from_str::<Request>(&request_str) {
+                    Ok(req) => handle_request(req, &state),
+                    Err(e) => Response {
+                        status: "error".into(),
+                        message: format!("JSON error: {}", e),
+                    },
+                };
+                let response_str = serde_json::to_string(&response).unwrap();
+                log(&state, &format!("Sending response: {}", &response_str));
+                let _ = server.write_all(response_str.as_bytes()).await;
+            }
+        }
+        Err(e) => log(&state, &format!("Read error: {}", e)),
+    }
+}
+
+/// Create a Named Pipe with a NULL DACL security descriptor
+/// This allows any user (including non-admin) to connect to the pipe
+#[cfg(windows)]
+fn create_named_pipe_with_security(
+    pipe_name: &str,
+    first_instance: bool,
+) -> Result<tokio::net::windows::named_pipe::NamedPipeServer, Box<dyn Error>> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr;
+
+    // Windows constants
+    const PIPE_ACCESS_DUPLEX: u32 = 0x00000003;
+    const FILE_FLAG_OVERLAPPED: u32 = 0x40000000;
+    const FILE_FLAG_FIRST_PIPE_INSTANCE: u32 = 0x00080000;
+    const PIPE_TYPE_BYTE: u32 = 0x00000000;
+    const PIPE_READMODE_BYTE: u32 = 0x00000000;
+    const PIPE_WAIT: u32 = 0x00000000;
+    const PIPE_REJECT_REMOTE_CLIENTS: u32 = 0x00000008;
+    const PIPE_UNLIMITED_INSTANCES: u32 = 255;
+    const INVALID_HANDLE_VALUE: isize = -1;
+
+    #[repr(C)]
+    struct SECURITY_ATTRIBUTES {
+        n_length: u32,
+        lp_security_descriptor: *mut std::ffi::c_void,
+        b_inherit_handle: i32,
+    }
+
+    #[repr(C)]
+    struct SECURITY_DESCRIPTOR {
+        revision: u8,
+        sbz1: u8,
+        control: u16,
+        owner: *mut std::ffi::c_void,
+        group: *mut std::ffi::c_void,
+        sacl: *mut std::ffi::c_void,
+        dacl: *mut std::ffi::c_void,
+    }
+
+    extern "system" {
+        fn CreateNamedPipeW(
+            lp_name: *const u16,
+            dw_open_mode: u32,
+            dw_pipe_mode: u32,
+            n_max_instances: u32,
+            n_out_buffer_size: u32,
+            n_in_buffer_size: u32,
+            n_default_time_out: u32,
+            lp_security_attributes: *const SECURITY_ATTRIBUTES,
+        ) -> isize;
+
+        fn InitializeSecurityDescriptor(
+            p_security_descriptor: *mut SECURITY_DESCRIPTOR,
+            dw_revision: u32,
+        ) -> i32;
+
+        fn SetSecurityDescriptorDacl(
+            p_security_descriptor: *mut SECURITY_DESCRIPTOR,
+            b_dacl_present: i32,
+            p_dacl: *const std::ffi::c_void,
+            b_dacl_defaulted: i32,
+        ) -> i32;
+
+        fn GetLastError() -> u32;
+    }
+
+    let pipe_name_wide: Vec<u16> = OsStr::new(pipe_name)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    // Create a security descriptor with NULL DACL (allows everyone access)
+    let mut sd: SECURITY_DESCRIPTOR = unsafe { std::mem::zeroed() };
+    let sd_init = unsafe { InitializeSecurityDescriptor(&mut sd, 1) };
+    if sd_init == 0 {
+        return Err(format!("InitializeSecurityDescriptor failed: {}", unsafe {
+            GetLastError()
+        })
+        .into());
+    }
+
+    // Set NULL DACL - this grants full access to everyone
+    let dacl_set = unsafe { SetSecurityDescriptorDacl(&mut sd, 1, ptr::null(), 0) };
+    if dacl_set == 0 {
+        return Err(format!("SetSecurityDescriptorDacl failed: {}", unsafe {
+            GetLastError()
+        })
+        .into());
+    }
+
+    let sa = SECURITY_ATTRIBUTES {
+        n_length: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lp_security_descriptor: &mut sd as *mut _ as *mut std::ffi::c_void,
+        b_inherit_handle: 0,
+    };
+
+    let mut open_mode = PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED;
+    if first_instance {
+        open_mode |= FILE_FLAG_FIRST_PIPE_INSTANCE;
+    }
+
+    let pipe_mode = PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS;
+
+    let handle = unsafe {
+        CreateNamedPipeW(
+            pipe_name_wide.as_ptr(),
+            open_mode,
+            pipe_mode,
+            PIPE_UNLIMITED_INSTANCES,
+            65536, // output buffer size
+            65536, // input buffer size
+            0,     // default timeout
+            &sa,
+        )
+    };
+
+    if handle == INVALID_HANDLE_VALUE {
+        let err = unsafe { GetLastError() };
+        return Err(format!("CreateNamedPipeW failed with error {}", err).into());
+    }
+
+    // Convert raw handle to tokio NamedPipeServer
+    let server = unsafe {
+        tokio::net::windows::named_pipe::NamedPipeServer::from_raw_handle(
+            handle as *mut std::ffi::c_void,
+        )
+    };
+
+    Ok(server)
 }
 
 #[derive(Serialize, Deserialize, Debug)]
