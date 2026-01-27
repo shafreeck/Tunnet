@@ -374,17 +374,18 @@ fn main() {
         println!("cargo:rustc-link-lib=userenv");
         println!("cargo:rustc-link-lib=crypt32");
 
-        // Copy libbox.dll to the target directory so the executable can find it
+        // Copy libbox.dll to the target directory so tunnet-helper.exe can find it
         let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
-        let target_dir = Path::new(&manifest_dir).join("target").join(profile);
+        let target_dir = Path::new(&manifest_dir).join("target").join(&profile);
 
         // Ensure target directory exists
         if !target_dir.exists() {
             let _ = std::fs::create_dir_all(&target_dir);
         }
 
-        // NOT copying to target_dir to simulate release environment behavior
-        // let _ = std::fs::copy(libbox_dir.join("libbox.dll"), target_dir.join("libbox.dll"));
+        // Copy libbox.dll and wintun.dll to target dir for development
+        // This is required because tunnet-helper.exe needs to find these DLLs
+        let _ = std::fs::copy(libbox_dir.join("libbox.dll"), target_dir.join("libbox.dll"));
 
         // Copy libbox.dll to resources/bin so it can be bundled
         let resources_bin_dir = Path::new(&manifest_dir).join("resources").join("bin");
@@ -395,6 +396,12 @@ fn main() {
             libbox_dir.join("libbox.dll"),
             resources_bin_dir.join("libbox.dll"),
         );
+
+        // Also copy wintun.dll to target dir if it exists in resources/bin
+        let wintun_src = resources_bin_dir.join("wintun.dll");
+        if wintun_src.exists() {
+            let _ = std::fs::copy(&wintun_src, target_dir.join("wintun.dll"));
+        }
 
         // Ensure wintun.dll exists in resources/bin
         let wintun_path = resources_bin_dir.join("wintun.dll");
