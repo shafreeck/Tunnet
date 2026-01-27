@@ -461,41 +461,31 @@ systemctl restart {}.service
 
         println!("Files copied successfully");
 
-        // 7. Create service with UAC elevation
-        println!("Creating Windows Service (UAC prompt will appear)...");
-
+        // Prepare arguments
         // CRITICAL: binPath must be binPath="path" (no space after =, path in quotes)
         let bin_path_arg = format!("binPath=\"{}\"", helper_dest.display());
-
-        // Build sc.exe arguments
-        let sc_args = format!(
-            "create TunnetHelper {} start=auto \"DisplayName=Tunnet Helper Service\"",
-            bin_path_arg
+        // 7. Create installation script (Batch file) to run all commands in one UAC prompt
+        let script_path = install_dir.join("install_service.bat");
+        let script_content = format!(
+            "@echo off\r\n\
+            sc create TunnetHelper {} start=auto \"DisplayName=Tunnet Helper Service\"\r\n\
+            sc config TunnetHelper {} start=auto\r\n\
+            sc description TunnetHelper \"Provides TUN interface support for Tunnet proxy\"\r\n\
+            sc start TunnetHelper\r\n\
+            exit /b 0",
+            bin_path_arg, bin_path_arg
         );
+        fs::write(&script_path, script_content)?;
 
-        run_elevated("sc.exe", &sc_args)?;
+        // 8. Execute script with elevation
+        println!("Available commands script created at: {:?}", script_path);
+        println!("Executing installation script (Single UAC prompt)...");
 
-        println!("Service created (or already exists). Updating configuration...");
+        let args = format!("/c \"{}\"", script_path.display());
+        run_elevated("cmd.exe", &args)?;
 
-        // FORCE UPDATE: Ensure binPath is correct even if service already existed
-        // This fixes the issue where an old service pointing to Program Files persists
-        let config_args = format!("config TunnetHelper {} start=auto", bin_path_arg);
-        run_elevated("sc.exe", &config_args)?;
-
-        println!("Service configuration updated");
-
-        // 8. Set service description
-        let _ = Command::new("sc.exe")
-            .args(&[
-                "description",
-                "TunnetHelper",
-                "Provides TUN interface support for Tunnet proxy",
-            ])
-            .output();
-
-        // 9. Start the service with elevation
-        println!("Starting service...");
-        run_elevated("sc.exe", "start TunnetHelper")?;
+        // Remove script after execution (optional, keep for debug?)
+        // let _ = fs::remove_file(script_path);
 
         // 10. Verify service started successfully
         println!("Verifying service status...");
