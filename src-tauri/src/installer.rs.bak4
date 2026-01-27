@@ -497,6 +497,8 @@ systemctl restart {}.service
         run_elevated("sc.exe", "start TunnetHelper")?;
 
         // Replaced with status check - see below
+
+        // 8. Wait for service to be responsive
         println!("Waiting for service to start...");
         std::thread::sleep(std::time::Duration::from_secs(2));
 
