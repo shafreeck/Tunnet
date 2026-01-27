@@ -672,7 +672,7 @@ pub fn run() {
                 });
 
                 #[cfg(target_os = "macos")]
-                let _ = tray.set_icon_as_template(true);
+                let _ = _tray.set_icon_as_template(true);
             }
 
             // Handle Start Minimized
