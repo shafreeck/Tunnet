@@ -47,8 +47,120 @@ fn log(state: &Arc<AppState>, msg: &str) {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+#[cfg(windows)]
+use windows_service::{
+    define_windows_service,
+    service::{
+        ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus,
+        ServiceType,
+    },
+    service_control_handler::{self, ServiceControlHandlerResult},
+    service_dispatcher,
+};
+
+// Define the Windows Service entry point
+#[cfg(windows)]
+define_windows_service!(ffi_service_main, tunnet_helper_service_main);
+
+#[cfg(windows)]
+fn tunnet_helper_service_main(_arguments: Vec<std::ffi::OsString>) {
+    if let Err(e) = run_service() {
+        // Log the error - since we're in service mode, logs go to event viewer or file
+        eprintln!("Service error: {}", e);
+    }
+}
+
+#[cfg(windows)]
+fn run_service() -> Result<(), Box<dyn Error>> {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let (shutdown_tx, shutdown_rx) = mpsc::channel();
+
+    // Register service control handler
+    let event_handler = move |control_event| -> ServiceControlHandlerResult {
+        match control_event {
+            ServiceControl::Stop | ServiceControl::Shutdown => {
+                // Signal shutdown
+                let _ = shutdown_tx.send(());
+                ServiceControlHandlerResult::NoError
+            }
+            ServiceControl::Interrogate => ServiceControlHandlerResult::NoError,
+            _ => ServiceControlHandlerResult::NotImplemented,
+        }
+    };
+
+    let status_handle = service_control_handler::register("TunnetHelper", event_handler)?;
+
+    // Tell Windows we're starting
+    status_handle.set_service_status(ServiceStatus {
+        service_type: ServiceType::OWN_PROCESS,
+        current_state: ServiceState::StartPending,
+        controls_accepted: ServiceControlAccept::empty(),
+        exit_code: ServiceExitCode::Win32(0),
+        checkpoint: 0,
+        wait_hint: Duration::from_secs(5),
+        process_id: None,
+    })?;
+
+    // Initialize the service
+    let rt = tokio::runtime::Runtime::new()?;
+    let app_state = rt.block_on(async { initialize_app_state().await })?;
+
+    // Tell Windows we're running
+    status_handle.set_service_status(ServiceStatus {
+        service_type: ServiceType::OWN_PROCESS,
+        current_state: ServiceState::Running,
+        controls_accepted: ServiceControlAccept::STOP | ServiceControlAccept::SHUTDOWN,
+        exit_code: ServiceExitCode::Win32(0),
+        checkpoint: 0,
+        wait_hint: Duration::default(),
+        process_id: None,
+    })?;
+
+    // Run the listener in a separate thread
+    let listener_handle = std::thread::spawn(move || {
+        rt.block_on(async {
+            if let Err(e) = run_listener(app_state).await {
+                eprintln!("Listener error: {}", e);
+            }
+        });
+    });
+
+    // Wait for shutdown signal
+    let _ = shutdown_rx.recv();
+
+    // Tell Windows we're stopping
+    status_handle.set_service_status(ServiceStatus {
+        service_type: ServiceType::OWN_PROCESS,
+        current_state: ServiceState::StopPending,
+        controls_accepted: ServiceControlAccept::empty(),
+        exit_code: ServiceExitCode::Win32(0),
+        checkpoint: 0,
+        wait_hint: Duration::from_secs(5),
+        process_id: None,
+    })?;
+
+    // TODO: Gracefully shutdown the listener
+    // For now, we'll just wait a bit for it to finish
+    listener_handle.join().ok();
+
+    // Tell Windows we've stopped
+    status_handle.set_service_status(ServiceStatus {
+        service_type: ServiceType::OWN_PROCESS,
+        current_state: ServiceState::Stopped,
+        controls_accepted: ServiceControlAccept::empty(),
+        exit_code: ServiceExitCode::Win32(0),
+        checkpoint: 0,
+        wait_hint: Duration::default(),
+        process_id: None,
+    })?;
+
+    Ok(())
+}
+
+// Extract initialization logic into a separate async function
+async fn initialize_app_state() -> Result<Arc<AppState>, Box<dyn Error>> {
     // Windows: Set DLL search path for libbox.dll and wintun.dll
     #[cfg(windows)]
     {
@@ -122,6 +234,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    Ok(app_state)
+}
+
+// Main entry point
+#[cfg(windows)]
+fn main() -> Result<(), Box<dyn Error>> {
+    // On Windows, dispatch to the service control manager
+    service_dispatcher::start("TunnetHelper", ffi_service_main)?;
+    Ok(())
+}
+
+#[cfg(not(windows))]
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let app_state = initialize_app_state().await?;
     run_listener(app_state).await
 }
 

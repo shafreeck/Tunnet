@@ -268,13 +268,157 @@ systemctl restart {}.service
 
     #[cfg(target_os = "windows")]
     pub fn is_installed(&self) -> bool {
-        // Windows uses a different approach (bundled in main process or service)
-        // For now returning true to skip install check
-        true
+        // Check if the service exists by querying it
+        let output = Command::new("sc.exe")
+            .args(["query", "TunnetHelper"])
+            .output();
+
+        match output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                // Service exists if sc query doesn't return error
+                stdout.contains("TunnetHelper")
+                    || stdout.contains("RUNNING")
+                    || stdout.contains("STOPPED")
+            }
+            Err(_) => false,
+        }
     }
 
     #[cfg(target_os = "windows")]
     pub fn install(&self) -> Result<(), Box<dyn Error>> {
+        use std::fs;
+
+        // 1. Find the helper binary
+        let mut resource_path = self
+            .app_handle
+            .path()
+            .resource_dir()?
+            .join("resources")
+            .join("bin")
+            .join(format!("{}.exe", HELPER_BIN_NAME));
+
+        if cfg!(debug_assertions) {
+            if let Ok(exe_path) = std::env::current_exe() {
+                let project_resource_path = exe_path
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .and_then(|p| p.parent())
+                    .map(|p| {
+                        p.join("resources")
+                            .join("bin")
+                            .join(format!("{}.exe", HELPER_BIN_NAME))
+                    });
+
+                if let Some(res_path) = project_resource_path {
+                    if res_path.exists() {
+                        println!("Using helper from resources (dev): {:?}", res_path);
+                        resource_path = res_path;
+                    }
+                }
+            }
+        }
+
+        if !resource_path.exists() {
+            return Err(format!("Helper binary not found at {:?}", resource_path).into());
+        }
+
+        println!("Installing Windows Service from: {:?}", resource_path);
+
+        // 2. Determine installation paths
+        let program_files = std::env::var("ProgramFiles")?;
+        let install_dir = PathBuf::from(program_files).join("Tunnet");
+        let helper_dest = install_dir.join(format!("{}.exe", HELPER_BIN_NAME));
+
+        // 3. Create installation directory and copy files
+        fs::create_dir_all(&install_dir)?;
+        fs::copy(&resource_path, &helper_dest)?;
+
+        // Also copy libbox.dll and wintun.dll if they exist
+        let dll_source_dir = resource_path.parent().ok_or("Invalid helper path")?;
+        for dll in &["libbox.dll", "wintun.dll"] {
+            let dll_src = dll_source_dir.join(dll);
+            if dll_src.exists() {
+                let dll_dest = install_dir.join(dll);
+                fs::copy(&dll_src, &dll_dest)?;
+                println!("Copied {} to installation directory", dll);
+            }
+        }
+
+        // 4. Create the service using sc.exe
+        let output = Command::new("sc.exe")
+            .args([
+                "create",
+                "TunnetHelper",
+                "binPath=",
+                &format!("\"{}\"", helper_dest.display()),
+                "start=",
+                "auto",
+                "DisplayName=",
+                "Tunnet Helper Service",
+            ])
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Failed to create service: {}", stderr).into());
+        }
+
+        println!("Service created successfully");
+
+        // 5. Set service description
+        Command::new("sc.exe")
+            .args([
+                "description",
+                "TunnetHelper",
+                "Tunnet network helper service for TUN mode support",
+            ])
+            .output()?;
+
+        // 6. Start the service
+        let output = Command::new("sc.exe")
+            .args(["start", "TunnetHelper"])
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // It's okay if service is already running
+            if !stderr.contains("already been started") {
+                return Err(format!("Failed to start service: {}", stderr).into());
+            }
+        }
+
+        println!("Service started successfully");
+        Ok(())
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn uninstall(&self) -> Result<(), Box<dyn Error>> {
+        // 1. Stop the service
+        let _ = Command::new("sc.exe")
+            .args(["stop", "TunnetHelper"])
+            .output();
+
+        // Wait for service to stop
+        std::thread::sleep(std::time::Duration::from_secs(2));
+
+        // 2. Delete the service
+        let output = Command::new("sc.exe")
+            .args(["delete", "TunnetHelper"])
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // It's okay if service doesn't exist
+            if !stderr.contains("does not exist") && !stderr.contains("marked for deletion") {
+                return Err(format!("Failed to delete service: {}", stderr).into());
+            }
+        }
+
+        // 3. Clean up installation directory (optional, be careful)
+        // We'll leave the files for now to avoid issues with running processes
+
+        println!("Service uninstalled successfully");
         Ok(())
     }
 }
