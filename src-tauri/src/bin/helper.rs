@@ -310,13 +310,10 @@ async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
     // Create the first Named Pipe instance with permissive security
     // This allows non-admin processes to connect to admin-created pipe
     let mut server = create_named_pipe_with_security(PIPE_NAME, true)?;
-    log(
-        &app_state,
-        "Named Pipe created with open security descriptor",
-    );
+    // Pipe created successfully
 
     loop {
-        log(&app_state, "Waiting for client connection...");
+        // Waiting for connection (removed high-frequency log)
 
         // Wait for a client to connect
         if let Err(e) = server.connect().await {
@@ -324,7 +321,7 @@ async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
             continue;
         }
 
-        log(&app_state, "Client connected!");
+        // Client connected (log only on errors)
 
         let state = app_state.clone();
 
@@ -375,10 +372,7 @@ async fn handle_connection(
 
     match reader.read_line(&mut request_str).await {
         Ok(size) => {
-            log(
-                &state,
-                &format!("Received {} bytes: {}", size, &request_str),
-            );
+            // Received request
             if size > 0 {
                 let response = match serde_json::from_str::<Request>(&request_str) {
                     Ok(req) => handle_request(req, &state),
@@ -389,10 +383,7 @@ async fn handle_connection(
                 };
                 let mut response_str = serde_json::to_string(&response).unwrap();
                 response_str.push('\n'); // Append newline for delimiters
-                log(
-                    &state,
-                    &format!("Sending response: {}", &response_str.trim()),
-                );
+                                         // Sending response
 
                 // We need to write back to the server.
                 // We can get the inner server from BufReader via .get_mut() or .into_inner()
