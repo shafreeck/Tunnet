@@ -276,10 +276,20 @@ systemctl restart {}.service
         match output {
             Ok(output) => {
                 let stdout = String::from_utf8_lossy(&output.stdout);
-                // Service exists if sc query doesn't return error
-                stdout.contains("TunnetHelper")
-                    || stdout.contains("RUNNING")
-                    || stdout.contains("STOPPED")
+                // Service must exist first
+                if !stdout.contains("TunnetHelper")
+                    && !stdout.contains("RUNNING")
+                    && !stdout.contains("STOPPED")
+                {
+                    return false;
+                }
+
+                // Then check version match (same as macOS/Linux)
+                let client = crate::helper_client::HelperClient::new();
+                match client.get_version() {
+                    Ok(v) => v == env!("CARGO_PKG_VERSION"),
+                    Err(_) => false, // Not responsive = needs reinstall
+                }
             }
             Err(_) => false,
         }
