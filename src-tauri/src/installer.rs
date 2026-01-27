@@ -475,7 +475,14 @@ systemctl restart {}.service
 
         run_elevated("sc.exe", &sc_args)?;
 
-        println!("Service created successfully");
+        println!("Service created (or already exists). Updating configuration...");
+
+        // FORCE UPDATE: Ensure binPath is correct even if service already existed
+        // This fixes the issue where an old service pointing to Program Files persists
+        let config_args = format!("config TunnetHelper {} start=auto", bin_path_arg);
+        run_elevated("sc.exe", &config_args)?;
+
+        println!("Service configuration updated");
 
         // 8. Set service description
         let _ = Command::new("sc.exe")
