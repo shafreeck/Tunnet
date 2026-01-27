@@ -10,11 +10,6 @@ const srcTauriDir = join(rootDir, 'src-tauri');
 const platform = process.platform;
 const arch = process.arch;
 
-if (platform === 'win32') {
-    console.log('Skipping tunnet-helper build on Windows (not needed)');
-    process.exit(0);
-}
-
 let target = '';
 let binaryName = 'tunnet-helper';
 
@@ -28,7 +23,8 @@ if (platform === 'darwin') {
 }
 
 const resourcesDir = join(srcTauriDir, 'resources', 'bin');
-const targetPath = join(resourcesDir, 'tunnet-helper');
+// Windows needs .exe extension, others don't
+const targetPath = join(resourcesDir, platform === 'win32' ? 'tunnet-helper.exe' : 'tunnet-helper');
 
 // Function to get the latest modification time of a directory recursively
 function getLatestMtime(dir) {
