@@ -49,6 +49,45 @@ fn log(state: &Arc<AppState>, msg: &str) {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    // Windows: Set DLL search path for libbox.dll and wintun.dll
+    #[cfg(windows)]
+    {
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                // Helper is in resources/bin, DLLs are in the same directory
+                let bin_dir = exe_dir;
+
+                // Also check parent's resources/bin (for bundled app structure)
+                let alt_bin_dir = exe_dir.parent().map(|p| p.join("resources").join("bin"));
+
+                // Update PATH for wintun.dll (Go runtime needs this)
+                let path_key = "PATH";
+                if let Ok(current_path) = std::env::var(path_key) {
+                    let mut new_path = format!("{}", bin_dir.display());
+                    if let Some(ref alt) = alt_bin_dir {
+                        if alt.exists() {
+                            new_path = format!("{};{}", alt.display(), new_path);
+                        }
+                    }
+                    new_path = format!("{};{}", new_path, current_path);
+                    std::env::set_var(path_key, new_path);
+                }
+
+                // Set DLL directory for libbox.dll
+                unsafe {
+                    use std::os::windows::ffi::OsStrExt;
+                    #[link(name = "kernel32")]
+                    extern "system" {
+                        fn SetDllDirectoryW(lpPathName: *const u16) -> i32;
+                    }
+                    let mut path_u16: Vec<u16> = bin_dir.as_os_str().encode_wide().collect();
+                    path_u16.push(0);
+                    SetDllDirectoryW(path_u16.as_ptr());
+                }
+            }
+        }
+    }
+
     println!("Tunnet Helper (Libbox) started");
 
     let log_path = if cfg!(windows) {
