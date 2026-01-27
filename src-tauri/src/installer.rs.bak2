@@ -353,10 +353,7 @@ systemctl restart {}.service
             if e.kind() == std::io::ErrorKind::PermissionDenied {
                 println!("Permission denied creating directory, requesting elevation...");
                 // Use PowerShell to create directory with elevation
-                let ps_script = format!(
-                    "New-Item -ItemType Directory -Force -Path '{}'",
-                    install_dir.display()
-                );
+                let ps_script = format!("New-Item -ItemType Directory -Force -Path '{}'", install_dir.display());
                 let _ = Command::new("powershell.exe")
                     .args(&["-NoProfile", "-Command", &ps_script])
                     .args(&["-Verb", "RunAs"])
@@ -409,10 +406,10 @@ systemctl restart {}.service
 
         // 5. Create service with correct binPath format
         println!("Creating Windows Service...");
-
+        
         // CRITICAL: binPath must be binPath="path" (no space after =, path in quotes)
         let bin_path_arg = format!("binPath=\"{}\"", helper_dest.display());
-
+        
         let create_args = vec![
             "create",
             "TunnetHelper",
@@ -420,45 +417,39 @@ systemctl restart {}.service
             "start=auto",
             "DisplayName=Tunnet Helper Service",
         ];
-
-        let create_output = Command::new("sc.exe").args(&create_args).output()?;
+        
+        let create_output = Command::new("sc.exe")
+            .args(&create_args)
+            .output()?;
 
         if !create_output.status.success() {
             let stderr = String::from_utf8_lossy(&create_output.stderr);
-
+            
             // Check for permission denied
-            if stderr.contains("拒绝访问")
-                || stderr.contains("Access is denied")
-                || stderr.contains("error 5")
-            {
+            if stderr.contains("拒绝访问") || stderr.contains("Access is denied") || stderr.contains("error 5") {
                 println!("Requesting UAC elevation for service creation...");
-
+                
                 // Build PowerShell command with proper escaping
                 // Use array syntax to avoid manual quoting issues
-                let args_escaped = create_args
-                    .iter()
+                let args_escaped = create_args.iter()
                     .map(|s| format!("'{}'", s.replace("'", "''")))
                     .collect::<Vec<_>>()
                     .join(",");
-
+                
                 let ps_script = format!(
                     "Start-Process -FilePath 'sc.exe' -ArgumentList @({}) -Verb RunAs -Wait",
                     args_escaped
                 );
-
+                
                 let elevated_output = Command::new("powershell.exe")
                     .args(&["-NoProfile", "-Command", &ps_script])
                     .output()?;
-
+                
                 if !elevated_output.status.success() {
                     let elevated_stderr = String::from_utf8_lossy(&elevated_output.stderr);
-                    return Err(format!(
-                        "Failed to create service with elevation: {}",
-                        elevated_stderr
-                    )
-                    .into());
+                    return Err(format!("Failed to create service with elevation: {}", elevated_stderr).into());
                 }
-
+                
                 println!("Service created with elevated privileges");
             } else {
                 return Err(format!("Failed to create service: {}", stderr).into());
@@ -484,7 +475,7 @@ systemctl restart {}.service
 
         if !start_output.status.success() {
             let stderr = String::from_utf8_lossy(&start_output.stderr);
-
+            
             if stderr.contains("拒绝访问") || stderr.contains("Access is denied") {
                 let ps_script = "Start-Process -FilePath 'sc.exe' -ArgumentList @('start','TunnetHelper') -Verb RunAs -Wait";
                 let _ = Command::new("powershell.exe")
@@ -500,6 +491,145 @@ systemctl restart {}.service
         std::thread::sleep(std::time::Duration::from_secs(2));
 
         println!("Windows Helper Service installed successfully!");
+        Ok(())
+
+        // 1. Find the helper binary
+        let mut resource_path = self
+            .app_handle
+            .path()
+            .resource_dir()?
+            .join("resources")
+            .join("bin")
+            .join(format!("{}.exe", HELPER_BIN_NAME));
+
+        if cfg!(debug_assertions) {
+            if let Ok(exe_path) = std::env::current_exe() {
+                let project_resource_path = exe_path
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .and_then(|p| p.parent())
+                    .map(|p| {
+                        p.join("resources")
+                            .join("bin")
+                            .join(format!("{}.exe", HELPER_BIN_NAME))
+                    });
+
+                if let Some(res_path) = project_resource_path {
+                    if res_path.exists() {
+                        println!("Using helper from resources (dev): {:?}", res_path);
+                        resource_path = res_path;
+                    }
+                }
+            }
+        }
+
+        if !resource_path.exists() {
+            return Err(format!("Helper binary not found at {:?}", resource_path).into());
+        }
+
+        println!("Installing Windows Service from: {:?}", resource_path);
+
+        // 2. Determine installation paths
+        let program_files = std::env::var("ProgramFiles")?;
+        let install_dir = PathBuf::from(program_files).join("Tunnet");
+        let helper_dest = install_dir.join(format!("{}.exe", HELPER_BIN_NAME));
+
+        // 3. Create installation directory and copy files
+        fs::create_dir_all(&install_dir)?;
+        fs::copy(&resource_path, &helper_dest)?;
+
+        // Also copy libbox.dll and wintun.dll if they exist
+        let dll_source_dir = resource_path.parent().ok_or("Invalid helper path")?;
+        for dll in &["libbox.dll", "wintun.dll"] {
+            let dll_src = dll_source_dir.join(dll);
+            if dll_src.exists() {
+                let dll_dest = install_dir.join(dll);
+                fs::copy(&dll_src, &dll_dest)?;
+                println!("Copied {} to installation directory", dll);
+            }
+        }
+
+        // 4. Create Windows Service with UAC elevation support
+        println!("Creating Windows Service 'TunnetHelper'...");
+
+        let create_output = Command::new("sc.exe")
+            .args([
+                "create",
+                "TunnetHelper",
+                format!("binPath= {}", helper_dest.display()).as_str(),
+                "start=",
+                "auto",
+                "DisplayName=",
+                "Tunnet Helper Service",
+            ])
+            .output()?;
+
+        // Check if we got "access denied" error (error code 5)
+        if !create_output.status.success() {
+            let stderr = String::from_utf8_lossy(&create_output.stderr);
+
+            // Error code 5 = Access Denied
+            if stderr.contains("拒绝访问")
+                || stderr.contains("Access is denied")
+                || stderr.contains("error 5")
+            {
+                println!("Permission denied, requesting UAC elevation...");
+
+                // Use PowerShell to elevate and run the sc create command
+                let ps_script = format!(
+                    "Start-Process -FilePath 'sc.exe' -ArgumentList 'create','TunnetHelper','binPath= {}','start=','auto','DisplayName=','Tunnet Helper Service' -Verb RunAs -Wait",
+                    helper_dest.display()
+                );
+
+                let elevated_output = Command::new("powershell.exe")
+                    .args(&["-NoProfile", "-Command", &ps_script])
+                    .output()?;
+
+                if !elevated_output.status.success() {
+                    let elevated_stderr = String::from_utf8_lossy(&elevated_output.stderr);
+                    return Err(format!(
+                        "Failed to create service with elevation: {}",
+                        elevated_stderr
+                    )
+                    .into());
+                }
+
+                println!("Service created successfully with elevated privileges");
+            } else {
+                return Err(format!("Failed to create service: {}", stderr).into());
+            }
+        }
+
+        // 5. Set service description
+        let _ = Command::new("sc.exe")
+            .args([
+                "description",
+                "TunnetHelper",
+                "Provides TUN interface support for Tunnet proxy",
+            ])
+            .output();
+
+        // 6. Start the service (may also need elevation)
+        println!("Starting TunnetHelper service...");
+        let start_output = Command::new("sc.exe")
+            .args(["start", "TunnetHelper"])
+            .output()?;
+
+        if !start_output.status.success() {
+            let stderr = String::from_utf8_lossy(&start_output.stderr);
+
+            if stderr.contains("拒绝访问") || stderr.contains("Access is denied") {
+                let ps_script = "Start-Process -FilePath 'sc.exe' -ArgumentList 'start','TunnetHelper' -Verb RunAs -Wait";
+                let _ = Command::new("powershell.exe")
+                    .args(&["-NoProfile", "-Command", ps_script])
+                    .output()?;
+            } else if !stderr.contains("already been started") {
+                // Ignore "already started" error
+                return Err(format!("Failed to start service: {}", stderr).into());
+            }
+        }
+
+        println!("Service started successfully");
         Ok(())
     }
 
