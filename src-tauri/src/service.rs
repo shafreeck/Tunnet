@@ -1673,10 +1673,19 @@ impl<R: Runtime> ProxyService<R> {
         use std::path::PathBuf;
         
         // Check if Helper is already running by trying to connect to the Named Pipe
-        let client = crate::helper_client::HelperClient::new();
-        if client.check_status().is_ok() {
-            info!("Windows Helper already running");
-            return Ok(());
+        info!("Checking if Windows Helper is already running...");
+        
+        // First, try a simple pipe existence check by attempting to open it
+        let pipe_path = r"\\.\pipe\tunnet";
+        match std::fs::OpenOptions::new().read(true).write(true).open(pipe_path) {
+            Ok(_) => {
+                // Pipe exists and is accessible, helper is running
+                info!("Windows Helper is already running (Named Pipe exists)");
+                return Ok(());
+            }
+            Err(e) => {
+                info!("Named Pipe not accessible: {} - will start new Helper", e);
+            }
         }
         
         info!("Starting Windows Helper with UAC elevation...");
