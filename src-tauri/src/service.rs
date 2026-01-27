@@ -1755,13 +1755,14 @@ impl<R: Runtime> ProxyService<R> {
     /// CRITICAL: Helper and DLLs MUST be in the same directory for Windows DLL loading to work
     #[cfg(target_os = "windows")]
     fn find_helper_and_dll_paths(&self) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
-        // Use Tauri's resource_dir which points to the correct location in both:
-        // - Dev mode: target/debug/resources
-        // - Release/bundled mode: app_dir/resources
+        // Use Tauri's resource_dir which points to:
+        // - Dev mode: target/debug
+        // - Release/bundled mode: app_dir
+        // We need to add "resources/bin" to get to the helper location
         let resource_dir = self.app.path().resource_dir()
             .map_err(|e| format!("Failed to get resource_dir: {}", e))?;
         
-        let bin_dir = resource_dir.join("bin");
+        let bin_dir = resource_dir.join("resources").join("bin");
         let helper = bin_dir.join("tunnet-helper.exe");
         let dll = bin_dir.join("libbox.dll");
         
