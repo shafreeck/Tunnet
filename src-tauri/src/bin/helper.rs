@@ -203,7 +203,9 @@ async fn initialize_app_state() -> Result<Arc<AppState>, Box<dyn Error>> {
     println!("Tunnet Helper (Libbox) started");
 
     let log_path = if cfg!(windows) {
-        std::env::temp_dir().join("tunnet-helper.log")
+        PathBuf::from(std::env::var("ProgramData").unwrap_or("C:\\ProgramData".into()))
+            .join("Tunnet")
+            .join("tunnet-helper.log")
     } else {
         PathBuf::from("/tmp/tunnet-helper.log")
     };
@@ -211,7 +213,7 @@ async fn initialize_app_state() -> Result<Arc<AppState>, Box<dyn Error>> {
     let log_file = fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(log_path)
+        .open(&log_path)
         .ok()
         .map(|f| BufWriter::new(f));
 
@@ -240,6 +242,41 @@ async fn initialize_app_state() -> Result<Arc<AppState>, Box<dyn Error>> {
 // Main entry point
 #[cfg(windows)]
 fn main() -> Result<(), Box<dyn Error>> {
+    // Early debug logging for service startup
+    if cfg!(windows) {
+        let log_path = std::path::PathBuf::from(
+            std::env::var("ProgramData").unwrap_or("C:\\ProgramData".into()),
+        )
+        .join("Tunnet")
+        .join("early_debug.log");
+
+        // Setup panic hook to catch crashes
+        std::panic::set_hook(Box::new(move |info| {
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path)
+            {
+                let _ = writeln!(f, "PANIC: {:?}", info);
+            }
+        }));
+
+        // Log startup
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(
+            std::path::PathBuf::from(
+                std::env::var("ProgramData").unwrap_or("C:\\ProgramData".into()),
+            )
+            .join("Tunnet")
+            .join("early_debug.log"),
+        ) {
+            let _ = writeln!(
+                f,
+                "Helper process starting... Args: {:?}",
+                std::env::args().collect::<Vec<_>>()
+            );
+        }
+    }
+
     // On Windows, dispatch to the service control manager
     service_dispatcher::start("TunnetHelper", ffi_service_main)?;
     Ok(())
