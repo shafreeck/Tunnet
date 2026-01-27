@@ -351,71 +351,49 @@ impl<R: Runtime> ProxyService<R> {
             .unwrap()
             .join("helper_config.json");
 
-        #[cfg(target_os = "windows")]
-        {
-            // Windows: Single Instance (Combined) Approach
-            // We run everything in the main process (users must run as Admin for TUN).
-            let mode = if tun_mode {
-                crate::config::ConfigMode::Combined
-            } else {
-                crate::config::ConfigMode::SystemProxyOnly
-            };
-
-            self.write_config(
-                node_opt.as_ref(),
-                mode,
-                &routing_mode,
-                &settings,
-                clash_port,
-            )?;
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            // macOS/Linux: Dual Instance (Privileged Helper for TUN)
-            if tun_mode {
-                // Allocate a separate port for Helper API
-                let mut helper_port = None;
-                for _ in 0..3 {
-                    if let Ok(l) = std::net::TcpListener::bind("127.0.0.1:0") {
-                        if let Ok(addr) = l.local_addr() {
-                            helper_port = Some(addr.port());
-                            break;
-                        }
+        // All platforms: Dual Instance (Privileged Helper for TUN)
+        if tun_mode {
+            // Allocate a separate port for Helper API
+            let mut helper_port = None;
+            for _ in 0..3 {
+                if let Ok(l) = std::net::TcpListener::bind("127.0.0.1:0") {
+                    if let Ok(addr) = l.local_addr() {
+                        helper_port = Some(addr.port());
+                        break;
                     }
                 }
-                if helper_port.is_none() {
-                    // Fallback to clash_port + 1 (safe guess)
-                    helper_port = clash_port.map(|p| p + 1);
-                }
+            }
+            if helper_port.is_none() {
+                // Fallback to clash_port + 1 (safe guess)
+                helper_port = clash_port.map(|p| p + 1);
+            }
 
-                info!("Allocated Helper API port: {:?}", helper_port);
+            info!("Allocated Helper API port: {:?}", helper_port);
 
-                // CRITICAL FIX: In TUN mode, the frontend needs to connect to the HELPER's API port
-                // to see traffic stats. We must update the shared state to reflect this.
-                if let Some(hp) = helper_port {
-                    *self.helper_api_port.lock().unwrap() = Some(hp);
-                }
-
-                self.write_config(
-                    node_opt.as_ref(),
-                    crate::config::ConfigMode::TunOnly,
-                    &routing_mode,
-                    &settings,
-                    helper_port,
-                )?;
-                std::fs::rename(&config_file_path, &helper_config_path)
-                    .map_err(|e| e.to_string())?;
+            // CRITICAL FIX: In TUN mode, the frontend needs to connect to the HELPER's API port
+            // to see traffic stats. We must update the shared state to reflect this.
+            if let Some(hp) = helper_port {
+                *self.helper_api_port.lock().unwrap() = Some(hp);
             }
 
             self.write_config(
                 node_opt.as_ref(),
-                crate::config::ConfigMode::SystemProxyOnly,
+                crate::config::ConfigMode::TunOnly,
                 &routing_mode,
                 &settings,
-                clash_port,
+                helper_port,
             )?;
+            std::fs::rename(&config_file_path, &helper_config_path)
+                .map_err(|e| e.to_string())?;
         }
+
+        self.write_config(
+            node_opt.as_ref(),
+            crate::config::ConfigMode::SystemProxyOnly,
+            &routing_mode,
+            &settings,
+            clash_port,
+        )?;
 
         // Loop for retrying startup if port is temporarily held (TIME_WAIT race)
         let max_retries = 60;
@@ -497,9 +475,13 @@ impl<R: Runtime> ProxyService<R> {
                 // But for now, let's just leak it or or put it in a global.
 
                 // 3. Start TUN Instance (Specialized Port-less config) if requested
-                // ON WINDOWS: We skipped generating helper_config, so we skip this block.
-                #[cfg(not(target_os = "windows"))]
                 if tun_mode {
+                    // Windows: Ensure Helper process is running with admin privileges
+                    #[cfg(target_os = "windows")]
+                    {
+                        self.ensure_windows_helper()?;
+                    }
+                    
                     info!(
                         "Starting specialized TUN instance via Helper (attempt {})...",
                         attempt
@@ -1682,6 +1664,125 @@ impl<R: Runtime> ProxyService<R> {
             addr, timeout_ms
         );
         false
+    }
+
+    /// Ensure the Windows Helper process is running with admin privileges.
+    /// Uses ShellExecuteW with "runas" verb to trigger UAC elevation.
+    #[cfg(target_os = "windows")]
+    fn ensure_windows_helper(&self) -> Result<(), String> {
+        use std::path::PathBuf;
+        
+        // Check if Helper is already running by trying to connect to the Named Pipe
+        let client = crate::helper_client::HelperClient::new();
+        if client.check_status().is_ok() {
+            info!("Windows Helper already running");
+            return Ok(());
+        }
+        
+        info!("Starting Windows Helper with UAC elevation...");
+        
+        // Find the helper executable path
+        // In dev: target/debug/tunnet-helper.exe
+        // In release: same directory as main app
+        let helper_path = self.find_helper_executable()?;
+        
+        info!("Helper path: {:?}", helper_path);
+        
+        // Use ShellExecuteW with "runas" verb to trigger UAC
+        use std::os::windows::ffi::OsStrExt;
+        use std::ffi::OsStr;
+        use std::iter::once;
+        
+        fn to_wide(s: &str) -> Vec<u16> {
+            OsStr::new(s).encode_wide().chain(once(0)).collect()
+        }
+        
+        let operation = to_wide("runas");
+        let file = to_wide(helper_path.to_string_lossy().as_ref());
+        let params = to_wide("");
+        let dir = to_wide(helper_path.parent().unwrap_or(&PathBuf::from(".")).to_string_lossy().as_ref());
+        
+        let result = unsafe {
+            extern "system" {
+                fn ShellExecuteW(
+                    hwnd: *mut std::ffi::c_void,
+                    lpOperation: *const u16,
+                    lpFile: *const u16,
+                    lpParameters: *const u16,
+                    lpDirectory: *const u16,
+                    nShowCmd: i32,
+                ) -> isize;
+            }
+            
+            // SW_HIDE = 0, SW_SHOWNORMAL = 1
+            ShellExecuteW(
+                std::ptr::null_mut(),
+                operation.as_ptr(),
+                file.as_ptr(),
+                params.as_ptr(),
+                dir.as_ptr(),
+                0, // SW_HIDE - run hidden
+            )
+        };
+        
+        // ShellExecuteW returns > 32 on success
+        if result <= 32 {
+            return Err(format!("Failed to start Helper with UAC (error code: {})", result));
+        }
+        
+        info!("UAC elevation requested, waiting for Helper to start...");
+        
+        // Wait for Helper to be ready (poll Named Pipe)
+        for i in 0..30 {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            if client.check_status().is_ok() {
+                info!("Windows Helper is ready after {}ms", (i + 1) * 500);
+                return Ok(());
+            }
+        }
+        
+        Err("Helper did not start within timeout (15s)".to_string())
+    }
+    
+    /// Find the helper executable path based on current environment
+    #[cfg(target_os = "windows")]
+    fn find_helper_executable(&self) -> Result<std::path::PathBuf, String> {
+        use std::path::PathBuf;
+        
+        // Try same directory as main executable first (release mode)
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                let helper_in_dir = exe_dir.join("tunnet-helper.exe");
+                if helper_in_dir.exists() {
+                    return Ok(helper_in_dir);
+                }
+            }
+        }
+        
+        // Try resources directory (Tauri bundled)
+        let resource_path = self.app.path()
+            .resource_dir()
+            .ok()
+            .map(|d| d.join("bin").join("tunnet-helper.exe"));
+        if let Some(ref p) = resource_path {
+            if p.exists() {
+                return Ok(p.clone());
+            }
+        }
+        
+        // Try target/debug for development
+        if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+            let dev_path = PathBuf::from(manifest_dir)
+                .join("target")
+                .join("debug")
+                .join("tunnet-helper.exe");
+            if dev_path.exists() {
+                return Ok(dev_path);
+            }
+        }
+        
+        // Fallback: assume in PATH
+        Err("Could not find tunnet-helper.exe".to_string())
     }
 
     fn write_config(
