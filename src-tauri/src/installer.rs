@@ -355,13 +355,14 @@ systemctl restart {}.service
             }
         }
 
-        // 4. Create the service using sc.exe
-        let output = Command::new("sc.exe")
+        // 4. Create Windows Service with UAC elevation support
+        println!("Creating Windows Service 'TunnetHelper'...");
+
+        let create_output = Command::new("sc.exe")
             .args([
                 "create",
                 "TunnetHelper",
-                "binPath=",
-                &format!("\"{}\"", helper_dest.display()),
+                format!("binPath= {}", helper_dest.display()).as_str(),
                 "start=",
                 "auto",
                 "DisplayName=",
@@ -369,31 +370,67 @@ systemctl restart {}.service
             ])
             .output()?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Failed to create service: {}", stderr).into());
+        // Check if we got "access denied" error (error code 5)
+        if !create_output.status.success() {
+            let stderr = String::from_utf8_lossy(&create_output.stderr);
+
+            // Error code 5 = Access Denied
+            if stderr.contains("拒绝访问")
+                || stderr.contains("Access is denied")
+                || stderr.contains("error 5")
+            {
+                println!("Permission denied, requesting UAC elevation...");
+
+                // Use PowerShell to elevate and run the sc create command
+                let ps_script = format!(
+                    "Start-Process -FilePath 'sc.exe' -ArgumentList 'create','TunnetHelper','binPath= {}','start=','auto','DisplayName=','Tunnet Helper Service' -Verb RunAs -Wait",
+                    helper_dest.display()
+                );
+
+                let elevated_output = Command::new("powershell.exe")
+                    .args(&["-NoProfile", "-Command", &ps_script])
+                    .output()?;
+
+                if !elevated_output.status.success() {
+                    let elevated_stderr = String::from_utf8_lossy(&elevated_output.stderr);
+                    return Err(format!(
+                        "Failed to create service with elevation: {}",
+                        elevated_stderr
+                    )
+                    .into());
+                }
+
+                println!("Service created successfully with elevated privileges");
+            } else {
+                return Err(format!("Failed to create service: {}", stderr).into());
+            }
         }
 
-        println!("Service created successfully");
-
         // 5. Set service description
-        Command::new("sc.exe")
+        let _ = Command::new("sc.exe")
             .args([
                 "description",
                 "TunnetHelper",
-                "Tunnet network helper service for TUN mode support",
+                "Provides TUN interface support for Tunnet proxy",
             ])
-            .output()?;
+            .output();
 
-        // 6. Start the service
-        let output = Command::new("sc.exe")
+        // 6. Start the service (may also need elevation)
+        println!("Starting TunnetHelper service...");
+        let start_output = Command::new("sc.exe")
             .args(["start", "TunnetHelper"])
             .output()?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            // It's okay if service is already running
-            if !stderr.contains("already been started") {
+        if !start_output.status.success() {
+            let stderr = String::from_utf8_lossy(&start_output.stderr);
+
+            if stderr.contains("拒绝访问") || stderr.contains("Access is denied") {
+                let ps_script = "Start-Process -FilePath 'sc.exe' -ArgumentList 'start','TunnetHelper' -Verb RunAs -Wait";
+                let _ = Command::new("powershell.exe")
+                    .args(&["-NoProfile", "-Command", ps_script])
+                    .output()?;
+            } else if !stderr.contains("already been started") {
+                // Ignore "already started" error
                 return Err(format!("Failed to start service: {}", stderr).into());
             }
         }
