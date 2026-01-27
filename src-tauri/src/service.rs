@@ -1666,103 +1666,83 @@ impl<R: Runtime> ProxyService<R> {
         false
     }
 
-    /// Ensure the Windows Helper process is running with admin privileges.
-    /// Uses ShellExecuteW with "runas" verb to trigger UAC elevation.
+    /// Ensure the Windows Helper Service is running.
+    /// Checks if the TunnetHelper service exists and is running, starts it if necessary.
     #[cfg(target_os = "windows")]
     fn ensure_windows_helper(&self) -> Result<(), String> {
-        info!("Checking if Windows Helper is already running...");
+        info!("Checking Windows Helper Service status...");
         
-        // Try to connect to Named Pipe to check if helper is running
-        // The Named Pipe is created with NULL DACL so non-admin can connect to admin-created pipe
+        // 1. Check if service exists and get its status
+        let output = std::process::Command::new("sc.exe")
+            .args(["query", "TunnetHelper"])
+            .output()
+            .map_err(|e| format!("Failed to query service: {}", e))?;
         
-        // Try the HelperClient to send a request and verify it's responsive
-        let client = crate::helper_client::HelperClient::new();
-        match client.check_status() {
-            Ok(_) => {
-                info!("Windows Helper is already running and responsive");
-                return Ok(());
-            }
-            Err(e) => {
-                info!("Helper not responsive: {} - will start new helper", e);
-            }
+        let output_str = String::from_utf8_lossy(&output.stdout);
+        
+        // 2. If service doesn't exist, return error (user needs to install it)
+        if !output.status.success() || !output_str.contains("TunnetHelper") {
+            return Err("TunnetHelper service is not installed. Please reinstall the application.".to_string());
         }
         
-        info!("Starting Windows Helper with UAC elevation...");
-        
-        // Find the helper executable and DLL paths
-        let (helper_path, dll_dir) = self.find_helper_and_dll_paths()?;
-        
-        info!("Helper path: {:?}, DLL dir: {:?}", helper_path, dll_dir);
-        
-        // Temporarily add DLL directory to PATH so child process inherits it
-        // This ensures libbox.dll is found during DLL load phase
-        let original_path = std::env::var("PATH").unwrap_or_default();
-        let new_path = format!("{};{}", dll_dir.display(), original_path);
-        std::env::set_var("PATH", &new_path);
-        
-        // Use ShellExecuteW with "runas" verb to trigger UAC
-        use std::os::windows::ffi::OsStrExt;
-        use std::ffi::OsStr;
-        use std::iter::once;
-        
-        fn to_wide(s: &str) -> Vec<u16> {
-            OsStr::new(s).encode_wide().chain(once(0)).collect()
-        }
-        
-        let operation = to_wide("runas");
-        let file = to_wide(helper_path.to_string_lossy().as_ref());
-        let params = to_wide("");
-        let dir = to_wide(dll_dir.to_string_lossy().as_ref());
-        
-        let result = unsafe {
-            extern "system" {
-                fn ShellExecuteW(
-                    hwnd: *mut std::ffi::c_void,
-                    lpOperation: *const u16,
-                    lpFile: *const u16,
-                    lpParameters: *const u16,
-                    lpDirectory: *const u16,
-                    nShowCmd: i32,
-                ) -> isize;
-            }
+        // 3. Check if service is running
+        if output_str.contains("RUNNING") {
+            info!("TunnetHelper service is already running");
             
-            // SW_HIDE = 0
-            ShellExecuteW(
-                std::ptr::null_mut(),
-                operation.as_ptr(),
-                file.as_ptr(),
-                params.as_ptr(),
-                dir.as_ptr(),
-                0,
-            )
-        };
-        
-        // Restore original PATH
-        std::env::set_var("PATH", &original_path);
-        
-        // ShellExecuteW returns > 32 on success
-        if result <= 32 {
-            return Err(format!("Failed to start Helper with UAC (error code: {})", result));
-        }
-        
-        info!("UAC elevation requested, waiting for Helper to start...");
-        
-        // Wait for Helper to be ready (poll Named Pipe)
-        let pipe_path = r"\\.\pipe\tunnet";
-        for i in 0..30 {
-            std::thread::sleep(std::time::Duration::from_millis(500));
-            if std::fs::OpenOptions::new().read(true).write(true).open(pipe_path).is_ok() {
-                info!("Windows Helper is ready after {}ms", (i + 1) * 500);
-                return Ok(());
+            // Verify Named Pipe is accessible
+            let client = crate::helper_client::HelperClient::new();
+            match client.check_status() {
+                Ok(_) => {
+                    info!("Service is responsive");
+                    return Ok(());
+                }
+                Err(e) => {
+                    warn!("Service is running but not responsive: {}. Will try to restart.", e);
+                    // Fall through to restart logic
+                }
             }
         }
         
-        Err("Helper did not start within timeout (15s)".to_string())
+        // 4. Service exists but not running, or not responsive - start it
+        info!("Starting TunnetHelper service...");
+        let output = std::process::Command::new("sc.exe")
+            .args(["start", "TunnetHelper"])
+            .output()
+            .map_err(|e| format!("Failed to start service: {}", e))?;
+        
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // Check if already started
+            if stderr.contains("already been started") {
+                info!("Service was already started");
+            } else {
+                return Err(format!("Failed to start service: {}", stderr));
+            }
+        }
+        
+        info!("Waiting for service to be ready...");
+        
+        // 5. Wait for service to be ready and responsive
+        let client = crate::helper_client::HelperClient::new();
+        for i in 0..20 {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            match client.check_status() {
+                Ok(_) => {
+                    info!("TunnetHelper service is ready after {}ms", (i + 1) * 500);
+                    return Ok(());
+                }
+                Err(_) => continue,
+            }
+        }
+        
+        Err("Service started but not responding within timeout (10s)".to_string())
     }
     
     /// Find the helper executable and DLL directory paths
     /// CRITICAL: Helper and DLLs MUST be in the same directory for Windows DLL loading to work
+    /// NOTE: This function is kept for potential future use (e.g., development mode)
     #[cfg(target_os = "windows")]
+    #[allow(dead_code)]
     fn find_helper_and_dll_paths(&self) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
         // Use Tauri's resource_dir which points to:
         // - Dev mode: target/debug
