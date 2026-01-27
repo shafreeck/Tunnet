@@ -173,21 +173,49 @@ async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
 async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
     use tokio::net::windows::named_pipe::ServerOptions;
 
+    log(
+        &app_state,
+        &format!("Helper listening on Named Pipe: {}", PIPE_NAME),
+    );
     println!("Helper listening on Named Pipe: {}", PIPE_NAME);
 
+    let mut first_instance = true;
+
     loop {
-        let mut server = ServerOptions::new()
-            .first_pipe_instance(true) // Subsequent instances will work too if we use this loop
-            .create(PIPE_NAME)?;
+        let server_result = ServerOptions::new()
+            .first_pipe_instance(first_instance)
+            .create(PIPE_NAME);
+
+        let mut server = match server_result {
+            Ok(s) => s,
+            Err(e) => {
+                log(&app_state, &format!("Failed to create Named Pipe: {}", e));
+                return Err(e.into());
+            }
+        };
+
+        // After first successful creation, subsequent instances should not use first_pipe_instance
+        first_instance = false;
+
+        log(&app_state, "Waiting for client connection...");
 
         // Wait for a client to connect
-        server.connect().await?;
+        if let Err(e) = server.connect().await {
+            log(&app_state, &format!("Failed to accept connection: {}", e));
+            continue;
+        }
+
+        log(&app_state, "Client connected!");
 
         let state = app_state.clone();
         tokio::spawn(async move {
             let mut request_str = String::new();
             match server.read_to_string(&mut request_str).await {
                 Ok(size) => {
+                    log(
+                        &state,
+                        &format!("Received {} bytes: {}", size, &request_str),
+                    );
                     if size > 0 {
                         let response = match serde_json::from_str::<Request>(&request_str) {
                             Ok(req) => handle_request(req, &state),
@@ -197,6 +225,7 @@ async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
                             },
                         };
                         let response_str = serde_json::to_string(&response).unwrap();
+                        log(&state, &format!("Sending response: {}", &response_str));
                         let _ = server.write_all(response_str.as_bytes()).await;
                     }
                 }
