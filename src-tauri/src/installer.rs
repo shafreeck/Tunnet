@@ -258,6 +258,7 @@ impl<R: Runtime> HelperInstaller<R> {
 
     #[cfg(target_os = "linux")]
     pub fn install(&self) -> Result<(), Box<dyn Error>> {
+        use std::fs;
         // 1. Find binary path (handle dev vs production)
         let mut resource_path = self
             .app_handle
