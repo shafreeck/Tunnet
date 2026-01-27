@@ -361,7 +361,7 @@ systemctl restart {}.service
 
         println!("Starting Windows Helper Service installation...");
 
-        // 1. Find the helper binary
+        // 1. Find the helper binary in resources/bin
         let mut resource_path = self
             .app_handle
             .path()
@@ -395,79 +395,73 @@ systemctl restart {}.service
             return Err(format!("Helper binary not found at {:?}", resource_path).into());
         }
 
-        // 2. Determine installation paths
-        let program_files = std::env::var("ProgramFiles")?;
-        let install_dir = PathBuf::from(program_files).join("Tunnet");
+        println!("Helper binary found at: {:?}", resource_path);
+
+        // 2. Unified installation directory: %ProgramData%\Tunnet
+        // This works for both dev and production, avoids file lock issues
+        let program_data = std::env::var("ProgramData")?;
+        let install_dir = PathBuf::from(program_data).join("Tunnet");
         let helper_dest = install_dir.join(format!("{}.exe", HELPER_BIN_NAME));
 
         println!("Installing to: {:?}", install_dir);
 
-        // 3. Delete old service if it exists (handles version upgrade)
+        // 3. Delete old service if it exists
         println!("Removing old service if exists...");
         let _ = self.uninstall(); // Ignore errors - service might not exist
 
-        // 4. Create installation directory and copy files
-        // This might need elevation on some systems
+        // 4. Create installation directory
+        // If this fails (permissions), we might need to use run_elevated with mkdir,
+        // but typically ProgramData is writable by users for creating subdirs.
         if let Err(e) = fs::create_dir_all(&install_dir) {
-            // Check if it's permission error
-            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                println!("Permission denied creating directory, requesting elevation...");
-                // Use PowerShell to create directory with elevation
-                let ps_script = format!(
-                    "New-Item -ItemType Directory -Force -Path '{}'",
-                    install_dir.display()
-                );
-                let _ = Command::new("powershell.exe")
-                    .args(&["-NoProfile", "-Command", &ps_script])
-                    .args(&["-Verb", "RunAs"])
-                    .output()?;
-            } else {
-                return Err(e.into());
-            }
+            println!(
+                "Failed to create directory: {}, attempting with elevation...",
+                e
+            );
+            run_elevated(
+                "cmd.exe",
+                &format!("/c mkdir \"{}\"", install_dir.display()),
+            )?;
         }
 
-        // Copy helper executable
+        // 5. Copy helper executable
+        println!("Copying helper executable...");
         if let Err(e) = fs::copy(&resource_path, &helper_dest) {
-            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                println!("Permission denied copying file, requesting elevation...");
-                let ps_script = format!(
-                    "Copy-Item -Path '{}' -Destination '{}' -Force",
-                    resource_path.display(),
-                    helper_dest.display()
-                );
-                Command::new("powershell.exe")
-                    .args(&["-NoProfile", "-Command", &ps_script])
-                    .args(&["-Verb", "RunAs"])
-                    .output()?;
-            } else {
-                return Err(e.into());
-            }
+            println!("Failed to copy helper: {}, attempting with robocopy...", e);
+            let source_dir = resource_path.parent().ok_or("Invalid helper path")?;
+            let helper_filename = resource_path.file_name().ok_or("Invalid helper filename")?;
+            let robocopy_args = format!(
+                "\"{}\" \"{}\" {} /NFL /NDL /NJH /NJS",
+                source_dir.display(),
+                install_dir.display(),
+                helper_filename.to_string_lossy()
+            );
+            run_elevated("robocopy.exe", &robocopy_args)?;
         }
 
-        // Copy DLLs
+        // 6. Copy DLLs
         let dll_source_dir = resource_path.parent().ok_or("Invalid helper path")?;
         for dll in &["libbox.dll", "wintun.dll"] {
             let dll_src = dll_source_dir.join(dll);
             if dll_src.exists() {
                 let dll_dest = install_dir.join(dll);
-                if let Err(e) = fs::copy(&dll_src, &dll_dest) {
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        let ps_script = format!(
-                            "Copy-Item -Path '{}' -Destination '{}' -Force",
-                            dll_src.display(),
-                            dll_dest.display()
-                        );
-                        let _ = Command::new("powershell.exe")
-                            .args(&["-NoProfile", "-Command", &ps_script])
-                            .args(&["-Verb", "RunAs"])
-                            .output();
-                    }
+                if let Err(_) = fs::copy(&dll_src, &dll_dest) {
+                    println!("Failed to copy {}, attempting with robocopy...", dll);
+                    let robocopy_args = format!(
+                        "\"{}\" \"{}\" {} /NFL /NDL /NJH /NJS",
+                        dll_source_dir.display(),
+                        install_dir.display(),
+                        dll
+                    );
+                    run_elevated("robocopy.exe", &robocopy_args)?;
+                } else {
+                    println!("Copied {} to installation directory", dll);
                 }
-                println!("Copied {} to installation directory", dll);
             }
         }
 
-        // 5. Create service with UAC elevation using Windows API
+        println!("Files copied successfully");
+
+        // 7. Create service with UAC elevation
         println!("Creating Windows Service (UAC prompt will appear)...");
 
         // CRITICAL: binPath must be binPath="path" (no space after =, path in quotes)
@@ -483,7 +477,7 @@ systemctl restart {}.service
 
         println!("Service created successfully");
 
-        // 6. Set service description
+        // 8. Set service description
         let _ = Command::new("sc.exe")
             .args(&[
                 "description",
@@ -492,11 +486,26 @@ systemctl restart {}.service
             ])
             .output();
 
-        // 7. Start the service with elevation
+        // 9. Start the service with elevation
         println!("Starting service...");
         run_elevated("sc.exe", "start TunnetHelper")?;
 
-        // Replaced with status check - see below
+        // 10. Verify service started successfully
+        println!("Verifying service status...");
+        std::thread::sleep(std::time::Duration::from_secs(3));
+
+        let query_output = Command::new("sc.exe")
+            .args(&["query", "TunnetHelper"])
+            .output()?;
+
+        let stdout = String::from_utf8_lossy(&query_output.stdout);
+        if !stdout.contains("RUNNING") && !stdout.contains("START_PENDING") {
+            return Err(format!("Service failed to start. Status:\n{}", stdout).into());
+        }
+
+        println!("Service is running");
+
+        // 11. Wait for service to be responsive
         println!("Waiting for service to start...");
         std::thread::sleep(std::time::Duration::from_secs(2));
 
