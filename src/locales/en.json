@@ -163,7 +163,18 @@
                 "title": "Core Cache Directory",
                 "desc": "Stores all runtime dynamic data."
             },
-            "component": "Component Management",
+            "component": {
+                "title": "Component Management",
+                "helper_tool": {
+                    "title": "Privileged Helper",
+                    "desc": "Background service for system networking permissions."
+                },
+                "reinstall_helper": "Reinstall Helper",
+                "installing": "Installing helper...",
+                "installing_short": "Installing...",
+                "install_success": "Helper installed successfully",
+                "install_failed": "Installation failed"
+            },
             "geodata": {
                 "title": "Routing Database (SRS)",
                 "desc": "GeoIP and GeoSite databases used for routing rules. Automatically synced from GitHub by default.",

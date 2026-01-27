@@ -170,7 +170,18 @@
                 "title": "核心缓存目录",
                 "desc": "存放所有运行时动态数据。"
             },
-            "component": "组件管理",
+            "component": {
+                "title": "组件管理",
+                "helper_tool": {
+                    "title": "特权助手",
+                    "desc": "用于接管系统网络权限的后台服务。"
+                },
+                "reinstall_helper": "重新安装 Helper",
+                "installing": "正在安装 Helper...",
+                "installing_short": "安装中...",
+                "install_success": "Helper 安装成功",
+                "install_failed": "安装失败"
+            },
             "geodata": {
                 "title": "路由数据库 (SRS)",
                 "desc": "用于规则分流的 GeoIP 和 GeoSite 数据库。系统默认从 GitHub 自动同步。",

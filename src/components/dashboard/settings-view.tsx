@@ -1056,33 +1056,45 @@ function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modif
                 </SettingItem>
             </Section>
 
-            <Section title={t('settings.advanced.component')} icon={<Server size={14} />}>
+            <Section title={t('settings.advanced.component.title', { defaultValue: 'Component Management' })} icon={<Server size={14} />}>
                 <SettingItem
                     title={t('settings.advanced.core.title')}
                     description={t('settings.advanced.core.desc')}
                     icon={<Zap size={20} />}
                 >
                     <div className="flex flex-col gap-2 items-end">
-                        {clashApiPort && (
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{t('settings.advanced.core.main_controller')}</span>
-                                <code className="text-[11px] font-mono bg-primary/10 text-primary px-2 py-1 rounded select-all cursor-text min-w-[160px] text-center">
-                                    http://127.0.0.1:{clashApiPort}
-                                </code>
-                            </div>
-                        )}
-                        {helperApiPort && (
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{t('settings.advanced.core.helper_controller')}</span>
-                                <code className="text-[11px] font-mono bg-accent-green/10 text-accent-green px-2 py-1 rounded select-all cursor-text min-w-[160px] text-center">
-                                    http://127.0.0.1:{helperApiPort}
-                                </code>
-                            </div>
-                        )}
-                        {!clashApiPort && !helperApiPort && (
-                            <span className="text-xs text-secondary/50 italic">{t('status.stopped')}</span>
-                        )}
+                        <div className="flex flex-col gap-2 items-end">
+                            {clashApiPort && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{t('settings.advanced.core.main_controller')}</span>
+                                    <code className="text-[11px] font-mono bg-primary/10 text-primary px-2 py-1 rounded select-all cursor-text min-w-[160px] text-center">
+                                        http://127.0.0.1:{clashApiPort}
+                                    </code>
+                                </div>
+                            )}
+                            {helperApiPort && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{t('settings.advanced.core.helper_controller')}</span>
+                                    <code className="text-[11px] font-mono bg-accent-green/10 text-accent-green px-2 py-1 rounded select-all cursor-text min-w-[160px] text-center">
+                                        http://127.0.0.1:{helperApiPort}
+                                    </code>
+                                </div>
+                            )}
+                            {!clashApiPort && !helperApiPort && (
+                                <span className="text-xs text-secondary/50 italic">{t('status.stopped')}</span>
+                            )}
+                        </div>
+
+
                     </div>
+                </SettingItem>
+
+                <SettingItem
+                    title={t('settings.advanced.component.helper_tool.title', { defaultValue: 'Privileged Helper' })}
+                    description={t('settings.advanced.component.helper_tool.desc', { defaultValue: 'Background service for system networking permissions.' })}
+                    icon={<Shield size={20} />}
+                >
+                    <ReinstallHelperBtn />
                 </SettingItem>
             </Section >
         </div >
@@ -1185,3 +1197,42 @@ function QuitButton() {
         </button>
     )
 }
+
+function ReinstallHelperBtn() {
+    const { t } = useTranslation()
+    const [installing, setInstalling] = useState(false)
+
+    const handleReinstall = async () => {
+        setInstalling(true)
+        const toastId = toast.loading(t('settings.advanced.component.installing', { defaultValue: 'Installing helper...' }))
+
+        try {
+            await invoke("install_helper")
+            toast.dismiss(toastId)
+            toast.success(t('settings.advanced.component.install_success', { defaultValue: 'Helper installed successfully' }))
+        } catch (e) {
+            console.error("Helper install failed:", e)
+            toast.dismiss(toastId)
+            toast.error(t('settings.advanced.component.install_failed', { defaultValue: 'Installation failed' }), {
+                description: String(e)
+            })
+        } finally {
+            setInstalling(false)
+        }
+    }
+
+    return (
+        <button
+            onClick={handleReinstall}
+            disabled={installing}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/5 dark:bg-white/5 text-secondary hover:text-foreground hover:bg-black/10 dark:hover:bg-white/10 transition-all text-[11px] font-medium disabled:opacity-50"
+        >
+            <Shield size={12} />
+            {installing
+                ? t('settings.advanced.component.installing_short', { defaultValue: 'Installing...' })
+                : t('settings.advanced.component.reinstall_helper', { defaultValue: 'Reinstall Helper' })
+            }
+        </button>
+    )
+}
+
