@@ -383,7 +383,8 @@ fn create_named_pipe_with_security(
         tokio::net::windows::named_pipe::NamedPipeServer::from_raw_handle(handle as RawHandle)
     };
 
-    Ok(server)
+    // from_raw_handle returns Result for tokio types
+    Ok(server?)
 }
 
 #[derive(Serialize, Deserialize, Debug)]
