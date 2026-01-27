@@ -103,7 +103,14 @@ func LibboxStop() *C.char {
 		return C.CString("service not running")
 	}
 
-	// Just close it
+	// CRITICAL: Cancel context FIRST to signal all goroutines to stop
+	// This allows instance.Close() to complete without waiting for context cancellation
+	if cancel != nil {
+		cancel()
+		cancel = nil
+	}
+
+	// Then close the instance
 	if err := instance.Close(); err != nil {
 		if strings.Contains(err.Error(), "service not running") {
 			// ignore
@@ -112,10 +119,6 @@ func LibboxStop() *C.char {
 		}
 	}
 
-	if cancel != nil {
-		cancel()
-		cancel = nil
-	}
 	instance = nil
 	return nil
 }
