@@ -2591,11 +2591,30 @@ impl<R: Runtime> ProxyService<R> {
             cleanup_performed = true;
 
             info!("Stopping local libbox proxy core...");
-            unsafe {
-                let err_ptr = libbox::LibboxStop();
-                if !err_ptr.is_null() {
-                    let err_msg = CStr::from_ptr(err_ptr).to_string_lossy().into_owned();
-                    error!("LibboxStop failed: {}", err_msg);
+            
+            // Optimization: LibboxStop is a blocking FFI call that can hang (e.g. 50s+).
+            // We wrap it in spawn_blocking with a timeout to ensure UI responsiveness.
+            let stop_future = tokio::task::spawn_blocking(|| {
+                unsafe {
+                    let err_ptr = libbox::LibboxStop();
+                    if !err_ptr.is_null() {
+                        let err_msg = CStr::from_ptr(err_ptr).to_string_lossy().into_owned();
+                        error!("LibboxStop failed: {}", err_msg);
+                    }
+                }
+            });
+
+            // Wait at most 2 seconds for libbox to stop
+            match tokio::time::timeout(std::time::Duration::from_secs(2), stop_future).await {
+                Ok(result) => {
+                    if let Err(e) = result {
+                        error!("LibboxStop task join error: {}", e);
+                    }
+                },
+                Err(_) => {
+                    warn!("LibboxStop timed out (2s), forcing continuation. The background thread might still be running.");
+                    // Note: We cannot cancel the blocking FFI call, it will continue in the background thread.
+                    // This is acceptable as we are either shutting down or don't care about the old instance.
                 }
             }
             *self.local_proxy_running.lock().unwrap() = false;
