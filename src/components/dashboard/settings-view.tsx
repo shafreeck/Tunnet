@@ -1225,7 +1225,7 @@ function ReinstallHelperBtn() {
         <button
             onClick={handleReinstall}
             disabled={installing}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/5 dark:bg-white/5 text-secondary hover:text-foreground hover:bg-black/10 dark:hover:bg-white/10 transition-all text-[11px] font-medium disabled:opacity-50"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-all text-[11px] font-bold disabled:opacity-50"
         >
             <Shield size={12} />
             {installing

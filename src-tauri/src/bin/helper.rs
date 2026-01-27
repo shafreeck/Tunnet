@@ -12,7 +12,7 @@ const SOCKET_PATH: &str = "/var/run/tunnet.sock";
 const PIPE_NAME: &str = r"\\.\pipe\tunnet";
 
 use app_lib::libbox;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Request {
