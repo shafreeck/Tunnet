@@ -49,7 +49,7 @@ fn run_elevated(program: &str, args: &str) -> Result<(), Box<dyn Error>> {
             file.as_ptr(),
             parameters.as_ptr(),
             ptr::null(),
-            1, // SW_SHOWNORMAL
+            0, // SW_HIDE
         );
 
         // ShellExecuteW returns > 32 on success
@@ -458,36 +458,18 @@ systemctl restart {}.service
                 }
             }
         }
-
         println!("Files copied successfully");
 
-        // Prepare arguments
-        // CRITICAL: binPath must be binPath="path" (no space after =, path in quotes)
-        let bin_path_arg = format!("binPath=\"{}\"", helper_dest.display());
-        // 7. Create installation script (Batch file) to run all commands in one UAC prompt
-        let script_path = install_dir.join("install_service.bat");
-        let script_content = format!(
-            "@echo off\r\n\
-            sc create TunnetHelper {} start=auto \"DisplayName=Tunnet Helper Service\"\r\n\
-            sc config TunnetHelper {} start=auto\r\n\
-            sc description TunnetHelper \"Provides TUN interface support for Tunnet proxy\"\r\n\
-            sc start TunnetHelper\r\n\
-            exit /b 0",
-            bin_path_arg, bin_path_arg
-        );
-        fs::write(&script_path, script_content)?;
+        // 7. Execute helper with "service-install" argument to setup the service
+        // This provides a cleaner UAC prompt (Tunnet Helper instead of cmd.exe)
+        // and handles service creation/config internally.
+        println!("Configuring Windows Service via helper binary...");
 
-        // 8. Execute script with elevation
-        println!("Available commands script created at: {:?}", script_path);
-        println!("Executing installation script (Single UAC prompt)...");
+        let helper_exe_str = helper_dest.to_str().ok_or("Invalid helper path")?;
 
-        let args = format!("/c \"{}\"", script_path.display());
-        run_elevated("cmd.exe", &args)?;
+        run_elevated(helper_exe_str, "service-install")?;
 
-        // Remove script after execution (optional, keep for debug?)
-        // let _ = fs::remove_file(script_path);
-
-        // 10. Verify service started successfully
+        // 8. Verify service started successfully
         println!("Verifying service status...");
         std::thread::sleep(std::time::Duration::from_secs(3));
 

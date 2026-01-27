@@ -277,6 +277,66 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    // Check for installation flag
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 && args[1] == "service-install" {
+        // We act as the installer (running as Admin)
+        println!("Installing Tunnet Helper Service...");
+
+        let exe_path = std::env::current_exe()?;
+        let bin_path_arg = format!("binPath=\"{}\"", exe_path.display());
+
+        // 1. Create service (ignore error if exists)
+        // CREATE_NO_WINDOW = 0x08000000
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let _ = std::process::Command::new("sc.exe")
+            .args(&[
+                "create",
+                "TunnetHelper",
+                &bin_path_arg,
+                "start=auto",
+                "DisplayName=Tunnet Helper Service",
+            ])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+
+        // 2. Config service (force update path)
+        let _ = std::process::Command::new("sc.exe")
+            .args(&["config", "TunnetHelper", &bin_path_arg, "start=auto"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+
+        // 3. Set description
+        let _ = std::process::Command::new("sc.exe")
+            .args(&[
+                "description",
+                "TunnetHelper",
+                "Provides TUN interface support for Tunnet proxy",
+            ])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+
+        // 4. Start service
+        let output = std::process::Command::new("sc.exe")
+            .args(&["start", "TunnetHelper"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()?;
+
+        if !output.status.success() {
+            // It's okay if already running, but let's log stderr just in case
+            let err = String::from_utf8_lossy(&output.stderr);
+            if !err.contains("An instance of the service is already running") {
+                // return Err(format!("Failed to start service: {}", err).into());
+                // Don't error out, let verification step handle it
+            }
+        }
+
+        println!("Service installation commands executed.");
+        return Ok(());
+    }
+
     // On Windows, dispatch to the service control manager
     service_dispatcher::start("TunnetHelper", ffi_service_main)?;
     Ok(())
