@@ -1752,47 +1752,60 @@ impl<R: Runtime> ProxyService<R> {
     }
     
     /// Find the helper executable and DLL directory paths
+    /// CRITICAL: Helper and DLLs MUST be in the same directory for Windows DLL loading to work
     #[cfg(target_os = "windows")]
     fn find_helper_and_dll_paths(&self) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
         use std::path::PathBuf;
         
-        // In release/bundled mode: helper and DLLs are in resources/bin
+        // Priority 1: resources/bin (both bundled release and dev mode after build-helper runs)
+        // This is the canonical location where helper and DLLs are guaranteed to be together
         if let Ok(resource_dir) = self.app.path().resource_dir() {
             let bin_dir = resource_dir.join("bin");
             let helper = bin_dir.join("tunnet-helper.exe");
-            if helper.exists() && bin_dir.join("libbox.dll").exists() {
+            let dll = bin_dir.join("libbox.dll");
+            info!("Checking resources/bin: helper={:?} exists={}, dll={:?} exists={}", 
+                  helper, helper.exists(), dll, dll.exists());
+            if helper.exists() && dll.exists() {
                 return Ok((helper, bin_dir));
             }
         }
         
-        // In dev mode: helper and DLLs should be in same target directory
+        // Priority 2: Same directory as main executable (target/debug or target/release)
+        // This works if build.rs copied the DLLs to target directory
         if let Ok(exe_path) = std::env::current_exe() {
             if let Some(exe_dir) = exe_path.parent() {
-                let target_dir = exe_dir;
-                let helper = target_dir.join("tunnet-helper.exe");
-                
-                // First check if DLLs are in same directory as helper
-                if helper.exists() && target_dir.join("libbox.dll").exists() {
-                    return Ok((helper, target_dir.to_path_buf()));
+                let helper = exe_dir.join("tunnet-helper.exe");
+                let dll = exe_dir.join("libbox.dll");
+                info!("Checking exe dir: helper={:?} exists={}, dll={:?} exists={}", 
+                      helper, helper.exists(), dll, dll.exists());
+                if helper.exists() && dll.exists() {
+                    return Ok((helper, exe_dir.to_path_buf()));
                 }
+            }
+        }
+        
+        // Priority 3: Fallback to src-tauri/resources/bin for dev mode
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                // target/debug -> target -> src-tauri -> resources/bin
+                let resources_bin = exe_dir
+                    .parent()
+                    .and_then(|p| p.parent())
+                    .map(|p| p.join("resources").join("bin"));
                 
-                // Try resources/bin for DLLs
-                if helper.exists() {
-                    let resources_bin = target_dir
-                        .parent() // target
-                        .and_then(|p| p.parent()) // src-tauri
-                        .map(|p| p.join("resources").join("bin"));
-                    
-                    if let Some(dll_dir) = resources_bin {
-                        if dll_dir.join("libbox.dll").exists() {
-                            return Ok((helper, dll_dir));
-                        }
+                if let Some(bin_dir) = resources_bin {
+                    let helper = bin_dir.join("tunnet-helper.exe");
+                    let dll = bin_dir.join("libbox.dll");
+                    info!("Checking src-tauri/resources/bin: helper={:?} exists={}, dll={:?} exists={}", 
+                          helper, helper.exists(), dll, dll.exists());
+                    if helper.exists() && dll.exists() {
+                        return Ok((helper, bin_dir));
                     }
                 }
             }
         }
         
-        Err("Could not find tunnet-helper.exe or libbox.dll".to_string())
+        Err("Could not find tunnet-helper.exe and libbox.dll in the same directory".to_string())
     }
 
     fn write_config(
