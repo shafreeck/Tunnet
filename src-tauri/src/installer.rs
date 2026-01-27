@@ -3,8 +3,68 @@ use std::path::PathBuf;
 use std::process::Command;
 use tauri::{AppHandle, Manager, Runtime};
 
+#[cfg(target_os = "windows")]
+use std::os::windows::ffi::OsStrExt;
+
 const HELPER_LABEL: &str = "run.tunnet.helper";
 const HELPER_BIN_NAME: &str = "tunnet-helper";
+
+#[cfg(target_os = "windows")]
+fn run_elevated(program: &str, args: &str) -> Result<(), Box<dyn Error>> {
+    use std::ptr;
+
+    // Declare ShellExecuteW from shell32.dll
+    #[link(name = "shell32")]
+    extern "system" {
+        fn ShellExecuteW(
+            hwnd: *mut std::ffi::c_void,
+            operation: *const u16,
+            file: *const u16,
+            parameters: *const u16,
+            directory: *const u16,
+            show_cmd: i32,
+        ) -> *mut std::ffi::c_void;
+    }
+
+    // Convert strings to wide strings (UTF-16)
+    let operation: Vec<u16> = std::ffi::OsStr::new("runas")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let file: Vec<u16> = std::ffi::OsStr::new(program)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let parameters: Vec<u16> = std::ffi::OsStr::new(args)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    println!("Running elevated: {} {}", program, args);
+
+    unsafe {
+        let result = ShellExecuteW(
+            ptr::null_mut(),
+            operation.as_ptr(),
+            file.as_ptr(),
+            parameters.as_ptr(),
+            ptr::null(),
+            1, // SW_SHOWNORMAL
+        );
+
+        // ShellExecuteW returns > 32 on success
+        if result as usize <= 32 {
+            return Err(
+                format!("ShellExecuteW failed with error code: {}", result as usize).into(),
+            );
+        }
+    }
+
+    // Wait a bit for the elevated process to complete
+    std::thread::sleep(std::time::Duration::from_secs(3));
+
+    Ok(())
+}
 
 pub struct HelperInstaller<R: Runtime> {
     app_handle: AppHandle<R>,
@@ -407,50 +467,19 @@ systemctl restart {}.service
             }
         }
 
-        // 5. Create service with UAC elevation
-        // Creating Windows Service REQUIRES admin privileges, so we use RunAs directly
-        println!("Creating Windows Service (this will prompt for UAC)...");
+        // 5. Create service with UAC elevation using Windows API
+        println!("Creating Windows Service (UAC prompt will appear)...");
 
         // CRITICAL: binPath must be binPath="path" (no space after =, path in quotes)
         let bin_path_arg = format!("binPath=\"{}\"", helper_dest.display());
 
-        let create_args = vec![
-            "create",
-            "TunnetHelper",
-            &bin_path_arg,
-            "start=auto",
-            "DisplayName=Tunnet Helper Service",
-        ];
-
-        // Build PowerShell command with proper escaping
-        let args_escaped = create_args
-            .iter()
-            .map(|s| format!("'{}'", s.replace("'", "''")))
-            .collect::<Vec<_>>()
-            .join(",");
-
-        let ps_script = format!(
-            "Start-Process -FilePath 'sc.exe' -ArgumentList @({}) -Verb RunAs -Wait",
-            args_escaped
+        // Build sc.exe arguments
+        let sc_args = format!(
+            "create TunnetHelper {} start=auto \"DisplayName=Tunnet Helper Service\"",
+            bin_path_arg
         );
 
-        println!("Executing: powershell {}", ps_script);
-
-        let create_output = Command::new("powershell.exe")
-            .args(&["-NoProfile", "-Command", &ps_script])
-            .output()?;
-
-        if !create_output.status.success() {
-            let stdout = String::from_utf8_lossy(&create_output.stdout);
-            let stderr = String::from_utf8_lossy(&create_output.stderr);
-            return Err(format!(
-                "Failed to create service\nExit code: {:?}\nStdout: {}\nStderr: {}",
-                create_output.status.code(),
-                stdout,
-                stderr
-            )
-            .into());
-        }
+        run_elevated("sc.exe", &sc_args)?;
 
         println!("Service created successfully");
 
@@ -463,30 +492,11 @@ systemctl restart {}.service
             ])
             .output();
 
-        // 7. Start the service (also needs elevation)
+        // 7. Start the service with elevation
         println!("Starting service...");
-        let ps_start = "Start-Process -FilePath 'sc.exe' -ArgumentList @('start','TunnetHelper') -Verb RunAs -Wait";
+        run_elevated("sc.exe", "start TunnetHelper")?;
 
-        let start_output = Command::new("powershell.exe")
-            .args(&["-NoProfile", "-Command", ps_start])
-            .output()?;
-
-        if !start_output.status.success() {
-            let stdout = String::from_utf8_lossy(&start_output.stdout);
-            let stderr = String::from_utf8_lossy(&start_output.stderr);
-
-            // Ignore "already started" error
-            let combined = format!("{}\n{}", stdout, stderr);
-            if !combined.contains("already") && !combined.contains("已") {
-                return Err(format!(
-                    "Failed to start service\nExit code: {:?}\nStdout: {}\nStderr: {}",
-                    start_output.status.code(),
-                    stdout,
-                    stderr
-                )
-                .into());
-            }
-        }
+        println!("Service started successfully");
 
         // 8. Wait for service to be responsive
         println!("Waiting for service to start...");
