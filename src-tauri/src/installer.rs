@@ -424,12 +424,21 @@ systemctl restart {}.service
         let create_output = Command::new("sc.exe").args(&create_args).output()?;
 
         if !create_output.status.success() {
+            // CRITICAL: sc.exe outputs errors to STDOUT, not STDERR!
+            let stdout = String::from_utf8_lossy(&create_output.stdout);
             let stderr = String::from_utf8_lossy(&create_output.stderr);
+            let combined_output = format!("{}\n{}", stdout, stderr);
 
-            // Check for permission denied
-            if stderr.contains("拒绝访问")
-                || stderr.contains("Access is denied")
-                || stderr.contains("error 5")
+            println!("sc.exe create failed:");
+            println!("  Exit code: {:?}", create_output.status.code());
+            println!("  Stdout: {}", stdout);
+            println!("  Stderr: {}", stderr);
+
+            // Check for permission denied in BOTH stdout and stderr
+            if combined_output.contains("拒绝访问")
+                || combined_output.contains("Access is denied")
+                || combined_output.contains("error 5")
+                || combined_output.contains("ERROR_ACCESS_DENIED")
             {
                 println!("Requesting UAC elevation for service creation...");
 
@@ -450,18 +459,22 @@ systemctl restart {}.service
                     .args(&["-NoProfile", "-Command", &ps_script])
                     .output()?;
 
+                println!("Executing: {}", ps_script);
+
                 if !elevated_output.status.success() {
+                    let elevated_stdout = String::from_utf8_lossy(&elevated_output.stdout);
                     let elevated_stderr = String::from_utf8_lossy(&elevated_output.stderr);
                     return Err(format!(
-                        "Failed to create service with elevation: {}",
+                        "Failed to create service with elevation\nExit code: {:?}\nStdout: {}\nStderr: {}",
+                        elevated_output.status.code(),
+                        elevated_stdout,
                         elevated_stderr
-                    )
-                    .into());
+                    ).into());
                 }
 
                 println!("Service created with elevated privileges");
             } else {
-                return Err(format!("Failed to create service: {}", stderr).into());
+                return Err(format!("Failed to create service: {}", combined_output).into());
             }
         } else {
             println!("Service created successfully");
@@ -483,15 +496,19 @@ systemctl restart {}.service
             .output()?;
 
         if !start_output.status.success() {
+            let stdout = String::from_utf8_lossy(&start_output.stdout);
             let stderr = String::from_utf8_lossy(&start_output.stderr);
+            let combined_output = format!("{}\n{}", stdout, stderr);
 
-            if stderr.contains("拒绝访问") || stderr.contains("Access is denied") {
+            if combined_output.contains("拒绝访问") || combined_output.contains("Access is denied")
+            {
+                println!("Permission denied, requesting UAC for service start...");
                 let ps_script = "Start-Process -FilePath 'sc.exe' -ArgumentList @('start','TunnetHelper') -Verb RunAs -Wait";
                 let _ = Command::new("powershell.exe")
                     .args(&["-NoProfile", "-Command", ps_script])
                     .output()?;
-            } else if !stderr.contains("already been started") {
-                return Err(format!("Failed to start service: {}", stderr).into());
+            } else if !combined_output.contains("already been started") {
+                return Err(format!("Failed to start service: {}", combined_output).into());
             }
         }
 
