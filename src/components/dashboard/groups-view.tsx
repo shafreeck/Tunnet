@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react"
 import { Plus, Search, Trash2, Edit2, LayoutGrid, Check, X, Loader2, Play, Zap, Target, ArrowUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
-import { listen } from "@tauri-apps/api/event"
+import { listen, emit } from "@tauri-apps/api/event"
 import { toast } from "sonner"
 import { useTranslation } from "react-i18next"
 import { ConfirmationModal } from "@/components/ui/confirmation-modal"
@@ -191,6 +191,8 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
             }
             setIsDialogOpen(false)
             fetchGroups()
+            // Notify parent component to refresh groups
+            emit("groups-updated")
         } catch (e: any) {
             console.error(e)
             toast.error(t('groups.save_failed', { error: e }))
@@ -210,6 +212,8 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
             await invoke("delete_group", { id: groupToDelete })
             toast.success(t('groups.deleted'))
             fetchGroups()
+            // Notify parent component to refresh groups
+            emit("groups-updated")
         } catch (e: any) {
             toast.error(t('groups.delete_failed', { error: e }))
         } finally {

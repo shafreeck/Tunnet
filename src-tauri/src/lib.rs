@@ -808,7 +808,7 @@ async fn delete_profile(
     service: State<'_, ProxyService<tauri::Wry>>,
     id: String,
 ) -> Result<(), String> {
-    service.delete_profile(&id)
+    service.delete_profile(&id).await
 }
 
 #[tauri::command]

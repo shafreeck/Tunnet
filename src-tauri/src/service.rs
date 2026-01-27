@@ -2858,9 +2858,17 @@ impl<R: Runtime> ProxyService<R> {
         self.manager.load_profiles()
     }
 
-    pub fn delete_profile(&self, profile_id: &str) -> Result<(), String> {
+    pub async fn delete_profile(&self, profile_id: &str) -> Result<(), String> {
         let is_running = self.is_proxy_running();
         let mut profiles = self.manager.load_profiles()?;
+        
+        // Capture deleted node IDs for group cleanup
+        let mut deleted_node_ids = std::collections::HashSet::new();
+        if let Some(p) = profiles.iter().find(|p| p.id == profile_id) {
+             for n in &p.nodes {
+                 deleted_node_ids.insert(n.id.clone());
+             }
+        }
 
         // Block if active and proxy is running
         if is_running {
@@ -2892,6 +2900,84 @@ impl<R: Runtime> ProxyService<R> {
 
         if cleared {
             let _ = self.app.emit("proxy-status-change", self.get_status());
+        }
+
+        // Auto-cleanup groups
+        if !deleted_node_ids.is_empty() {
+            let mut groups = self.manager.load_groups().unwrap_or_default();
+            let mut groups_changed = false;
+            let mut restart_needed = false;
+            let mut groups_to_delete = Vec::new();
+
+            // Collect all remaining node IDs for Filter evaluation
+            let remaining_node_ids: std::collections::HashSet<String> = profiles
+                .iter()
+                .flat_map(|p| p.nodes.iter().map(|n| n.id.clone()))
+                .collect();
+
+            for group in groups.iter_mut() {
+                // Only skip system-protected groups (not auto-generated ones)
+                if group.id.starts_with("system:") {
+                    continue;
+                }
+                
+                let mut should_check_empty = false;
+                
+                match &mut group.source {
+                    crate::profile::GroupSource::Static { node_ids } => {
+                        let original_len = node_ids.len();
+                        node_ids.retain(|nid| !deleted_node_ids.contains(nid));
+                        
+                        if node_ids.len() != original_len {
+                            should_check_empty = node_ids.is_empty();
+                            groups_changed = true;
+                        }
+                    }
+                    crate::profile::GroupSource::Filter { criteria } => {
+                        // For Filter groups, check if any remaining nodes match the criteria
+                        let has_matching_nodes = if let Some(keywords) = &criteria.keywords {
+                            profiles.iter().any(|p| {
+                                p.nodes.iter().any(|n| {
+                                    let node_name = n.name.to_lowercase();
+                                    keywords.iter().any(|kw| node_name.contains(&kw.to_lowercase()))
+                                })
+                            })
+                        } else {
+                            // No criteria means match all, so has nodes if any remain
+                            !remaining_node_ids.is_empty()
+                        };
+                        
+                        if !has_matching_nodes {
+                            should_check_empty = true;
+                            groups_changed = true;
+                        }
+                    }
+                }
+                
+                if should_check_empty {
+                    groups_to_delete.push(group.id.clone());
+                    
+                    // Check if we need restart (if this group is in use)
+                    if is_running && !restart_needed {
+                        if let Ok(in_use) = self.is_group_in_use(&group.id) {
+                            if in_use {
+                                restart_needed = true;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if groups_changed {
+                 groups.retain(|g| !groups_to_delete.contains(&g.id));
+                 self.manager.save_groups(&groups)?;
+                 let _ = self.app.emit("groups-updated", ());
+                 
+                 if restart_needed {
+                      let tun = *self.tun_mode.lock().unwrap();
+                      self.restart_proxy_by_config(tun).await?;
+                 }
+            }
         }
 
         Ok(())
@@ -3022,14 +3108,35 @@ impl<R: Runtime> ProxyService<R> {
 
         // Filter out system/implicit groups from saved list to avoid duplicates/staleness.
         // We will regenerate them fresh and re-apply the 'selected' state and 'group_type'.
+        // Also filter out empty user-defined groups.
+        
+        // Add Implicit Groups (Freshly generated)
+        let profiles = self.manager.load_profiles().unwrap_or_default();
+            
         let mut final_groups: Vec<crate::profile::Group> = saved_groups
             .iter()
-            .filter(|g| !g.id.starts_with("system:"))
+            .filter(|g| {
+                // Exclude system groups (we regenerate them fresh)
+                if g.id.starts_with("system:") {
+                    return false;
+                }
+                
+                // Filter out only truly empty user groups
+                match &g.source {
+                    crate::profile::GroupSource::Static { node_ids } => {
+                        // Only filter if the list itself is empty
+                        !node_ids.is_empty()
+                    }
+                    crate::profile::GroupSource::Filter { .. } => {
+                        // Always keep Filter groups - they define criteria, not a static list
+                        // Even if no current nodes match, the filter config is still valid
+                        true
+                    }
+                }
+            })
             .cloned()
             .collect();
 
-        // Add Implicit Groups (Freshly generated)
-        let profiles = self.manager.load_profiles().unwrap_or_default();
         let mut all_node_ids = Vec::new();
 
         // 1. Global Group
@@ -3065,7 +3172,13 @@ impl<R: Runtime> ProxyService<R> {
 
         // 2. Subscription Groups (Default to UrlTest/Automatic)
         for p in &profiles {
-            let node_ids = p.nodes.iter().map(|n| n.id.clone()).collect();
+            let node_ids: Vec<String> = p.nodes.iter().map(|n| n.id.clone()).collect();
+            
+            // Skip empty subscriptions
+            if node_ids.is_empty() {
+                continue;
+            }
+            
             let mut sub_group = crate::profile::Group {
                 id: format!("system:sub:{}", p.id),
                 name: p.name.clone(),
@@ -3164,6 +3277,11 @@ impl<R: Runtime> ProxyService<R> {
         }
 
         for (country, node_ids) in region_map {
+            // Skip empty regions
+            if node_ids.is_empty() {
+                continue;
+            }
+            
             let mut region_group = crate::profile::Group {
                 id: format!("system:region:{}", country),
                 name: country.clone(),
@@ -3197,33 +3315,56 @@ impl<R: Runtime> ProxyService<R> {
         }
     }
 
+    /// Check if a group is currently in use (either active or referenced by rules)
+    fn is_group_in_use(&self, group_id: &str) -> Result<bool, String> {
+        let settings = self.manager.load_settings()?;
+        
+        // 1. Check if it's the currently active target
+        if let Some(active_id) = &settings.active_target_id {
+            if active_id == group_id {
+                return Ok(true);
+            }
+        }
+        
+        // 2. Check if it's referenced by any enabled rules
+        let rules = self.manager.load_rules().unwrap_or_default();
+        for rule in rules {
+            if rule.enabled && rule.policy == group_id {
+                return Ok(true);
+            }
+        }
+        
+        Ok(false)
+    }
+
     pub async fn add_group(&self, group: crate::profile::Group) -> Result<(), String> {
         let mut groups = self.manager.load_groups().unwrap_or_default();
         groups.push(group);
         self.manager.save_groups(&groups)?;
-        if self.is_proxy_running() {
-            let tun = *self.tun_mode.lock().unwrap();
-            self.restart_proxy_by_config(tun).await
-        } else {
-            Ok(())
-        }
+        
+        // Smart restart: new groups are never in use, no need to restart
+        Ok(())
     }
 
     pub async fn update_group(&self, group: crate::profile::Group) -> Result<(), String> {
         let mut groups = self.manager.load_groups().unwrap_or_default();
         if let Some(pos) = groups.iter().position(|g| g.id == group.id) {
-            groups[pos] = group;
+            groups[pos] = group.clone();
             self.manager.save_groups(&groups)?;
-            if self.is_proxy_running() {
+            
+            // Smart restart: only restart if the group is currently in use
+            if self.is_proxy_running() && self.is_group_in_use(&group.id)? {
                 let tun = *self.tun_mode.lock().unwrap();
                 self.restart_proxy_by_config(tun).await
             } else {
                 Ok(())
             }
         } else if group.id.starts_with("system:") {
-            groups.push(group);
+            groups.push(group.clone());
             self.manager.save_groups(&groups)?;
-            if self.is_proxy_running() {
+            
+            // System groups also use smart restart
+            if self.is_proxy_running() && self.is_group_in_use(&group.id)? {
                 let tun = *self.tun_mode.lock().unwrap();
                 self.restart_proxy_by_config(tun).await
             } else {
@@ -3235,10 +3376,15 @@ impl<R: Runtime> ProxyService<R> {
     }
 
     pub async fn delete_group(&self, id: &str) -> Result<(), String> {
+        // Check if the group is in use before deleting
+        let in_use = self.is_proxy_running() && self.is_group_in_use(id).unwrap_or(false);
+        
         let mut groups = self.manager.load_groups().unwrap_or_default();
         groups.retain(|g| g.id != id);
         self.manager.save_groups(&groups)?;
-        if self.is_proxy_running() {
+        
+        // Smart restart: only restart if the deleted group was in use
+        if in_use {
             let tun = *self.tun_mode.lock().unwrap();
             self.restart_proxy_by_config(tun).await
         } else {

@@ -1498,7 +1498,8 @@ pub mod parser {
 
     fn parse_singbox_config(v: &serde_json::Value) -> ParsedContent {
         let mut content = ParsedContent::default();
-        let mut tag_to_id = std::collections::HashMap::new();
+        let mut node_tag_to_id = std::collections::HashMap::new();
+        let mut group_tag_to_id = std::collections::HashMap::new();
 
         // Parse outbounds
         if let Some(outbounds) = v.get("outbounds").and_then(|o| o.as_array()) {
@@ -1510,7 +1511,7 @@ pub mod parser {
                 match otype_lower.as_str() {
                     "selector" | "urltest" => {
                         let id = Uuid::new_v4().to_string();
-                        tag_to_id.insert(tag.to_string(), id.clone());
+                        group_tag_to_id.insert(tag.to_string(), id.clone());
 
                         let gt = if otype_lower == "urltest" {
                             GroupType::UrlTest {
@@ -1534,17 +1535,13 @@ pub mod parser {
                             name: tag.to_string(),
                             group_type: gt,
                             source: GroupSource::Static {
+                                // Store raw tags first, will be resolved to node UUIDs later
                                 node_ids: o
                                     .get("outbounds")
                                     .and_then(|a| a.as_array())
                                     .map(|arr| {
                                         arr.iter()
-                                            .filter_map(|m| {
-                                                m.as_str().and_then(|tag_str| {
-                                                    // Convert Sing-box tag to internal node UUID
-                                                    tag_to_id.get(tag_str).cloned()
-                                                })
-                                            })
+                                            .filter_map(|m| m.as_str().map(|s| s.to_string()))
                                             .collect()
                                     })
                                     .unwrap_or_default(),
@@ -1566,7 +1563,7 @@ pub mod parser {
                             .and_then(|p| p.as_u64())
                             .unwrap_or(0) as u16;
                         let node_id = Uuid::new_v4().to_string();
-                        tag_to_id.insert(tag.to_string(), node_id.clone());
+                        node_tag_to_id.insert(tag.to_string(), node_id.clone());
 
                         content.nodes.push(Node {
                             id: node_id,
@@ -1618,14 +1615,16 @@ pub mod parser {
             }
         }
 
-        // Resolve group members
+        // Resolve group members - only resolve to node UUIDs, skip group references
         for group in &mut content.groups {
             if let GroupSource::Static { node_ids } = &mut group.source {
                 let mut resolved = Vec::new();
                 for tag in node_ids.iter() {
-                    if let Some(id) = tag_to_id.get(tag) {
+                    // Only resolve if it's a node tag, not a group tag
+                    if let Some(id) = node_tag_to_id.get(tag) {
                         resolved.push(id.clone());
                     }
+                    // Skip tags that refer to other groups
                 }
                 *node_ids = resolved;
             }

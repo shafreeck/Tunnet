@@ -688,8 +688,29 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    // Fetch groups when mounting or needed
-    invoke<Group[]>("get_groups").then(setGroups).catch(console.error)
+    let active = true
+    let unlistenFn: (() => void) | undefined
+
+    // Listen for groups updates (e.g., after add/update/delete or import)
+    listen("groups-updated", () => {
+      if (!active) return
+      invoke<Group[]>("get_groups")
+        .then(setGroups)
+        .catch(console.error)
+    }).then(f => {
+      if (active) unlistenFn = f
+      else f()
+    })
+
+    // Initial fetch
+    invoke<Group[]>("get_groups")
+      .then(setGroups)
+      .catch(console.error)
+
+    return () => {
+      active = false
+      if (unlistenFn) unlistenFn()
+    }
   }, [])
 
   // Listen for TUN mode sync from Tray (when proxy is stopped)
@@ -1306,6 +1327,27 @@ export default function Home() {
     }
   }
 
+  // Validate activeServerId validity when groups/servers change
+  useEffect(() => {
+    if (!isInitialized || !activeServerId) return
+
+    // Skip system special IDs
+    if (activeServerId.startsWith("system:") || activeServerId.startsWith("auto_")) return
+
+    const existsInServers = servers.some(s => s.id === activeServerId)
+    const existsInGroups = groups.some(g => g.id === activeServerId)
+
+    if (!existsInServers && !existsInGroups) {
+      console.warn(`Active target ${activeServerId} not found in updated lists, resetting...`)
+      if (isConnected) {
+        setConnectionState("disconnecting")
+        setIsLoading(true)
+        setIsConnected(false)
+      }
+      setActiveServerId(null)
+    }
+  }, [groups, servers, activeServerId, isInitialized, isConnected])
+
   const handlePingNode = async (id: string | string[]) => {
     if (id === "ALL") {
       await checkLatency(servers, true)
@@ -1508,7 +1550,7 @@ export default function Home() {
           setActiveAutoNodeId(status)
           // console.log("[GroupSelect] Active node ID:", status)
         } catch (e) {
-          console.error("[GroupSelect] Failed to fetch group status:", e)
+          console.warn("[GroupSelect] Group not yet available in proxy (will be available after restart):", e)
         }
       }
       fetchStatus()
