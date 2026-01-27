@@ -8,6 +8,8 @@ import 'react-tooltip/dist/react-tooltip.css'
 import { getLatencyColor, formatLatency } from "@/lib/latency"
 import { getFlagUrlFromCode } from "@/lib/flags"
 import { useModifierKey } from "@/hooks/use-modifier-key"
+import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
 
 interface ConnectionStatusProps {
     isConnected: boolean;
@@ -38,13 +40,63 @@ interface ConnectionStatusProps {
 export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, onLatencyClick, onMainToggle, connectionDetails, mode, onModeChange, tunEnabled, onTunToggle, systemProxyEnabled, onSystemProxyToggle, isLoading, targetType, groupIcon, targetId, activeNodeName, isLatencyLoading, connectionState, hasNoServers }: ConnectionStatusProps) {
     const { t } = useTranslation()
     const isAltPressed = useModifierKey('Alt')
-    const isReconnectMode = isConnected && isAltPressed
+
+    // 本地状态：直接从后端获取的真实运行状态
+    const [backendStatus, setBackendStatus] = React.useState<{ is_running: boolean } | null>(null)
+
+    // 获取后端真实状态
+    const fetchBackendStatus = React.useCallback(async () => {
+        try {
+            const status = await invoke("get_proxy_status") as any
+            setBackendStatus(status)
+        } catch (e) {
+            console.error("Failed to fetch backend status:", e)
+        }
+    }, [])
+
+    // 初始化和监听后端状态变更
+    React.useEffect(() => {
+        let active = true
+
+        // 初始获取
+        fetchBackendStatus()
+
+        // 监听状态变更事件
+        const setupListener = async () => {
+            const unlisten = await listen("proxy-status-change", (event: any) => {
+                if (!active) return
+                setBackendStatus(event.payload)
+            })
+
+            return unlisten
+        }
+
+        const unlistenPromise = setupListener()
+
+        return () => {
+            active = false
+            unlistenPromise.then(unlisten => unlisten())
+        }
+    }, [fetchBackendStatus])
+
+    // 使用后端状态作为真实来源，prop 作为备用（用于乐观更新）
+    // 如果后端状态可用，优先使用后端状态；否则使用 prop
+    const actualIsConnected = backendStatus !== null ? backendStatus.is_running : isConnected
+
+    // 状态不一致检测（仅用于调试）
+    React.useEffect(() => {
+        if (backendStatus !== null && backendStatus.is_running !== isConnected) {
+            console.warn(`[ConnectionStatus] State mismatch detected: backend=${backendStatus.is_running}, prop=${isConnected}`)
+        }
+    }, [backendStatus, isConnected])
+
+    const isReconnectMode = actualIsConnected && isAltPressed
 
     const realFlagUrl = connectionDetails?.countryCode ? getFlagUrlFromCode(connectionDetails.countryCode) : null
-    const displayFlag = (isConnected && realFlagUrl) ? realFlagUrl : flagUrl
+    const displayFlag = (actualIsConnected && realFlagUrl) ? realFlagUrl : flagUrl
 
-    const displayName = hasNoServers ? t('status.no_servers') : (isConnected ? (serverName || t('status.unknown_server')) : t('status.disconnected'))
-    const displaySubName = isConnected && targetType === 'group' && activeNodeName && activeNodeName !== serverName ? activeNodeName : null
+    const displayName = hasNoServers ? t('status.no_servers') : (actualIsConnected ? (serverName || t('status.unknown_server')) : t('status.disconnected'))
+    const displaySubName = actualIsConnected && targetType === 'group' && activeNodeName && activeNodeName !== serverName ? activeNodeName : null
 
     // Helper for status colors
     const getStatusColor = () => {
@@ -54,7 +106,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
             return 'bg-yellow-500'
         }
         if (hasNoServers) return 'bg-primary animate-pulse'
-        return isConnected ? 'bg-accent-green' : 'bg-red-500'
+        return actualIsConnected ? 'bg-accent-green' : 'bg-red-500'
     }
 
     const getStatusText = () => {
@@ -65,7 +117,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
         }
         if (hasNoServers) return t('status.setup_needed')
         if (isReconnectMode) return t('status.reconnect')
-        return isConnected ? t('status.active') : t('status.stopped')
+        return actualIsConnected ? t('status.active') : t('status.stopped')
     }
 
     const [failedUrls, setFailedUrls] = React.useState<Set<string>>(new Set())
@@ -86,7 +138,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
     return (
         <div className="flex flex-col items-center justify-center py-6 md:py-10 relative">
             <div className="relative mb-6 group cursor-pointer" onClick={isLoading ? undefined : () => onMainToggle?.(isReconnectMode)}>
-                <span className={`animate-ping absolute inset-0 inline-flex h-full w-full rounded-full ${hasNoServers ? 'bg-primary' : (isReconnectMode ? 'bg-yellow-500' : (isConnected ? 'bg-accent-green' : 'bg-red-500'))} opacity-20 duration-1000 ${isLoading ? 'hidden' : ''}`}></span>
+                <span className={`animate-ping absolute inset-0 inline-flex h-full w-full rounded-full ${hasNoServers ? 'bg-primary' : (isReconnectMode ? 'bg-yellow-500' : (actualIsConnected ? 'bg-accent-green' : 'bg-red-500'))} opacity-20 duration-1000 ${isLoading ? 'hidden' : ''}`}></span>
                 <div className={`relative size-28 rounded-full border border-white/10 bg-black/40 backdrop-blur-xl glow-effect flex items-center justify-center overflow-hidden shadow-2xl transition-transform duration-300 ${isLoading ? 'scale-100 cursor-not-allowed' : 'group-hover:scale-105'}`}>
                     {hasNoServers ? (
                         <div className="flex flex-col items-center justify-center">
@@ -96,7 +148,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                         <>
                             {finalFlag ? (
                                 <img
-                                    className={`w-full h-full object-cover transition-all duration-700 ${isConnected ? 'opacity-60 scale-110' : 'opacity-20 grayscale scale-100'}`}
+                                    className={`w-full h-full object-cover transition-all duration-700 ${actualIsConnected ? 'opacity-60 scale-110' : 'opacity-20 grayscale scale-100'}`}
                                     alt="Country Flag"
                                     src={finalFlag}
                                     onError={() => {
@@ -104,7 +156,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                                     }}
                                 />
                             ) : (
-                                <Globe className={`w-1/2 h-1/2 transition-colors duration-500 ${isConnected ? 'text-accent-green opacity-60' : 'text-gray-500 opacity-20'}`} />
+                                <Globe className={`w-1/2 h-1/2 transition-colors duration-500 ${actualIsConnected ? 'text-accent-green opacity-60' : 'text-gray-500 opacity-20'}`} />
                             )}
                             {isLoading && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[2px]">
@@ -118,7 +170,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                         null
                     ) : isReconnectMode ? (
                         <RefreshCw className="absolute text-white drop-shadow-lg size-9 animate-spin-slow" />
-                    ) : isConnected ? (
+                    ) : actualIsConnected ? (
                         <CheckCircle2 className="absolute text-white drop-shadow-lg size-9 fill-white/10" />
                     ) : (
                         <XCircle className="absolute text-white/50 drop-shadow-lg size-9 fill-white/5" />
@@ -126,7 +178,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                 </div>
                 <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-card-bg backdrop-blur-md border border-border-color pl-1 pr-2 py-0.5 rounded-full shadow-lg flex items-center gap-1">
                     <span className={`size-2 rounded-full ${isReconnectMode ? 'bg-yellow-500' : getStatusColor()} ${isLoading ? 'animate-bounce' : 'animate-pulse'}`}></span>
-                    <span className={`${isLoading ? (connectionState === "disconnecting" ? 'text-red-500' : 'text-yellow-500') : (isReconnectMode ? 'text-yellow-500' : (isConnected ? 'text-accent-green' : 'text-red-500'))} text-[10px] font-bold tracking-wider uppercase whitespace-nowrap`}>
+                    <span className={`${isLoading ? (connectionState === "disconnecting" ? 'text-red-500' : 'text-yellow-500') : (isReconnectMode ? 'text-yellow-500' : (actualIsConnected ? 'text-accent-green' : 'text-red-500'))} text-[10px] font-bold tracking-wider uppercase whitespace-nowrap`}>
                         {getStatusText()}
                     </span>
                 </div>
@@ -154,7 +206,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                 variant="dark"
                 border="1px solid rgba(255,255,255,0.1)"
             >
-                {isConnected && connectionDetails ? (
+                {actualIsConnected && connectionDetails ? (
                     <div className="flex flex-col gap-1.5 min-w-[200px]">
                         <div className="flex justify-between items-center pb-2 border-b border-white/10 mb-1">
                             <span className="text-white/60 text-xs font-medium uppercase tracking-wider">{t('dashboard.node_info')}</span>
@@ -176,26 +228,26 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                         </div>
                     </div>
                 ) : (
-                    <span className="text-sm text-white/70 px-2">{isConnected ? t('status.checking_ip') : t('status.disconnected_tooltip')}</span>
+                    <span className="text-sm text-white/70 px-2">{actualIsConnected ? t('status.checking_ip') : t('status.disconnected_tooltip')}</span>
                 )}
             </Tooltip>
 
             <div className="flex items-center gap-3 text-text-secondary text-xs font-medium mb-8 bg-card-bg backdrop-blur-md px-4 py-1.5 rounded-full border border-border-color shadow-sm">
                 <span className="flex items-center gap-1.5 text-text-primary">
-                    <Wifi className={`size-3.5 ${isConnected ? 'text-accent-green' : 'text-text-tertiary'}`} />
-                    {isConnected ? t('status.connected') : t('status.offline')}
+                    <Wifi className={`size-3.5 ${actualIsConnected ? 'text-accent-green' : 'text-text-tertiary'}`} />
+                    {actualIsConnected ? t('status.connected') : t('status.offline')}
                 </span>
                 <span className="w-px h-3 bg-border-color"></span>
                 <span
-                    onClick={isConnected && !isLatencyLoading ? onLatencyClick : undefined}
-                    className={`flex items-center gap-1.5 ${isConnected ? `cursor-pointer transition-colors active:scale-95 ${getLatencyColor(latency)}` : 'text-text-secondary'} ${isLatencyLoading ? 'opacity-70 cursor-wait' : ''}`}
-                    title={isConnected ? t('dashboard.node_info') : undefined} // Or a specific ping tooltip
+                    onClick={actualIsConnected && !isLatencyLoading ? onLatencyClick : undefined}
+                    className={`flex items-center gap-1.5 ${actualIsConnected ? `cursor-pointer transition-colors active:scale-95 ${getLatencyColor(latency)}` : 'text-text-secondary'} ${isLatencyLoading ? 'opacity-70 cursor-wait' : ''}`}
+                    title={actualIsConnected ? t('dashboard.node_info') : undefined} // Or a specific ping tooltip
                 >
                     <div className={isLatencyLoading ? 'animate-spin' : ''}>
-                        <Bolt className={`size-3.5 ${isConnected ? 'text-text-primary' : ''}`} />
+                        <Bolt className={`size-3.5 ${actualIsConnected ? 'text-text-primary' : ''}`} />
                     </div>
                     <span className="font-mono pt-[1.5px] leading-none">
-                        {isConnected ? formatLatency(latency) : '--'}
+                        {actualIsConnected ? formatLatency(latency) : '--'}
                     </span>
                 </span>
                 <span className="w-px h-3 bg-border-color"></span>
@@ -205,7 +257,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                     className={`flex items-center gap-1.5 transition-colors hover:text-text-primary ${systemProxyEnabled ? 'text-text-primary' : 'text-text-secondary'} cursor-pointer`}
                     title="Toggle System Proxy"
                 >
-                    <div className={`size-2 rounded-full ${systemProxyEnabled ? (isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-primary/50') : 'bg-gray-500/30'} transition-all duration-300`} />
+                    <div className={`size-2 rounded-full ${systemProxyEnabled ? (actualIsConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-primary/50') : 'bg-gray-500/30'} transition-all duration-300`} />
                     <span className="text-[11px] md:text-xs font-semibold tracking-wide">
                         {t('status.system_proxy_switch')}
                     </span>
@@ -216,7 +268,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
                     className={`flex items-center gap-1.5 transition-colors hover:text-text-primary ${tunEnabled ? 'text-text-primary' : 'text-text-secondary'} cursor-pointer`}
                     title="Toggle TUN Mode"
                 >
-                    <div className={`size-2 rounded-full ${tunEnabled ? (isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-primary/50') : 'bg-gray-500/30'} transition-all duration-300`} />
+                    <div className={`size-2 rounded-full ${tunEnabled ? (actualIsConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-primary/50') : 'bg-gray-500/30'} transition-all duration-300`} />
                     <span className="text-[11px] md:text-xs font-semibold tracking-wide">
                         {t('status.tun_mode_switch')}
                     </span>
