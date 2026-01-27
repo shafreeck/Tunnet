@@ -1670,21 +1670,26 @@ impl<R: Runtime> ProxyService<R> {
     /// Uses ShellExecuteW with "runas" verb to trigger UAC elevation.
     #[cfg(target_os = "windows")]
     fn ensure_windows_helper(&self) -> Result<(), String> {
-        // Check if Helper is already running by trying to connect to the Named Pipe
         info!("Checking if Windows Helper is already running...");
         
-        // First, try a simple pipe existence check by attempting to open it
-        let pipe_path = r"\\.\pipe\tunnet";
-        match std::fs::OpenOptions::new().read(true).write(true).open(pipe_path) {
+        // Try to connect to Named Pipe to check if helper is running
+        // Note: Due to Windows security, admin-created pipes may not be accessible from non-admin process
+        
+        // First, try the HelperClient to send a request and verify it's responsive
+        let client = crate::helper_client::HelperClient::new();
+        match client.check_status() {
             Ok(_) => {
-                // Pipe exists and is accessible, helper is running
-                info!("Windows Helper is already running (Named Pipe exists)");
+                info!("Windows Helper is already running and responsive");
                 return Ok(());
             }
             Err(e) => {
-                info!("Named Pipe not accessible: {} - will start new Helper", e);
+                info!("Helper not responsive: {} - will restart", e);
             }
         }
+        
+        // Kill any existing helper processes before starting a new one
+        // This avoids the "Access Denied" error when a stale helper holds the pipe
+        Self::kill_existing_helpers();
         
         info!("Starting Windows Helper with UAC elevation...");
         
@@ -1786,6 +1791,39 @@ impl<R: Runtime> ProxyService<R> {
         }
         
         Ok((helper, bin_dir))
+    }
+    
+    /// Kill any existing tunnet-helper.exe processes
+    /// This is needed because admin-created Named Pipes may not be accessible from non-admin process
+    #[cfg(target_os = "windows")]
+    fn kill_existing_helpers() {
+        use std::process::Command;
+        
+        info!("Killing any existing tunnet-helper.exe processes...");
+        
+        // Use taskkill to terminate all instances of tunnet-helper.exe
+        // /F = force, /IM = image name, /T = terminate child processes
+        let result = Command::new("taskkill")
+            .args(["/F", "/IM", "tunnet-helper.exe", "/T"])
+            .output();
+        
+        match result {
+            Ok(output) => {
+                if output.status.success() {
+                    info!("Successfully killed existing helper processes");
+                } else {
+                    // This is fine - likely means no process was running
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    info!("No helper processes to kill (or already terminated): {}", stderr.trim());
+                }
+            }
+            Err(e) => {
+                warn!("Failed to run taskkill: {}", e);
+            }
+        }
+        
+        // Give Windows time to release the Named Pipe
+        std::thread::sleep(std::time::Duration::from_millis(500));
     }
 
     fn write_config(
