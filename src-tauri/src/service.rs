@@ -1681,12 +1681,10 @@ impl<R: Runtime> ProxyService<R> {
         
         info!("Starting Windows Helper with UAC elevation...");
         
-        // Find the helper executable path
-        // In dev: target/debug/tunnet-helper.exe
-        // In release: same directory as main app
-        let helper_path = self.find_helper_executable()?;
+        // Find the helper executable and DLL paths
+        let (helper_path, dll_dir) = self.find_helper_and_dll_paths()?;
         
-        info!("Helper path: {:?}", helper_path);
+        info!("Helper path: {:?}, DLL dir: {:?}", helper_path, dll_dir);
         
         // Use ShellExecuteW with "runas" verb to trigger UAC
         use std::os::windows::ffi::OsStrExt;
@@ -1697,10 +1695,20 @@ impl<R: Runtime> ProxyService<R> {
             OsStr::new(s).encode_wide().chain(once(0)).collect()
         }
         
+        // We need to use cmd.exe to set PATH before running helper
+        // This ensures libbox.dll can be found during DLL load phase
         let operation = to_wide("runas");
-        let file = to_wide(helper_path.to_string_lossy().as_ref());
-        let params = to_wide("");
-        let dir = to_wide(helper_path.parent().unwrap_or(&PathBuf::from(".")).to_string_lossy().as_ref());
+        let cmd_exe = to_wide("cmd.exe");
+        
+        // Build command: set PATH and then run helper
+        let helper_path_str = helper_path.to_string_lossy();
+        let dll_dir_str = dll_dir.to_string_lossy();
+        let params_str = format!(
+            "/C \"set PATH={};%PATH% && \"{}\"\"",
+            dll_dir_str, helper_path_str
+        );
+        let params = to_wide(&params_str);
+        let dir = to_wide(&dll_dir_str);
         
         let result = unsafe {
             extern "system" {
@@ -1714,14 +1722,14 @@ impl<R: Runtime> ProxyService<R> {
                 ) -> isize;
             }
             
-            // SW_HIDE = 0, SW_SHOWNORMAL = 1
+            // SW_HIDE = 0
             ShellExecuteW(
                 std::ptr::null_mut(),
                 operation.as_ptr(),
-                file.as_ptr(),
+                cmd_exe.as_ptr(),
                 params.as_ptr(),
                 dir.as_ptr(),
-                0, // SW_HIDE - run hidden
+                0,
             )
         };
         
@@ -1744,45 +1752,49 @@ impl<R: Runtime> ProxyService<R> {
         Err("Helper did not start within timeout (15s)".to_string())
     }
     
-    /// Find the helper executable path based on current environment
+    /// Find the helper executable and DLL directory paths
     #[cfg(target_os = "windows")]
-    fn find_helper_executable(&self) -> Result<std::path::PathBuf, String> {
+    fn find_helper_and_dll_paths(&self) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
         use std::path::PathBuf;
         
-        // Try same directory as main executable first (release mode)
+        // In release/bundled mode: helper and DLLs are in resources/bin
+        if let Ok(resource_dir) = self.app.path().resource_dir() {
+            let bin_dir = resource_dir.join("bin");
+            let helper = bin_dir.join("tunnet-helper.exe");
+            if helper.exists() && bin_dir.join("libbox.dll").exists() {
+                return Ok((helper, bin_dir));
+            }
+        }
+        
+        // In dev mode: helper is in target/debug, DLLs are in resources/bin
         if let Ok(exe_path) = std::env::current_exe() {
             if let Some(exe_dir) = exe_path.parent() {
-                let helper_in_dir = exe_dir.join("tunnet-helper.exe");
-                if helper_in_dir.exists() {
-                    return Ok(helper_in_dir);
+                // Check if we're in target/debug or target/release
+                let target_dir = exe_dir;
+                let helper = target_dir.join("tunnet-helper.exe");
+                
+                if helper.exists() {
+                    // DLLs should be in resources/bin
+                    let resources_bin = target_dir
+                        .parent() // target
+                        .and_then(|p| p.parent()) // src-tauri
+                        .map(|p| p.join("resources").join("bin"));
+                    
+                    if let Some(dll_dir) = resources_bin {
+                        if dll_dir.join("libbox.dll").exists() {
+                            return Ok((helper, dll_dir));
+                        }
+                    }
+                    
+                    // Fallback: DLLs might be in same dir as helper
+                    if target_dir.join("libbox.dll").exists() {
+                        return Ok((helper, target_dir.to_path_buf()));
+                    }
                 }
             }
         }
         
-        // Try resources directory (Tauri bundled)
-        let resource_path = self.app.path()
-            .resource_dir()
-            .ok()
-            .map(|d| d.join("bin").join("tunnet-helper.exe"));
-        if let Some(ref p) = resource_path {
-            if p.exists() {
-                return Ok(p.clone());
-            }
-        }
-        
-        // Try target/debug for development
-        if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
-            let dev_path = PathBuf::from(manifest_dir)
-                .join("target")
-                .join("debug")
-                .join("tunnet-helper.exe");
-            if dev_path.exists() {
-                return Ok(dev_path);
-            }
-        }
-        
-        // Fallback: assume in PATH
-        Err("Could not find tunnet-helper.exe".to_string())
+        Err("Could not find tunnet-helper.exe or libbox.dll".to_string())
     }
 
     fn write_config(
