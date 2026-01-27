@@ -12,7 +12,7 @@ const SOCKET_PATH: &str = "/var/run/tunnet.sock";
 const PIPE_NAME: &str = r"\\.\pipe\tunnet";
 
 use app_lib::libbox;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncReadExt;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Request {
@@ -529,7 +529,7 @@ async fn run_listener(
             }
             _ = shutdown.notified() => {
                 log(&app_state, "Shutdown signal received. Stopping listener.");
-                break;
+                break Ok(());
             }
         }
 
