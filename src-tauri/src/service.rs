@@ -1686,6 +1686,12 @@ impl<R: Runtime> ProxyService<R> {
         
         info!("Helper path: {:?}, DLL dir: {:?}", helper_path, dll_dir);
         
+        // Temporarily add DLL directory to PATH so child process inherits it
+        // This ensures libbox.dll is found during DLL load phase
+        let original_path = std::env::var("PATH").unwrap_or_default();
+        let new_path = format!("{};{}", dll_dir.display(), original_path);
+        std::env::set_var("PATH", &new_path);
+        
         // Use ShellExecuteW with "runas" verb to trigger UAC
         use std::os::windows::ffi::OsStrExt;
         use std::ffi::OsStr;
@@ -1695,20 +1701,10 @@ impl<R: Runtime> ProxyService<R> {
             OsStr::new(s).encode_wide().chain(once(0)).collect()
         }
         
-        // We need to use cmd.exe to set PATH before running helper
-        // This ensures libbox.dll can be found during DLL load phase
         let operation = to_wide("runas");
-        let cmd_exe = to_wide("cmd.exe");
-        
-        // Build command: set PATH and then run helper
-        let helper_path_str = helper_path.to_string_lossy();
-        let dll_dir_str = dll_dir.to_string_lossy();
-        let params_str = format!(
-            "/C \"set PATH={};%PATH% && \"{}\"\"",
-            dll_dir_str, helper_path_str
-        );
-        let params = to_wide(&params_str);
-        let dir = to_wide(&dll_dir_str);
+        let file = to_wide(helper_path.to_string_lossy().as_ref());
+        let params = to_wide("");
+        let dir = to_wide(dll_dir.to_string_lossy().as_ref());
         
         let result = unsafe {
             extern "system" {
@@ -1726,12 +1722,15 @@ impl<R: Runtime> ProxyService<R> {
             ShellExecuteW(
                 std::ptr::null_mut(),
                 operation.as_ptr(),
-                cmd_exe.as_ptr(),
+                file.as_ptr(),
                 params.as_ptr(),
                 dir.as_ptr(),
                 0,
             )
         };
+        
+        // Restore original PATH
+        std::env::set_var("PATH", &original_path);
         
         // ShellExecuteW returns > 32 on success
         if result <= 32 {
@@ -1766,15 +1765,19 @@ impl<R: Runtime> ProxyService<R> {
             }
         }
         
-        // In dev mode: helper is in target/debug, DLLs are in resources/bin
+        // In dev mode: helper and DLLs should be in same target directory
         if let Ok(exe_path) = std::env::current_exe() {
             if let Some(exe_dir) = exe_path.parent() {
-                // Check if we're in target/debug or target/release
                 let target_dir = exe_dir;
                 let helper = target_dir.join("tunnet-helper.exe");
                 
+                // First check if DLLs are in same directory as helper
+                if helper.exists() && target_dir.join("libbox.dll").exists() {
+                    return Ok((helper, target_dir.to_path_buf()));
+                }
+                
+                // Try resources/bin for DLLs
                 if helper.exists() {
-                    // DLLs should be in resources/bin
                     let resources_bin = target_dir
                         .parent() // target
                         .and_then(|p| p.parent()) // src-tauri
@@ -1784,11 +1787,6 @@ impl<R: Runtime> ProxyService<R> {
                         if dll_dir.join("libbox.dll").exists() {
                             return Ok((helper, dll_dir));
                         }
-                    }
-                    
-                    // Fallback: DLLs might be in same dir as helper
-                    if target_dir.join("libbox.dll").exists() {
-                        return Ok((helper, target_dir.to_path_buf()));
                     }
                 }
             }
