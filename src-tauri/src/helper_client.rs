@@ -76,7 +76,7 @@ impl HelperClient {
 
     #[cfg(windows)]
     fn attempt_send(&self, req_str: &str) -> Result<Response, Box<dyn Error>> {
-        use std::io::{BufRead, BufReader, Read, Write};
+        use std::io::{BufRead, BufReader, Write};
 
         let mut file = std::fs::OpenOptions::new()
             .read(true)

@@ -1,18 +1,17 @@
 use std::error::Error;
-use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Runtime};
 
 const HELPER_LABEL: &str = "run.tunnet.helper";
 const HELPER_BIN_NAME: &str = "tunnet-helper";
 
-pub struct HelperInstaller {
-    app_handle: AppHandle,
+pub struct HelperInstaller<R: Runtime> {
+    app_handle: AppHandle<R>,
 }
 
-impl HelperInstaller {
-    pub fn new(app_handle: AppHandle) -> Self {
+impl<R: Runtime> HelperInstaller<R> {
+    pub fn new(app_handle: AppHandle<R>) -> Self {
         Self { app_handle }
     }
 
@@ -34,6 +33,7 @@ impl HelperInstaller {
 
     #[cfg(target_os = "macos")]
     pub fn install(&self) -> Result<(), Box<dyn Error>> {
+        use std::fs;
         // 1. Find binary path (handle dev vs production)
         // Note: resources are bundled into a 'resources' subdirectory due to tauri.conf.json structure
         let mut resource_path = self
