@@ -225,13 +225,28 @@ async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
 
 #[cfg(windows)]
 async fn handle_connection(
-    mut server: tokio::net::windows::named_pipe::NamedPipeServer,
+    server: tokio::net::windows::named_pipe::NamedPipeServer,
     state: Arc<AppState>,
 ) {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
+    // Split the server into read and write halves
+    // But NamedPipeServer doesn't support split() directly like TcpStream
+    // We can use the server for both, but need to be careful with ownership
+    // BufReader takes ownership of the reader
+
+    // Actually NamedPipeServer implements AsyncRead and AsyncWrite.
+    // We can wrap it in BufReader, but then we can't write to it easily if BufReader owns it.
+    // We should probably just read into a buffer until newline manually or use existing utilities.
+
+    // Better approach: wrap server in BufReader, read line, then get inner server back?
+    // No, into_inner() is sync.
+
+    // Let's use a meaningful buffer size and read until we find a newline
+    let mut reader = BufReader::new(server);
     let mut request_str = String::new();
-    match server.read_to_string(&mut request_str).await {
+
+    match reader.read_line(&mut request_str).await {
         Ok(size) => {
             log(
                 &state,
@@ -247,6 +262,10 @@ async fn handle_connection(
                 };
                 let response_str = serde_json::to_string(&response).unwrap();
                 log(&state, &format!("Sending response: {}", &response_str));
+
+                // We need to write back to the server.
+                // We can get the inner server from BufReader via .get_mut() or .into_inner()
+                let mut server = reader.into_inner();
                 let _ = server.write_all(response_str.as_bytes()).await;
             }
         }

@@ -76,21 +76,36 @@ impl HelperClient {
 
     #[cfg(windows)]
     fn attempt_send(&self, req_str: &str) -> Result<Response, Box<dyn Error>> {
-        use std::io::{Read, Write};
+        use std::io::{BufRead, BufReader, Read, Write};
+
         let mut file = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
             .open(PIPE_NAME)?;
 
-        file.write_all(req_str.as_bytes())?;
+        // Write the request with a newline delimiter
+        let mut req_with_newline = req_str.to_string();
+        if !req_with_newline.ends_with('\n') {
+            req_with_newline.push('\n');
+        }
+
+        file.write_all(req_with_newline.as_bytes())?;
         file.flush()?;
 
+        // No need to shutdown write side anymore as we rely on newline delimiter
+
+        // Read response until newline
+        let mut reader = BufReader::new(file);
         let mut resp_str = String::new();
-        file.read_to_string(&mut resp_str)?;
+        reader.read_line(&mut resp_str)?;
+
         if resp_str.is_empty() {
             return Err("Empty response from helper".into());
         }
-        let resp: Response = serde_json::from_str(&resp_str)?;
+
+        // Trim potentially trailing newline
+        let resp_json = resp_str.trim();
+        let resp: Response = serde_json::from_str(resp_json)?;
         Ok(resp)
     }
 
