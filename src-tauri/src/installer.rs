@@ -407,8 +407,9 @@ systemctl restart {}.service
             }
         }
 
-        // 5. Create service with correct binPath format
-        println!("Creating Windows Service...");
+        // 5. Create service with UAC elevation
+        // Creating Windows Service REQUIRES admin privileges, so we use RunAs directly
+        println!("Creating Windows Service (this will prompt for UAC)...");
 
         // CRITICAL: binPath must be binPath="path" (no space after =, path in quotes)
         let bin_path_arg = format!("binPath=\"{}\"", helper_dest.display());
@@ -421,64 +422,37 @@ systemctl restart {}.service
             "DisplayName=Tunnet Helper Service",
         ];
 
-        let create_output = Command::new("sc.exe").args(&create_args).output()?;
+        // Build PowerShell command with proper escaping
+        let args_escaped = create_args
+            .iter()
+            .map(|s| format!("'{}'", s.replace("'", "''")))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let ps_script = format!(
+            "Start-Process -FilePath 'sc.exe' -ArgumentList @({}) -Verb RunAs -Wait",
+            args_escaped
+        );
+
+        println!("Executing: powershell {}", ps_script);
+
+        let create_output = Command::new("powershell.exe")
+            .args(&["-NoProfile", "-Command", &ps_script])
+            .output()?;
 
         if !create_output.status.success() {
-            // CRITICAL: sc.exe outputs errors to STDOUT, not STDERR!
             let stdout = String::from_utf8_lossy(&create_output.stdout);
             let stderr = String::from_utf8_lossy(&create_output.stderr);
-            let combined_output = format!("{}\n{}", stdout, stderr);
-
-            println!("sc.exe create failed:");
-            println!("  Exit code: {:?}", create_output.status.code());
-            println!("  Stdout: {}", stdout);
-            println!("  Stderr: {}", stderr);
-
-            // Check for permission denied in BOTH stdout and stderr
-            if combined_output.contains("拒绝访问")
-                || combined_output.contains("Access is denied")
-                || combined_output.contains("error 5")
-                || combined_output.contains("ERROR_ACCESS_DENIED")
-            {
-                println!("Requesting UAC elevation for service creation...");
-
-                // Build PowerShell command with proper escaping
-                // Use array syntax to avoid manual quoting issues
-                let args_escaped = create_args
-                    .iter()
-                    .map(|s| format!("'{}'", s.replace("'", "''")))
-                    .collect::<Vec<_>>()
-                    .join(",");
-
-                let ps_script = format!(
-                    "Start-Process -FilePath 'sc.exe' -ArgumentList @({}) -Verb RunAs -Wait",
-                    args_escaped
-                );
-
-                let elevated_output = Command::new("powershell.exe")
-                    .args(&["-NoProfile", "-Command", &ps_script])
-                    .output()?;
-
-                println!("Executing: {}", ps_script);
-
-                if !elevated_output.status.success() {
-                    let elevated_stdout = String::from_utf8_lossy(&elevated_output.stdout);
-                    let elevated_stderr = String::from_utf8_lossy(&elevated_output.stderr);
-                    return Err(format!(
-                        "Failed to create service with elevation\nExit code: {:?}\nStdout: {}\nStderr: {}",
-                        elevated_output.status.code(),
-                        elevated_stdout,
-                        elevated_stderr
-                    ).into());
-                }
-
-                println!("Service created with elevated privileges");
-            } else {
-                return Err(format!("Failed to create service: {}", combined_output).into());
-            }
-        } else {
-            println!("Service created successfully");
+            return Err(format!(
+                "Failed to create service\nExit code: {:?}\nStdout: {}\nStderr: {}",
+                create_output.status.code(),
+                stdout,
+                stderr
+            )
+            .into());
         }
+
+        println!("Service created successfully");
 
         // 6. Set service description
         let _ = Command::new("sc.exe")
@@ -489,26 +463,28 @@ systemctl restart {}.service
             ])
             .output();
 
-        // 7. Start the service
+        // 7. Start the service (also needs elevation)
         println!("Starting service...");
-        let start_output = Command::new("sc.exe")
-            .args(&["start", "TunnetHelper"])
+        let ps_start = "Start-Process -FilePath 'sc.exe' -ArgumentList @('start','TunnetHelper') -Verb RunAs -Wait";
+
+        let start_output = Command::new("powershell.exe")
+            .args(&["-NoProfile", "-Command", ps_start])
             .output()?;
 
         if !start_output.status.success() {
             let stdout = String::from_utf8_lossy(&start_output.stdout);
             let stderr = String::from_utf8_lossy(&start_output.stderr);
-            let combined_output = format!("{}\n{}", stdout, stderr);
 
-            if combined_output.contains("拒绝访问") || combined_output.contains("Access is denied")
-            {
-                println!("Permission denied, requesting UAC for service start...");
-                let ps_script = "Start-Process -FilePath 'sc.exe' -ArgumentList @('start','TunnetHelper') -Verb RunAs -Wait";
-                let _ = Command::new("powershell.exe")
-                    .args(&["-NoProfile", "-Command", ps_script])
-                    .output()?;
-            } else if !combined_output.contains("already been started") {
-                return Err(format!("Failed to start service: {}", combined_output).into());
+            // Ignore "already started" error
+            let combined = format!("{}\n{}", stdout, stderr);
+            if !combined.contains("already") && !combined.contains("已") {
+                return Err(format!(
+                    "Failed to start service\nExit code: {:?}\nStdout: {}\nStderr: {}",
+                    start_output.status.code(),
+                    stdout,
+                    stderr
+                )
+                .into());
             }
         }
 
