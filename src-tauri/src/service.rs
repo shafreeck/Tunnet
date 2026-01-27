@@ -1706,6 +1706,25 @@ impl<R: Runtime> ProxyService<R> {
             match client.check_status() {
                 Ok(_) => {
                     info!("Service is responsive");
+                    
+                    // Version Check
+                    if let Ok(v) = client.get_version() {
+                         let expected = env!("CARGO_PKG_VERSION");
+                         if v != expected {
+                             info!("Helper version mismatch: running={}, expected={}. Triggering update...", v, expected);
+                             // Call installer to update (it handles stop/service-update)
+                             let installer = crate::installer::HelperInstaller::new(self.app.clone());
+                             if let Err(e) = installer.install() {
+                                 error!("Failed to update helper service: {}", e);
+                                 // Return error or warn? 
+                                 // Ideally fail the start so logic works
+                                 return Err(format!("Failed to update helper service: {}", e));
+                             }
+                             info!("Helper service updated successfully.");
+                             return Ok(());
+                         }
+                    }
+
                     return Ok(());
                 }
                 Err(e) => {

@@ -405,71 +405,22 @@ systemctl restart {}.service
 
         println!("Installing to: {:?}", install_dir);
 
-        // 3. Delete old service if it exists
-        println!("Removing old service if exists...");
-        let _ = self.uninstall(); // Ignore errors - service might not exist
+        // 3. Use helper binary to perform "service-update"
+        // This command:
+        // 1. Stops the service (if running)
+        // 2. Copies itself and DLLs to the target directory
+        // 3. Runs "service-install" on the new binary
+        println!("Delegating installation/update to helper binary...");
 
-        // 4. Create installation directory
-        // If this fails (permissions), we might need to use run_elevated with mkdir,
-        // but typically ProgramData is writable by users for creating subdirs.
-        if let Err(e) = fs::create_dir_all(&install_dir) {
-            println!(
-                "Failed to create directory: {}, attempting with elevation...",
-                e
-            );
-            run_elevated(
-                "cmd.exe",
-                &format!("/c mkdir \"{}\"", install_dir.display()),
-            )?;
-        }
+        let resource_helper_str = resource_path.to_str().ok_or("Invalid resource path")?;
+        let install_dir_str = install_dir.to_str().ok_or("Invalid install dir")?;
 
-        // 5. Copy helper executable
-        println!("Copying helper executable...");
-        if let Err(e) = fs::copy(&resource_path, &helper_dest) {
-            println!("Failed to copy helper: {}, attempting with robocopy...", e);
-            let source_dir = resource_path.parent().ok_or("Invalid helper path")?;
-            let helper_filename = resource_path.file_name().ok_or("Invalid helper filename")?;
-            let robocopy_args = format!(
-                "\"{}\" \"{}\" {} /NFL /NDL /NJH /NJS",
-                source_dir.display(),
-                install_dir.display(),
-                helper_filename.to_string_lossy()
-            );
-            run_elevated("robocopy.exe", &robocopy_args)?;
-        }
+        // Command: <resource_helper> service-update <install_dir>
+        let args = format!("service-update \"{}\"", install_dir_str);
 
-        // 6. Copy DLLs
-        let dll_source_dir = resource_path.parent().ok_or("Invalid helper path")?;
-        for dll in &["libbox.dll", "wintun.dll"] {
-            let dll_src = dll_source_dir.join(dll);
-            if dll_src.exists() {
-                let dll_dest = install_dir.join(dll);
-                if let Err(_) = fs::copy(&dll_src, &dll_dest) {
-                    println!("Failed to copy {}, attempting with robocopy...", dll);
-                    let robocopy_args = format!(
-                        "\"{}\" \"{}\" {} /NFL /NDL /NJH /NJS",
-                        dll_source_dir.display(),
-                        install_dir.display(),
-                        dll
-                    );
-                    run_elevated("robocopy.exe", &robocopy_args)?;
-                } else {
-                    println!("Copied {} to installation directory", dll);
-                }
-            }
-        }
-        println!("Files copied successfully");
+        run_elevated(resource_helper_str, &args)?;
 
-        // 7. Execute helper with "service-install" argument to setup the service
-        // This provides a cleaner UAC prompt (Tunnet Helper instead of cmd.exe)
-        // and handles service creation/config internally.
-        println!("Configuring Windows Service via helper binary...");
-
-        let helper_exe_str = helper_dest.to_str().ok_or("Invalid helper path")?;
-
-        run_elevated(helper_exe_str, "service-install")?;
-
-        // 8. Verify service started successfully
+        // 4. Verify service started successfully
         println!("Verifying service status...");
         std::thread::sleep(std::time::Duration::from_secs(3));
 

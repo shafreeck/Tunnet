@@ -279,6 +279,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Check for installation flag
     let args: Vec<String> = std::env::args().collect();
+    #[cfg(target_os = "windows")]
     if args.len() > 1 && args[1] == "service-install" {
         // We act as the installer (running as Admin)
         println!("Installing Tunnet Helper Service...");
@@ -334,6 +335,66 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         println!("Service installation commands executed.");
+        return Ok(());
+    } else if args.len() > 2 && args[1] == "service-update" {
+        // service-update <target_dir>
+        // Use this to update the service binary from a temporary location (e.g. resources)
+        // This avoids "Text file busy" or locked file issues by ensuring service is stopped first.
+        let target_dir = std::path::PathBuf::from(&args[2]);
+        println!("Updating Tunnet Helper Service to {:?}...", target_dir);
+
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        // 1. Stop service
+        println!("Stopping service...");
+        let _ = std::process::Command::new("sc.exe")
+            .args(&["stop", "TunnetHelper"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+
+        // Wait for stop (simple polling)
+        std::thread::sleep(std::time::Duration::from_secs(2));
+
+        // 2. Ensure target dir exists
+        if !target_dir.exists() {
+            let _ = std::fs::create_dir_all(&target_dir);
+        }
+
+        // 3. Copy files (Self + DLLs)
+        let current_exe = std::env::current_exe()?;
+        let current_dir = current_exe.parent().unwrap();
+
+        let files = ["tunnet-helper.exe", "libbox.dll", "wintun.dll"];
+        for file in files.iter() {
+            let src = current_dir.join(file);
+            let dest = target_dir.join(file);
+            if src.exists() {
+                println!("Copying {:?} to {:?}", src, dest);
+                if let Err(e) = std::fs::copy(&src, &dest) {
+                    eprintln!("Failed to copy {}: {}", file, e);
+                    // Try to proceed, maybe DLLs are fine
+                }
+            } else {
+                eprintln!("Source file not found: {:?}", src);
+            }
+        }
+
+        // 4. Call service-install on the NEW binary
+        let new_binary = target_dir.join("tunnet-helper.exe");
+        println!("Executing service-install on new binary: {:?}", new_binary);
+
+        // We use a separate process for this to ensure we are running the installed binary
+        let status = std::process::Command::new(&new_binary)
+            .arg("service-install")
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()?;
+
+        if !status.success() {
+            return Err("Failed to execute service-install".into());
+        }
+
+        println!("Service update completed.");
         return Ok(());
     }
 
