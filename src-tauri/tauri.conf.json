@@ -22,7 +22,8 @@
         "decorations": false,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "shadow": false
+        "shadow": false,
+        "dragDropEnabled": true
       },
       {
         "label": "tray",
