@@ -260,8 +260,12 @@ async fn handle_connection(
                         message: format!("JSON error: {}", e),
                     },
                 };
-                let response_str = serde_json::to_string(&response).unwrap();
-                log(&state, &format!("Sending response: {}", &response_str));
+                let mut response_str = serde_json::to_string(&response).unwrap();
+                response_str.push('\n'); // Append newline for delimiters
+                log(
+                    &state,
+                    &format!("Sending response: {}", &response_str.trim()),
+                );
 
                 // We need to write back to the server.
                 // We can get the inner server from BufReader via .get_mut() or .into_inner()
