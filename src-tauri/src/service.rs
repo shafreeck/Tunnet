@@ -476,9 +476,21 @@ impl<R: Runtime> ProxyService<R> {
 
                 // 3. Start TUN Instance (Specialized Port-less config) if requested
                 if tun_mode {
-                    // Windows: Ensure Helper process is running with admin privileges
+                    // Windows: Check if Helper Service is installed, install if not
                     #[cfg(target_os = "windows")]
                     {
+                        use crate::installer::HelperInstaller;
+                        let installer = HelperInstaller::new(self.app.clone());
+                        
+                        if !installer.is_installed() {
+                            info!("Windows Helper Service not installed, installing...");
+                            installer.install().map_err(|e| {
+                                format!("Failed to install Windows Helper Service: {}. Please run the application as administrator.", e)
+                            })?;
+                            info!("Windows Helper Service installed successfully");
+                        }
+                        
+                        // Ensure Helper Service is running
                         self.ensure_windows_helper()?;
                     }
                     
