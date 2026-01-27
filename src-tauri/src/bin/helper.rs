@@ -271,6 +271,7 @@ async fn handle_connection(
                 // We can get the inner server from BufReader via .get_mut() or .into_inner()
                 let mut server = reader.into_inner();
                 let _ = server.write_all(response_str.as_bytes()).await;
+                let _ = server.flush().await; // CRITICAL: Flush to ensure client receives response immediately
             }
         }
         Err(e) => log(&state, &format!("Read error: {}", e)),
