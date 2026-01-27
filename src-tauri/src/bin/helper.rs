@@ -118,10 +118,13 @@ fn run_service() -> Result<(), Box<dyn Error>> {
         process_id: None,
     })?;
 
+    let shutdown_notify = Arc::new(tokio::sync::Notify::new());
+    let shutdown_notify_clone = shutdown_notify.clone();
+
     // Run the listener in a separate thread
     let listener_handle = std::thread::spawn(move || {
         rt.block_on(async {
-            if let Err(e) = run_listener(app_state).await {
+            if let Err(e) = run_listener(app_state, shutdown_notify_clone).await {
                 eprintln!("Listener error: {}", e);
             }
         });
@@ -141,7 +144,10 @@ fn run_service() -> Result<(), Box<dyn Error>> {
         process_id: None,
     })?;
 
-    // TODO: Gracefully shutdown the listener
+    // Signal the listener to stop
+    shutdown_notify.notify_waiters();
+
+    // Gracefully shutdown the listener
     // For now, we'll just wait a bit for it to finish
     listener_handle.join().ok();
 
@@ -353,8 +359,38 @@ fn main() -> Result<(), Box<dyn Error>> {
             .creation_flags(CREATE_NO_WINDOW)
             .output();
 
-        // Wait for stop (simple polling)
-        std::thread::sleep(std::time::Duration::from_secs(2));
+        // Wait for stop using polling
+        let start_time = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(30);
+        let mut stopped = false;
+
+        while start_time.elapsed() < timeout {
+            let output = std::process::Command::new("sc.exe")
+                .args(&["query", "TunnetHelper"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output();
+
+            if let Ok(o) = output {
+                let stdout = String::from_utf8_lossy(&o.stdout);
+                if stdout.contains("STOPPED") {
+                    stopped = true;
+                    break;
+                }
+                // Also check if service doesn't exist (already deleted?)
+                if String::from_utf8_lossy(&o.stderr).contains("does not exist") {
+                    stopped = true;
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+
+        if !stopped {
+            eprintln!("Timed out waiting for service to stop.");
+            // We'll try to proceed anyway, but it will likely fail
+        } else {
+            println!("Service stopped.");
+        }
 
         // 2. Ensure target dir exists
         if !target_dir.exists() {
@@ -407,11 +443,18 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let app_state = initialize_app_state().await?;
-    run_listener(app_state).await
+    let notify = Arc::new(tokio::sync::Notify::new());
+    // Setup signal handler for Unix to trigger notify?
+    // For now simpler to just run it.
+    // But we need to match signature.
+    run_listener(app_state, notify).await
 }
 
 #[cfg(unix)]
-async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
+async fn run_listener(
+    app_state: Arc<AppState>,
+    _shutdown: Arc<tokio::sync::Notify>,
+) -> Result<(), Box<dyn Error>> {
     use tokio::net::UnixListener;
 
     if Path::new(SOCKET_PATH).exists() {
@@ -455,7 +498,10 @@ async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
 }
 
 #[cfg(windows)]
-async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
+async fn run_listener(
+    app_state: Arc<AppState>,
+    shutdown: Arc<tokio::sync::Notify>,
+) -> Result<(), Box<dyn Error>> {
     use std::os::windows::io::FromRawHandle;
     use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 
@@ -473,10 +519,18 @@ async fn run_listener(app_state: Arc<AppState>) -> Result<(), Box<dyn Error>> {
     loop {
         // Waiting for connection (removed high-frequency log)
 
-        // Wait for a client to connect
-        if let Err(e) = server.connect().await {
-            log(&app_state, &format!("Failed to accept connection: {}", e));
-            continue;
+        // Wait for a client to connect or shutdown signal
+        tokio::select! {
+            result = server.connect() => {
+                 if let Err(e) = result {
+                    log(&app_state, &format!("Failed to accept connection: {}", e));
+                    continue;
+                }
+            }
+            _ = shutdown.notified() => {
+                log(&app_state, "Shutdown signal received. Stopping listener.");
+                break;
+            }
         }
 
         // Client connected (log only on errors)

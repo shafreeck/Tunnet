@@ -11,23 +11,45 @@ const HELPER_BIN_NAME: &str = "tunnet-helper";
 
 #[cfg(target_os = "windows")]
 fn run_elevated(program: &str, args: &str) -> Result<(), Box<dyn Error>> {
+    use std::ffi::c_void;
     use std::ptr;
 
-    // Declare ShellExecuteW from shell32.dll
+    const SEE_MASK_NOCLOSEPROCESS: u32 = 0x00000040;
+    const SW_HIDE: i32 = 0;
+    const INFINITE: u32 = 0xFFFFFFFF;
+
+    #[repr(C)]
+    struct SHELLEXECUTEINFOW {
+        cb_size: u32,
+        f_mask: u32,
+        hwnd: *mut c_void,
+        lp_verb: *const u16,
+        lp_file: *const u16,
+        lp_parameters: *const u16,
+        lp_directory: *const u16,
+        n_show: i32,
+        h_inst_app: *mut c_void,
+        lp_id_list: *mut c_void,
+        lp_class: *const u16,
+        hkey_class: *mut c_void,
+        dw_hot_key: u32,
+        h_icon: *mut c_void,
+        h_process: *mut c_void,
+    }
+
     #[link(name = "shell32")]
     extern "system" {
-        fn ShellExecuteW(
-            hwnd: *mut std::ffi::c_void,
-            operation: *const u16,
-            file: *const u16,
-            parameters: *const u16,
-            directory: *const u16,
-            show_cmd: i32,
-        ) -> *mut std::ffi::c_void;
+        fn ShellExecuteExW(pExecInfo: *mut SHELLEXECUTEINFOW) -> i32;
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn WaitForSingleObject(hHandle: *mut c_void, dwMilliseconds: u32) -> u32;
+        fn CloseHandle(hObject: *mut c_void) -> i32;
     }
 
     // Convert strings to wide strings (UTF-16)
-    let operation: Vec<u16> = std::ffi::OsStr::new("runas")
+    let verb: Vec<u16> = std::ffi::OsStr::new("runas")
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
@@ -40,28 +62,33 @@ fn run_elevated(program: &str, args: &str) -> Result<(), Box<dyn Error>> {
         .chain(std::iter::once(0))
         .collect();
 
-    println!("Running elevated: {} {}", program, args);
+    let mut info: SHELLEXECUTEINFOW = unsafe { std::mem::zeroed() };
+    info.cb_size = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
+    info.f_mask = SEE_MASK_NOCLOSEPROCESS;
+    info.lp_verb = verb.as_ptr();
+    info.lp_file = file.as_ptr();
+    info.lp_parameters = parameters.as_ptr();
+    info.n_show = SW_HIDE;
+
+    println!("Running elevated (sync): {} {}", program, args);
 
     unsafe {
-        let result = ShellExecuteW(
-            ptr::null_mut(),
-            operation.as_ptr(),
-            file.as_ptr(),
-            parameters.as_ptr(),
-            ptr::null(),
-            0, // SW_HIDE
-        );
+        let result = ShellExecuteExW(&mut info);
 
-        // ShellExecuteW returns > 32 on success
-        if result as usize <= 32 {
-            return Err(
-                format!("ShellExecuteW failed with error code: {}", result as usize).into(),
-            );
+        if result == 0 {
+            return Err(format!("ShellExecuteExW failed").into());
+        }
+
+        if !info.h_process.is_null() {
+            // Wait for the process to complete
+            WaitForSingleObject(info.h_process, INFINITE);
+            CloseHandle(info.h_process);
+        } else {
+            // Process completed immediately or failed to return handle?
+            // Fallback to sleep just in case, but ShellExecuteEx usually ensures handle if NOCLOSEPROCESS is set
+            std::thread::sleep(std::time::Duration::from_secs(1));
         }
     }
-
-    // Wait a bit for the elevated process to complete
-    std::thread::sleep(std::time::Duration::from_secs(3));
 
     Ok(())
 }
