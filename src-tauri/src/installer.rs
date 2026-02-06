@@ -191,7 +191,7 @@ impl<R: Runtime> HelperInstaller<R> {
 
         // 3. Construct install script with UNLOAD first to ensure restart
         let cmd_unload = format!(
-            "launchctl unload '/Library/LaunchDaemons/{}.plist' || true",
+            "launchctl unload '/Library/LaunchDaemons/{}.plist' >/dev/null 2>&1 || true",
             HELPER_LABEL
         );
         let cmd_rm_bin = format!("rm -f '/Library/PrivilegedHelperTools/{}'", HELPER_LABEL);
@@ -223,9 +223,11 @@ impl<R: Runtime> HelperInstaller<R> {
         );
 
         let script = format!(
-            "{} && {} && {} && {} && {} && {} && {} && {}",
+            "{} && {} && {} && {} && {} && {} && {} && {} && {}",
             cmd_unload,
             cmd_rm_bin,
+            // Ensure directory exists
+            format!("mkdir -p '/Library/PrivilegedHelperTools'"),
             cmd_cp_bin,
             cmd_chown_bin,
             cmd_chmod_bin,
