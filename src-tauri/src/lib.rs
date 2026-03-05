@@ -327,6 +327,11 @@ async fn open_main_window(app: tauri::AppHandle) -> Result<(), String> {
         window.show().map_err(|e| e.to_string())?;
         window.unminimize().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
+        // Force WKWebView repaint on macOS: after orderOut+orderFront the backing
+        // store can be released, leaving the window transparent. Reading a layout
+        // property wakes the renderer process back up.
+        #[cfg(target_os = "macos")]
+        let _ = window.eval("document.documentElement.getBoundingClientRect()");
     }
     Ok(())
 }
@@ -648,6 +653,9 @@ pub fn run() {
                                     let _ = window.show();
                                     let _ = window.set_focus(); // Re-enabled for blur detection
                                     let _ = window.set_always_on_top(true);
+                                    // Force WKWebView repaint (transparent window bug on macOS)
+                                    #[cfg(target_os = "macos")]
+                                    let _ = window.eval("document.documentElement.getBoundingClientRect()");
                                 }
                             }
                         }
@@ -789,6 +797,8 @@ pub fn run() {
                         let _ = window.show();
                         let _ = window.unminimize();
                         let _ = window.set_focus();
+                        // Force WKWebView repaint (transparent window bug on macOS)
+                        let _ = window.eval("document.documentElement.getBoundingClientRect()");
                     }
                 }
                 _ => {}
