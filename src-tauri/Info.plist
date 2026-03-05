@@ -9,6 +9,8 @@
 		<string>zh</string>
 		<string>zh-Hans</string>
 	</array>
+	<key>NSAppSleepDisabled</key>
+	<true/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
