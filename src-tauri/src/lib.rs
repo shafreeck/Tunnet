@@ -327,11 +327,8 @@ async fn open_main_window(app: tauri::AppHandle) -> Result<(), String> {
         window.show().map_err(|e| e.to_string())?;
         window.unminimize().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
-        // Force WKWebView repaint on macOS: after orderOut+orderFront the backing
-        // store can be released, leaving the window transparent. Reading a layout
-        // property wakes the renderer process back up.
         #[cfg(target_os = "macos")]
-        let _ = window.eval("document.documentElement.getBoundingClientRect()");
+        force_webview_repaint(&window);
     }
     Ok(())
 }
@@ -381,6 +378,51 @@ async fn get_proxy_status(
 use std::sync::atomic::{AtomicI64, Ordering};
 static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 static LAST_HIDE_TIME: AtomicI64 = AtomicI64::new(0);
+static LAST_MAIN_DEFOCUS_TIME: AtomicI64 = AtomicI64::new(0);
+
+/// Forces WKWebView to fully re-render its content on macOS.
+///
+/// ## Background: Why this is needed
+///
+/// Tauri on macOS uses WKWebView as its rendering engine, which runs in a **separate
+/// process** (the "Web Content" process). When a window is hidden via `window.hide()`
+/// (which calls `[NSWindow orderOut:]` under the hood) and later shown again via
+/// `window.show()` (which calls `[NSWindow orderFront:]`), WKWebView does **not**
+/// always automatically re-render its content. The renderer process may have had its
+/// backing store (GPU texture / IOSurface) evicted while the window was off-screen.
+///
+/// For normal windows (with a titlebar and opaque background), this blank state is
+/// hidden — the OS shows the window's last cached screenshot. But Tunnet uses
+/// `transparent: true` + `decorations: false`, so the window has **no fallback
+/// background at all**. A blank WKWebView in this configuration appears as a
+/// completely invisible, click-through window — the user sees nothing.
+///
+/// This is a known, open Tauri/wry bug:
+///   - <https://github.com/tauri-apps/tauri/issues/8255>  (transparent window glitch after focus change)
+///   - <https://github.com/tauri-apps/tauri/issues/10306> (redraw when background color is transparent)
+///
+/// ## Why the resize trick works
+///
+/// Nudging the window size by +1 px and immediately restoring it forces the OS to
+/// invalidate the entire WKWebView compositing layer and schedule a synchronous
+/// relayout + repaint. This is more reliable than JS-side tricks (e.g. toggling
+/// `opacity` via `eval`) because:
+///   1. The resize signal comes from the **native layer**, before JS even runs.
+///   2. It guarantees a full compositing cycle regardless of the renderer process state.
+///   3. The 1 px change is imperceptible to the user (sub-millisecond round-trip).
+#[cfg(target_os = "macos")]
+fn force_webview_repaint(window: &tauri::WebviewWindow) {
+    if let Ok(size) = window.outer_size() {
+        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
+            size.width + 1,
+            size.height,
+        )));
+        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
+            size.width,
+            size.height,
+        )));
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -456,6 +498,34 @@ pub fn run() {
                             if (now - last_click) > 500 {
                                 let _ = window.hide();
                                 LAST_HIDE_TIME.store(now, Ordering::Relaxed);
+                            }
+                        }
+                    }
+                    tauri::WindowEvent::Focused(focused) if label == "main" => {
+                        #[cfg(target_os = "macos")]
+                        {
+                            let now = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_millis() as i64;
+                            if *focused {
+                                let last_defocus =
+                                    LAST_MAIN_DEFOCUS_TIME.load(Ordering::Relaxed);
+                                // If inactive for more than 2 minutes, force repaint both windows
+                                // to recover from macOS WKWebView backing store release
+                                if last_defocus > 0 && (now - last_defocus) > 120_000 {
+                                    let app = window.app_handle();
+                                    if let Some(main_wv) = app.get_webview_window("main") {
+                                        force_webview_repaint(&main_wv);
+                                    }
+                                    if let Some(tray_wv) = app.get_webview_window("tray") {
+                                        if tray_wv.is_visible().unwrap_or(false) {
+                                            force_webview_repaint(&tray_wv);
+                                        }
+                                    }
+                                }
+                            } else {
+                                LAST_MAIN_DEFOCUS_TIME.store(now, Ordering::Relaxed);
                             }
                         }
                     }
@@ -653,9 +723,9 @@ pub fn run() {
                                     let _ = window.show();
                                     let _ = window.set_focus(); // Re-enabled for blur detection
                                     let _ = window.set_always_on_top(true);
-                                    // Force WKWebView repaint (transparent window bug on macOS)
                                     #[cfg(target_os = "macos")]
-                                    let _ = window.eval("document.documentElement.getBoundingClientRect()");
+                                    force_webview_repaint(&window);
+
                                 }
                             }
                         }
@@ -797,8 +867,9 @@ pub fn run() {
                         let _ = window.show();
                         let _ = window.unminimize();
                         let _ = window.set_focus();
-                        // Force WKWebView repaint (transparent window bug on macOS)
-                        let _ = window.eval("document.documentElement.getBoundingClientRect()");
+                        #[cfg(target_os = "macos")]
+                        force_webview_repaint(&window);
+
                     }
                 }
                 _ => {}
