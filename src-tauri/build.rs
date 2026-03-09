@@ -472,6 +472,18 @@ fn main() {
         );
     }
 
+    // Embed the short git commit hash so the About page can show which exact
+    // build the user is running — useful for verifying bug fixes.
+    let git_hash = Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    println!("cargo:rustc-env=GIT_HASH={}", git_hash);
+    println!("cargo:rerun-if-changed=.git/HEAD");
+
     tauri_build::try_build(tauri_build::Attributes::new().windows_attributes(windows))
         .expect("failed to run build script");
 }

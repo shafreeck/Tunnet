@@ -1106,6 +1106,15 @@ function AdvancedSettings({ settings, update, clashApiPort, helperApiPort, modif
 function AboutSection({ version }: { version: string }) {
     const { t } = useTranslation()
     const [clicks, setClicks] = useState(0)
+    const [commit, setCommit] = useState<string>("")
+
+    useEffect(() => {
+        import("@tauri-apps/api/core").then(({ invoke }) => {
+            invoke<{ version: string; commit: string }>("get_build_info")
+                .then(info => setCommit(info.commit))
+                .catch(() => {})
+        })
+    }, [])
 
     const handleTestUpdate = () => {
         const newClicks = clicks + 1
@@ -1137,7 +1146,7 @@ function AboutSection({ version }: { version: string }) {
                         onClick={handleTestUpdate}
                         className="text-[10px] text-secondary font-mono uppercase tracking-widest cursor-pointer hover:text-primary transition-colors select-none"
                     >
-                        v{version}
+                        v{version}{commit ? ` (${commit})` : ""}
                     </span>
                 </div>
             </div>
