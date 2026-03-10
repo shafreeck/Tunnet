@@ -331,8 +331,20 @@ async fn open_main_window(app: tauri::AppHandle) -> Result<(), String> {
         // may be dead, force orderOut+orderFront to re-establish the display connection.
         #[cfg(target_os = "macos")]
         if visible && !minimized {
-            log::info!("[open-main] forcing hide+show cycle to recover possibly dead WKWebView");
-            let _ = window.hide();
+            log::info!("[open-main] forcing hide+show+reload to recover possibly dead WKWebView");
+            let w = window.clone();
+            tauri::async_runtime::spawn(async move {
+                let _ = w.hide();
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                let _ = w.show();
+                let _ = w.set_focus();
+                force_webview_repaint(&w);
+                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                log::info!("[open-main] calling location.reload() to recover dead WKWebView");
+                let _ = w.eval("location.reload()");
+            });
+            log::info!("[open-main] recovery task spawned");
+            return Ok(());
         }
         window.show().map_err(|e| e.to_string())?;
         window.unminimize().map_err(|e| e.to_string())?;
@@ -926,8 +938,26 @@ pub fn run() {
                         // (orderFront/makeKeyAndOrderFront) causes macOS to establish a fresh one,
                         // which restarts or re-attaches the WKWebView renderer process.
                         if visible && !minimized {
-                            log::info!("[reopen] window visible but possibly blank — forcing hide+show cycle");
-                            let _ = window.hide();
+                            log::info!("[reopen] window visible but possibly blank — forcing hide+show+reload");
+                            // hide+show alone is not enough: the WKWebView renderer process
+                            // may be dead and orderOut+orderFront does not restart it.
+                            // Spawn an async task so we can insert a small delay between
+                            // hide and show (giving macOS time to tear down the old context)
+                            // then call location.reload() to force the renderer to restart.
+                            // The proxy backend is unaffected; only the UI resets.
+                            let w = window.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let _ = w.hide();
+                                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                                force_webview_repaint(&w);
+                                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                                log::info!("[reopen] calling location.reload() to recover dead WKWebView");
+                                let _ = w.eval("location.reload()");
+                            });
+                            log::info!("[reopen] recovery task spawned");
+                            return;
                         }
 
                         let _ = window.show();
