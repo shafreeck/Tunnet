@@ -34,6 +34,8 @@ pub struct AppSettings {
     // Advanced
     pub log_level: String,
     pub active_target_id: Option<String>,
+    #[serde(default)]
+    pub config_version: u32,
 }
 
 impl Default for AppSettings {
@@ -58,6 +60,7 @@ impl Default for AppSettings {
             routing_mode: Some("rule".to_string()),
             log_level: "info".to_string(),
             active_target_id: None,
+            config_version: 2,
         }
     }
 }

@@ -324,34 +324,9 @@ async fn close_all_connections(
 async fn open_main_window(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(desktop)]
     if let Some(window) = app.get_webview_window("main") {
-        let visible = window.is_visible().unwrap_or(false);
-        let minimized = window.is_minimized().unwrap_or(false);
-        log::info!("[open-main] is_visible={visible} is_minimized={minimized}");
-        // Same fix as Reopen: if window is already "visible" but WKWebView renderer
-        // may be dead, force orderOut+orderFront to re-establish the display connection.
-        #[cfg(target_os = "macos")]
-        if visible && !minimized {
-            log::info!("[open-main] forcing hide+show+reload to recover possibly dead WKWebView");
-            let w = window.clone();
-            tauri::async_runtime::spawn(async move {
-                let _ = w.hide();
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                let _ = w.show();
-                let _ = w.set_focus();
-                force_webview_repaint(&w);
-                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-                log::info!("[open-main] calling location.reload() to recover dead WKWebView");
-                let _ = w.eval("location.reload()");
-            });
-            log::info!("[open-main] recovery task spawned");
-            return Ok(());
-        }
         window.show().map_err(|e| e.to_string())?;
         window.unminimize().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
-        #[cfg(target_os = "macos")]
-        force_webview_repaint(&window);
-        log::info!("[open-main] done");
     }
     Ok(())
 }
@@ -372,14 +347,6 @@ async fn quit_app(
 fn final_exit(app: tauri::AppHandle) {
     log::info!("Final exit signal received. Closing process.");
     app.exit(0);
-}
-
-#[tauri::command]
-fn get_build_info() -> serde_json::Value {
-    serde_json::json!({
-        "version": env!("CARGO_PKG_VERSION"),
-        "commit": env!("GIT_HASH"),
-    })
 }
 
 #[tauri::command]
@@ -409,52 +376,6 @@ async fn get_proxy_status(
 use std::sync::atomic::{AtomicI64, Ordering};
 static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 static LAST_HIDE_TIME: AtomicI64 = AtomicI64::new(0);
-static LAST_MAIN_DEFOCUS_TIME: AtomicI64 = AtomicI64::new(0);
-static LAST_REOPEN_TIME: AtomicI64 = AtomicI64::new(0);
-
-/// Forces WKWebView to fully re-render its content on macOS.
-///
-/// ## Background: Why this is needed
-///
-/// Tauri on macOS uses WKWebView as its rendering engine, which runs in a **separate
-/// process** (the "Web Content" process). When a window is hidden via `window.hide()`
-/// (which calls `[NSWindow orderOut:]` under the hood) and later shown again via
-/// `window.show()` (which calls `[NSWindow orderFront:]`), WKWebView does **not**
-/// always automatically re-render its content. The renderer process may have had its
-/// backing store (GPU texture / IOSurface) evicted while the window was off-screen.
-///
-/// For normal windows (with a titlebar and opaque background), this blank state is
-/// hidden — the OS shows the window's last cached screenshot. But Tunnet uses
-/// `transparent: true` + `decorations: false`, so the window has **no fallback
-/// background at all**. A blank WKWebView in this configuration appears as a
-/// completely invisible, click-through window — the user sees nothing.
-///
-/// This is a known, open Tauri/wry bug:
-///   - <https://github.com/tauri-apps/tauri/issues/8255>  (transparent window glitch after focus change)
-///   - <https://github.com/tauri-apps/tauri/issues/10306> (redraw when background color is transparent)
-///
-/// ## Why the resize trick works
-///
-/// Nudging the window size by +1 px and immediately restoring it forces the OS to
-/// invalidate the entire WKWebView compositing layer and schedule a synchronous
-/// relayout + repaint. This is more reliable than JS-side tricks (e.g. toggling
-/// `opacity` via `eval`) because:
-///   1. The resize signal comes from the **native layer**, before JS even runs.
-///   2. It guarantees a full compositing cycle regardless of the renderer process state.
-///   3. The 1 px change is imperceptible to the user (sub-millisecond round-trip).
-#[cfg(target_os = "macos")]
-fn force_webview_repaint(window: &tauri::WebviewWindow) {
-    if let Ok(size) = window.outer_size() {
-        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
-            size.width + 1,
-            size.height,
-        )));
-        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
-            size.width,
-            size.height,
-        )));
-    }
-}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -533,34 +454,6 @@ pub fn run() {
                             }
                         }
                     }
-                    tauri::WindowEvent::Focused(focused) if label == "main" => {
-                        #[cfg(target_os = "macos")]
-                        {
-                            let now = std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap_or_default()
-                                .as_millis() as i64;
-                            if *focused {
-                                let last_defocus =
-                                    LAST_MAIN_DEFOCUS_TIME.load(Ordering::Relaxed);
-                                // If inactive for more than 2 minutes, force repaint both windows
-                                // to recover from macOS WKWebView backing store release
-                                if last_defocus > 0 && (now - last_defocus) > 120_000 {
-                                    let app = window.app_handle();
-                                    if let Some(main_wv) = app.get_webview_window("main") {
-                                        force_webview_repaint(&main_wv);
-                                    }
-                                    if let Some(tray_wv) = app.get_webview_window("tray") {
-                                        if tray_wv.is_visible().unwrap_or(false) {
-                                            force_webview_repaint(&tray_wv);
-                                        }
-                                    }
-                                }
-                            } else {
-                                LAST_MAIN_DEFOCUS_TIME.store(now, Ordering::Relaxed);
-                            }
-                        }
-                    }
                     tauri::WindowEvent::CloseRequested { api, .. } if label == "main" => {
                         #[cfg(not(target_os = "linux"))]
                         {
@@ -578,21 +471,12 @@ pub fn run() {
     }
     builder
         .setup(|app| {
-            // Always enable logging: Trace in debug, Info+file in release (for diagnosing
-            // hard-to-reproduce issues like the transparent window bug on macOS).
-            {
-                let log_builder = if cfg!(debug_assertions) {
-                    tauri_plugin_log::Builder::default().level(log::LevelFilter::Trace)
-                } else {
+            if cfg!(debug_assertions) {
+                app.handle().plugin(
                     tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .target(tauri_plugin_log::Target::new(
-                            tauri_plugin_log::TargetKind::LogDir {
-                                file_name: Some("tunnet".to_string()),
-                            },
-                        ))
-                };
-                app.handle().plugin(log_builder.build())?;
+                        .level(log::LevelFilter::Trace)
+                        .build(),
+                )?;
             }
 
             #[cfg(target_os = "macos")]
@@ -720,10 +604,7 @@ pub fn run() {
 
                             let app = tray.app_handle();
                             if let Some(window) = app.get_webview_window("tray") {
-                                let visible = window.is_visible().unwrap_or(false);
-                                log::info!("[tray-click] tray window is_visible={visible}");
-                                if visible {
-                                    log::info!("[tray-click] hiding tray window");
+                                if window.is_visible().unwrap_or(false) {
                                     let _ = window.hide();
                                 } else {
                                     if let Ok(Some(monitor)) = window.current_monitor() {
@@ -764,14 +645,9 @@ pub fn run() {
                                         ));
                                     }
 
-                                    log::info!("[tray-click] showing tray window");
-                                    let show_result = window.show();
-                                    log::info!("[tray-click] show() result: {show_result:?}");
-                                    let _ = window.set_focus();
+                                    let _ = window.show();
+                                    let _ = window.set_focus(); // Re-enabled for blur detection
                                     let _ = window.set_always_on_top(true);
-                                    #[cfg(target_os = "macos")]
-                                    force_webview_repaint(&window);
-
                                 }
                             }
                         }
@@ -873,7 +749,6 @@ pub fn run() {
             set_routing_mode_command,
             get_proxy_status,
             final_exit,
-            get_build_info,
             edit_profile,
             check_node_pings,
             get_group_status,
@@ -909,64 +784,11 @@ pub fn run() {
                 }
                 #[cfg(target_os = "macos")]
                 tauri::RunEvent::Reopen { .. } => {
-                    // Tauri fires Reopen twice per Dock-icon click on macOS (known bug).
-                    // Debounce to 500 ms so we only act once.
-                    let now = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as i64;
-                    let last = LAST_REOPEN_TIME.load(Ordering::Relaxed);
-                    if (now - last) < 500 {
-                        return;
-                    }
-                    LAST_REOPEN_TIME.store(now, Ordering::Relaxed);
-
-                    log::info!("[reopen] Dock icon clicked, attempting to show main window");
+                    // Click on Dock icon triggers this when app is running but no windows are focused/visible
                     if let Some(window) = _app_handle.get_webview_window("main") {
-                        let visible = window.is_visible().unwrap_or(false);
-                        let minimized = window.is_minimized().unwrap_or(false);
-                        log::info!("[reopen] main window is_visible={visible} is_minimized={minimized}");
-
-                        // Diagnostic confirmed: window reports is_visible=true / is_minimized=false
-                        // yet is blank/transparent. This means the WKWebView renderer process was
-                        // killed by macOS (memory pressure or App Nap) while the NSWindow itself
-                        // stayed alive. In this state show() is a no-op and resize tricks have no
-                        // effect on a dead renderer process.
-                        //
-                        // Fix: force a full orderOut + orderFront cycle. Calling hide() first
-                        // (orderOut) tears down the current display connection, then show()
-                        // (orderFront/makeKeyAndOrderFront) causes macOS to establish a fresh one,
-                        // which restarts or re-attaches the WKWebView renderer process.
-                        if visible && !minimized {
-                            log::info!("[reopen] window visible but possibly blank — forcing hide+show+reload");
-                            // hide+show alone is not enough: the WKWebView renderer process
-                            // may be dead and orderOut+orderFront does not restart it.
-                            // Spawn an async task so we can insert a small delay between
-                            // hide and show (giving macOS time to tear down the old context)
-                            // then call location.reload() to force the renderer to restart.
-                            // The proxy backend is unaffected; only the UI resets.
-                            let w = window.clone();
-                            tauri::async_runtime::spawn(async move {
-                                let _ = w.hide();
-                                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                                let _ = w.show();
-                                let _ = w.set_focus();
-                                force_webview_repaint(&w);
-                                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-                                log::info!("[reopen] calling location.reload() to recover dead WKWebView");
-                                let _ = w.eval("location.reload()");
-                            });
-                            log::info!("[reopen] recovery task spawned");
-                            return;
-                        }
-
                         let _ = window.show();
                         let _ = window.unminimize();
                         let _ = window.set_focus();
-                        force_webview_repaint(&window);
-                        log::info!("[reopen] show/unminimize/focus done");
-                    } else {
-                        log::warn!("[reopen] could not get main webview window");
                     }
                 }
                 _ => {}

@@ -72,10 +72,6 @@ pub struct Inbound {
     pub interface_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mtu: Option<u16>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sniff: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub sniff_override_destination: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -221,6 +217,10 @@ pub struct RouteRule {
     pub ip_is_private: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub action: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sniff: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sniff_override_destination: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -414,6 +414,12 @@ impl SingBoxConfig {
                 rules: match mode {
                     ConfigMode::TunOnly | ConfigMode::Combined => vec![
                         RouteRule {
+                            action: Some("sniff".to_string()),
+                            sniff: Some(true),
+                            sniff_override_destination: Some(true),
+                            ..Default::default()
+                        },
+                        RouteRule {
                             inbound: Some(vec!["tun-in".to_string()]),
                             protocol: Some(vec!["dns".to_string()]),
                             port: Some(vec![53]),
@@ -425,10 +431,18 @@ impl SingBoxConfig {
                             ..Default::default()
                         },
                     ],
-                    _ => vec![RouteRule {
-                        outbound: Some("proxy".to_string()),
-                        ..Default::default()
-                    }],
+                    _ => vec![
+                        RouteRule {
+                            action: Some("sniff".to_string()),
+                            sniff: Some(true),
+                            sniff_override_destination: Some(true),
+                            ..Default::default()
+                        },
+                        RouteRule {
+                            outbound: Some("proxy".to_string()),
+                            ..Default::default()
+                        },
+                    ],
                 },
                 rule_set: None,
                 final_outbound: None,
@@ -457,8 +471,6 @@ impl SingBoxConfig {
             stack: None,
             interface_name: None,
             mtu: None,
-            sniff: Some(true),
-            sniff_override_destination: Some(true),
         });
         self
     }
@@ -493,8 +505,6 @@ impl SingBoxConfig {
             stack: Some(stack),
             interface_name: None,
             mtu: Some(mtu),
-            sniff: Some(true),
-            sniff_override_destination: None,
         });
         self
     }

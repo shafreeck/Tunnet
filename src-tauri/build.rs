@@ -24,7 +24,8 @@ fn main() {
             .args(&[
                 "build",
                 "-tags",
-                "with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls",
+                "with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls,badlinkname",
+                "-ldflags=-X github.com/sagernet/sing-box/constant.Version=1.13.6 -checklinkname=0",
                 "-buildmode=c-archive",
                 "-o",
                 "libbox.a",
@@ -70,7 +71,8 @@ fn main() {
             .args(&[
                 "build",
                 "-tags",
-                "with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls",
+                "with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls,badlinkname",
+                "-ldflags=-X github.com/sagernet/sing-box/constant.Version=1.13.6 -checklinkname=0",
                 "-buildmode=c-archive",
                 "-o",
                 "libbox_ios.a",
@@ -125,7 +127,8 @@ fn main() {
         cmd.current_dir(&libbox_dir).args(&[
             "build",
             "-tags",
-            "with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls,android",
+            "with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls,android,badlinkname",
+            "-ldflags=-X github.com/sagernet/sing-box/constant.Version=1.13.6 -checklinkname=0",
             "-buildmode=c-shared",
         ]);
 
@@ -226,7 +229,8 @@ fn main() {
             .args(&[
                 "build",
                 "-tags",
-                "with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls",
+                "with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls,badlinkname",
+                "-ldflags=-X github.com/sagernet/sing-box/constant.Version=1.13.6 -checklinkname=0",
                 "-buildmode=c-archive",
                 "-o",
                 "libbox.a",
@@ -271,9 +275,9 @@ fn main() {
             .args(&[
                 "build",
                 "-tags",
-                "with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls,with_wintun",
+                "with_clash_api,with_gvisor,with_quic,with_wireguard,with_utls,with_wintun,badlinkname",
                 "-buildmode=c-shared",
-                "-ldflags=-s -w -extldflags '-static'",
+                "-ldflags=-s -w -extldflags '-static' -checklinkname=0 -X github.com/sagernet/sing-box/constant.Version=1.13.6",
                 "-o",
                 "libbox.dll",
                 "main.go",

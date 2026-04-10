@@ -4,6 +4,7 @@ use reqwest::Client;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
+use chrono::Local;
 
 const SETTINGS_FILENAME: &str = "settings.json";
 
@@ -399,17 +400,67 @@ impl<R: Runtime> CoreManager<R> {
     }
 
     pub fn get_settings_path(&self) -> PathBuf {
-        let mut base = self
+        self.get_app_data_dir().join(SETTINGS_FILENAME)
+    }
+
+    pub fn get_app_data_dir(&self) -> PathBuf {
+        let mut app_local_data = self
             .app
             .path()
             .app_local_data_dir()
-            .unwrap_or_else(|_| PathBuf::from("."));
+            .expect("failed to resolve app local data dir");
+
+        // Isolate dev data from production data to avoid version conflicts
         if cfg!(debug_assertions) {
-            let mut name = base.file_name().unwrap_or_default().to_os_string();
+            let mut name = app_local_data
+                .file_name()
+                .unwrap_or_default()
+                .to_os_string();
             name.push("_dev");
-            base.set_file_name(name);
+            app_local_data.set_file_name(name);
         }
-        base.join(SETTINGS_FILENAME)
+        app_local_data
+    }
+
+    pub fn backup_data(&self) -> Result<(), String> {
+        let app_data_dir = self.get_app_data_dir();
+        let backup_root = app_data_dir.join("backups");
+        let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
+        let backup_dir = backup_root.join(timestamp);
+
+        fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
+
+        let files_to_backup = ["settings.json", "profiles_v2.json", "rules.json", "groups.json"];
+        for file in files_to_backup {
+            let src = app_data_dir.join(file);
+            if src.exists() {
+                let dest = backup_dir.join(file);
+                fs::copy(&src, &dest).map_err(|e| e.to_string())?;
+            }
+        }
+
+        info!("Configuration backed up to {:?}", backup_dir);
+        Ok(())
+    }
+
+    pub fn migrate_data(&self, mut settings: crate::settings::AppSettings) -> Result<crate::settings::AppSettings, String> {
+        if settings.config_version >= 2 {
+            return Ok(settings);
+        }
+
+        info!("Migrating data from version {} to 2...", settings.config_version);
+        self.backup_data()?;
+
+        // Version 1 -> 2 Migration (sing-box v1.13)
+        // In reality, most of the logic is in config.rs generation.
+        // But we might want to update rules.json if we had any deprecated fields there.
+        // For now, we just bump the version to signal that we acknowledged the upgrade.
+
+        settings.config_version = 2;
+        self.save_settings(&settings)?;
+        
+        info!("Data migration to version 2 completed.");
+        Ok(settings)
     }
 
     pub fn save_settings(&self, settings: &crate::settings::AppSettings) -> Result<(), String> {
@@ -430,15 +481,22 @@ impl<R: Runtime> CoreManager<R> {
             return Ok(crate::settings::AppSettings::default());
         }
         let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        match serde_json::from_str::<crate::settings::AppSettings>(&content) {
-            Ok(settings) => Ok(settings),
+        let settings = match serde_json::from_str::<crate::settings::AppSettings>(&content) {
+            Ok(s) => s,
             Err(e) => {
                 log::error!(
                     "Failed to parse settings.json: {}. Falling back to default.",
                     e
                 );
-                Ok(crate::settings::AppSettings::default())
+                crate::settings::AppSettings::default()
             }
+        };
+
+        // Check for migration
+        if settings.config_version < 2 {
+            self.migrate_data(settings)
+        } else {
+            Ok(settings)
         }
     }
 }

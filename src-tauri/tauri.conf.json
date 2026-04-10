@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Tunnet",
-  "version": "0.3.3",
+  "version": "0.3.1",
   "identifier": "run.tunnet",
   "build": {
     "frontendDist": "../out",
@@ -18,11 +18,11 @@
         "height": 720,
         "resizable": true,
         "fullscreen": false,
-        "transparent": true,
+        "transparent": false,
         "decorations": false,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "shadow": false,
+        "shadow": true,
         "dragDropEnabled": true
       },
       {
@@ -31,12 +31,12 @@
         "width": 320,
         "height": 450,
         "resizable": false,
-        "transparent": true,
+        "transparent": false,
         "decorations": false,
         "alwaysOnTop": true,
         "visible": false,
         "skipTaskbar": true,
-        "shadow": false
+        "shadow": true
       }
     ],
     "security": {

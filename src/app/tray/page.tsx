@@ -396,7 +396,7 @@ export default function TrayPage() {
     if (!mounted) return null
 
     return (
-        <div className="h-screen w-full flex flex-col select-none transition-colors duration-300 bg-transparent text-text-primary">
+        <div className="h-screen w-full flex flex-col select-none transition-colors duration-300 bg-app-bg text-text-primary">
             <div className="h-12 shrink-0 flex items-center justify-between px-4 border-b border-white/3 dark:border-white/3 bg-black/5 dark:bg-white/5">
                 <div className="flex items-center gap-2">
                     <div className={cn(
