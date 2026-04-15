@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import { Plus, Search, Trash2, Edit2, LayoutGrid, Check, X, Loader2, Play, Zap, Target, ArrowUpDown } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, safeUnlisten } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
 import { listen, emit } from "@tauri-apps/api/event"
 import { toast } from "sonner"
@@ -107,7 +107,7 @@ export function GroupsView({ allNodes, activeTargetId, onSelectTarget, isConnect
         })
 
         return () => {
-            unlistenGroupsUpdate.then(f => f())
+            safeUnlisten(unlistenGroupsUpdate)
         }
     }, [])
 

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { X, Clipboard, Link, Plus, QrCode, Edit3, FileText, Upload } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
-import { cn } from "@/lib/utils"
+import { cn, safeUnlisten } from "@/lib/utils"
 
 interface AddNodeModalProps {
     isOpen: boolean
@@ -50,7 +50,7 @@ export function AddNodeModal({ isOpen, onClose, onManual, onImport, title }: Add
 
         return () => {
             active = false;
-            unlistenFuncs.forEach(fn => fn());
+            unlistenFuncs.forEach(fn => safeUnlisten(fn));
             unlistenFuncs = [];
         }
     }, [isOpen, onImport, onClose]);

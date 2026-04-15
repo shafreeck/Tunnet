@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { listen, emit } from "@tauri-apps/api/event"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn, safeUnlisten } from "@/lib/utils"
 import { AppSettings, defaultSettings, getAppSettings, saveAppSettings } from "@/lib/settings"
 import { Sidebar, ViewType } from "@/components/dashboard/sidebar"
 import { LocationsView } from "@/components/dashboard/locations-view"
@@ -84,6 +84,23 @@ export default function Home() {
 
   // Logs State
   const [logs, setLogs] = useState<{ local: string[], helper: string[] }>({ local: [], helper: [] })
+  const pendingLogsRef = useRef<{ local: string[], helper: string[] }>({ local: [], helper: [] })
+
+  // Batch log updates to prevent UI thread lock during bursts (e.g. after sleep/wake)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (pendingLogsRef.current.local.length > 0 || pendingLogsRef.current.helper.length > 0) {
+        setLogs(prev => {
+          const nextLocal = [...prev.local, ...pendingLogsRef.current.local].slice(-1000);
+          const nextHelper = [...prev.helper, ...pendingLogsRef.current.helper].slice(-1000);
+          pendingLogsRef.current = { local: [], helper: [] };
+          return { local: nextLocal, helper: nextHelper };
+        });
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, []);
+
   const [showLogs, setShowLogs] = useState(false)
   const [showAddSubscription, setShowAddSubscription] = useState(false)
 
@@ -141,28 +158,28 @@ export default function Home() {
   // Traffic State (Global)
   const [traffic, setTraffic] = useState({ up: 0, down: 0 })
 
+  // Traffic Polling (Pull instead of Push)
   useEffect(() => {
-    let active = true
-    let unlistenFn: (() => void) | undefined
-
     if (!isConnected) {
-      setTraffic({ up: 0, down: 0 })
-      return
+      setTraffic({ up: 0, down: 0 });
+      return;
     }
 
-    listen<any>("traffic-update", (event) => {
-      if (!active) return
-      setTraffic(event.payload)
-    }).then(f => {
-      if (active) unlistenFn = f
-      else f()
-    })
+    const poll = async () => {
+      try {
+        const data: any = await invoke("poll_traffic");
+        setTraffic(data);
+      } catch (e) {
+        // Silently fail if IPC is busy or app is shutting down
+      }
+    };
 
-    return () => {
-      active = false
-      if (unlistenFn) unlistenFn()
-    }
-  }, [isConnected])
+    // Initial poll
+    poll();
+
+    const timer = setInterval(poll, 1000);
+    return () => clearInterval(timer);
+  }, [isConnected]);
 
   // Sync derived state
   useEffect(() => {
@@ -467,12 +484,12 @@ export default function Home() {
           listen<{ source: string, message: string }>("proxy-log", (event) => {
             if (!active) return
             const { source, message } = event.payload
-            setLogs(prev => {
-              const stream = source === "helper" ? "helper" : "local"
-              const newStream = [...prev[stream], message]
-              const limitedStream = newStream.length > 1000 ? newStream.slice(-1000) : newStream
-              return { ...prev, [stream]: limitedStream }
-            })
+            const stream = source === "helper" ? "helper" : "local"
+            pendingLogsRef.current[stream].push(message);
+            // Cap the pending buffer to 1000 to prevent runaway memory if the sync timer hangs
+            if (pendingLogsRef.current[stream].length > 1000) {
+                pendingLogsRef.current[stream].shift();
+            }
           }),
           listen<AppSettings>("settings-update", (event) => {
             if (!active) return
@@ -561,7 +578,7 @@ export default function Home() {
         ])
 
         if (!active) {
-          results.forEach(f => f())
+          results.forEach(f => safeUnlisten(f))
         } else {
           unlisteners.push(...results)
         }
@@ -623,7 +640,7 @@ export default function Home() {
 
     return () => {
       active = false
-      unlisteners.forEach(f => f())
+      unlisteners.forEach(f => safeUnlisten(f))
     }
   }, [])
 
@@ -678,12 +695,12 @@ export default function Home() {
       }
     }).then(f => {
       if (active) unlistenFn = f
-      else f()
+      else safeUnlisten(f)
     })
 
     return () => {
       active = false
-      if (unlistenFn) unlistenFn()
+      safeUnlisten(unlistenFn)
     }
   }, [])
 
@@ -699,7 +716,7 @@ export default function Home() {
         .catch(console.error)
     }).then(f => {
       if (active) unlistenFn = f
-      else f()
+      else safeUnlisten(f)
     })
 
     // Initial fetch
@@ -709,7 +726,7 @@ export default function Home() {
 
     return () => {
       active = false
-      if (unlistenFn) unlistenFn()
+      safeUnlisten(unlistenFn)
     }
   }, [])
 
@@ -726,12 +743,12 @@ export default function Home() {
       }
     }).then(f => {
       if (active) unlistenFn = f
-      else f()
+      else safeUnlisten(f)
     })
 
     return () => {
       active = false
-      if (unlistenFn) unlistenFn()
+      safeUnlisten(unlistenFn)
     }
   }, [isConnected])
 
@@ -1036,17 +1053,9 @@ export default function Home() {
 
     setup();
     return () => {
-      const cleanup = (ul: any) => {
-        if (!ul) return;
-        if (typeof ul.then === 'function') {
-          ul.then((f: any) => f?.());
-        } else {
-          ul();
-        }
-      };
-      cleanup(unlistenDragEnter);
-      cleanup(unlistenDragLeave);
-      cleanup(unlistenDragDrop);
+      safeUnlisten(unlistenDragEnter);
+      safeUnlisten(unlistenDragLeave);
+      safeUnlisten(unlistenDragDrop);
     };
   }, []); // Run once, use ref for logic
 
@@ -1094,7 +1103,7 @@ export default function Home() {
       }
     }
     setup()
-    return () => { unlisten && unlisten() }
+    return () => { safeUnlisten(unlisten) }
   }, [])
 
   const handleUpdateProfile = async (id: string) => {

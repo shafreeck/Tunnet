@@ -10,6 +10,7 @@ import { getFlagUrlFromCode } from "@/lib/flags"
 import { useModifierKey } from "@/hooks/use-modifier-key"
 import { invoke } from "@tauri-apps/api/core"
 import { listen } from "@tauri-apps/api/event"
+import { safeUnlisten } from "@/lib/utils"
 
 interface ConnectionStatusProps {
     isConnected: boolean;
@@ -75,7 +76,7 @@ export function ConnectionStatus({ isConnected, serverName, flagUrl, latency, on
 
         return () => {
             active = false
-            unlistenPromise.then(unlisten => unlisten())
+            safeUnlisten(unlistenPromise)
         }
     }, [fetchBackendStatus])
 

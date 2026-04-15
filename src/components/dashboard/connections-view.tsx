@@ -129,10 +129,17 @@ export function ConnectionsView() {
     }
 
     useEffect(() => {
-        const unlisten = listen<{ up: number, down: number }>("traffic-update", (event) => {
-            setTotalSpeed(event.payload)
-        })
-        return () => { unlisten.then(f => f()) }
+        const poll = async () => {
+            try {
+                const data: any = await invoke("poll_traffic");
+                setTotalSpeed(data);
+            } catch (e) {
+                // Ignore
+            }
+        };
+        poll();
+        const timer = setInterval(poll, 1000);
+        return () => clearInterval(timer);
     }, [])
 
     useEffect(() => {

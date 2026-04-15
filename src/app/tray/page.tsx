@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef } from "react"
+// HMR Trigger: Diagnostic comment to force tray reload
 import { invoke } from "@tauri-apps/api/core"
 import { listen, emit } from "@tauri-apps/api/event"
 import { AppSettings, defaultSettings, getAppSettings, saveAppSettings } from "@/lib/settings"
@@ -235,26 +236,34 @@ export default function TrayPage() {
         checkLatency()
     }, [checkLatency])
 
+    // Traffic Polling & Heartbeat (Pull instead of Push)
     useEffect(() => {
-        if (!status.is_running) {
-            setTraffic({ up: 0, down: 0 })
-            return
-        }
+        const poll = async () => {
+            // Send heartbeat regardless of proxy status to ensure Rust knows we're alive
+            try {
+                await invoke("tray_heartbeat");
+                
+                if (status.is_running) {
+                    const data: any = await invoke("poll_traffic");
+                    const { up, down } = data;
+                    setTraffic({ up, down });
+                    setTrafficHistory(prev => {
+                        const next = [...prev, { up, down }];
+                        if (next.length > 30) next.shift();
+                        return next;
+                    });
+                }
+            } catch (e) {
+                // Ignore
+            }
+        };
 
-        const unlistenPromise = listen<any>("traffic-update", (event) => {
-            const { up, down } = event.payload
-            setTraffic({ up, down })
-            setTrafficHistory(prev => {
-                const next = [...prev, { up, down }]
-                if (next.length > 30) next.shift()
-                return next
-            })
-        })
+        // Initial poll
+        poll();
 
-        return () => {
-            unlistenPromise.then(f => f())
-        }
-    }, [status.is_running])
+        const timer = setInterval(poll, 1000);
+        return () => clearInterval(timer);
+    }, [status.is_running]);
 
     const toggleConnection = async () => {
         if (isTransitioning) return
@@ -623,31 +632,33 @@ export default function TrayPage() {
                                 </div>
                             </div>
                             <div className="h-8 flex items-end gap-px opacity-80">
-                                {trafficHistory.map((val, i) => {
+                                {(() => {
                                     const maxTotal = Math.max(...trafficHistory.map(t => t.up + t.down), 1024)
-                                    const total = val.up + val.down
-                                    const totalHeight = Math.min((total / maxTotal) * 100, 100)
+                                    return trafficHistory.map((val, i) => {
+                                        const total = val.up + val.down
+                                        const totalHeight = Math.min((total / maxTotal) * 100, 100)
 
-                                    const upRatio = total > 0 ? val.up / total : 0
-                                    const downRatio = total > 0 ? val.down / total : 0
+                                        const upRatio = total > 0 ? val.up / total : 0
+                                        const downRatio = total > 0 ? val.down / total : 0
 
-                                    return (
-                                        <div
-                                            key={i}
-                                            className="flex-1 flex flex-col justify-end bg-black/5 dark:bg-white/5 rounded-t-[1px] overflow-hidden relative"
-                                            style={{ height: `${Math.max(totalHeight, 1)}%` }}
-                                        >
+                                        return (
                                             <div
-                                                className="w-full bg-emerald-500 transition-all duration-300"
-                                                style={{ height: `${upRatio * 100}%` }}
-                                            />
-                                            <div
-                                                className="w-full bg-primary transition-all duration-300"
-                                                style={{ height: `${downRatio * 100}%` }}
-                                            />
-                                        </div>
-                                    )
-                                })}
+                                                key={i}
+                                                className="flex-1 flex flex-col justify-end bg-black/5 dark:bg-white/5 rounded-t-[1px] overflow-hidden relative"
+                                                style={{ height: `${Math.max(totalHeight, 1)}%` }}
+                                            >
+                                                <div
+                                                    className="w-full bg-emerald-500 transition-all duration-300"
+                                                    style={{ height: `${upRatio * 100}%` }}
+                                                />
+                                                <div
+                                                    className="w-full bg-primary transition-all duration-300"
+                                                    style={{ height: `${downRatio * 100}%` }}
+                                                />
+                                            </div>
+                                        )
+                                    })
+                                })()}
                             </div>
                         </div>
                     )}

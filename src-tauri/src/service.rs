@@ -104,6 +104,8 @@ pub struct ProxyService<R: Runtime> {
     traffic_running: std::sync::Arc<std::sync::atomic::AtomicBool>,
     running_settings: Mutex<Option<crate::settings::AppSettings>>,
     is_starting: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    last_wake_up_time: std::sync::Arc<std::sync::atomic::AtomicI64>,
+    latest_traffic: std::sync::Arc<std::sync::Mutex<(u64, u64)>>,
 }
 
 impl<R: Runtime> ProxyService<R> {
@@ -134,7 +136,26 @@ impl<R: Runtime> ProxyService<R> {
             traffic_running: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             running_settings: Mutex::new(None),
             is_starting: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            last_wake_up_time: std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0)),
+            latest_traffic: std::sync::Arc::new(std::sync::Mutex::new((0, 0))),
         }
+    }
+
+    pub fn get_latest_traffic(&self) -> (u64, u64) {
+        if let Ok(traffic) = self.latest_traffic.lock() {
+            *traffic
+        } else {
+            (0, 0)
+        }
+    }
+
+    pub fn trigger_wake_up(&self) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+        self.last_wake_up_time.store(now, std::sync::atomic::Ordering::SeqCst);
+        debug!("ProxyService: System wake-up triggered at {}ms. Buffering logs/traffic...", now);
     }
 
     pub fn init(&self) {
@@ -424,23 +445,49 @@ impl<R: Runtime> ProxyService<R> {
                 self.log_running
                     .store(true, std::sync::atomic::Ordering::SeqCst);
 
-                // Spawn local log forwarder
+                // Spawn local log forwarder with backpressure protection
                 let app_clone = self.app.clone();
                 let log_running_clone = self.log_running.clone();
+                let last_wake_clone = self.last_wake_up_time.clone();
                 std::thread::spawn(move || {
                     let reader = BufReader::new(reader);
+                    // Experiment: Slight delay to prevent IPC flooding during boot/wake bursts
+                    let mut log_batch = Vec::with_capacity(10);
+                    let mut last_emit = std::time::Instant::now();
+
                     for line in reader.lines() {
                         if !log_running_clone.load(std::sync::atomic::Ordering::SeqCst) {
                             break;
                         }
                         if let Ok(l) = line {
-                            let _ = app_clone.emit(
-                                "proxy-log",
-                                LogEvent {
-                                    source: "local".to_string(),
-                                    message: l,
-                                },
-                            );
+                            log_batch.push(l);
+                            
+                            // Emit every 5 lines or every 100ms
+                            if log_batch.len() >= 5 || last_emit.elapsed().as_millis() > 100 {
+                                // Wake-up Silence Barrier: Avoid saturating IPC while WebKit/GPU is re-initializing
+                                let now = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_millis() as i64;
+                                let last_wake = last_wake_clone.load(std::sync::atomic::Ordering::SeqCst);
+                                
+                                if (now - last_wake) < 1500 && last_wake > 0 {
+                                    // Slow down during silence period
+                                    std::thread::sleep(std::time::Duration::from_millis(100));
+                                } else {
+                                    for msg in log_batch.drain(..) {
+                                        let _ = app_clone.emit_to(
+                                            "main",
+                                            "proxy-log",
+                                            LogEvent {
+                                                source: "local".to_string(),
+                                                message: msg,
+                                            },
+                                        );
+                                    }
+                                    last_emit = std::time::Instant::now();
+                                }
+                            }
                         }
                     }
                     debug!("Local log forwarder terminated.");
@@ -558,7 +605,8 @@ impl<R: Runtime> ProxyService<R> {
                                     Ok(_) => {
                                         let message = line.trim();
                                         if !message.is_empty() {
-                                            let _ = app_clone.emit(
+                                            let _ = app_clone.emit_to(
+                                                "main",
                                                 "proxy-log",
                                                 LogEvent {
                                                     source: "helper".to_string(),
@@ -4301,10 +4349,12 @@ impl<R: Runtime> ProxyService<R> {
                 let current_up = m_up + h_up;
                 let current_down = m_down + h_down;
 
-                let _ = app_handle_task.emit("traffic-update", serde_json::json!({
-                    "up": current_up,
-                    "down": current_down
-                }));
+                // REFACTOR: Instead of pushing via IPC, we update a shared state for polling
+                // We clone the Arc to avoid lifetime issues with State<'_, T>
+                let latest_traffic_arc = service_state.latest_traffic.clone();
+                if let Ok(mut traffic) = latest_traffic_arc.lock() {
+                    *traffic = (current_up, current_down);
+                };
             }
         });
     }

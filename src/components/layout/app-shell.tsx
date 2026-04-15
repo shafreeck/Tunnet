@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
+import { safeUnlisten } from "@/lib/utils"
 import { listen } from "@tauri-apps/api/event"
 import { invoke } from "@tauri-apps/api/core"
 
@@ -35,10 +36,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             })
         }
 
-        setupListener()
+        const unlistenPromise = setupListener()
 
         return () => {
-            if (unlisten) unlisten()
+            safeUnlisten(unlistenPromise)
         }
     }, [])
 

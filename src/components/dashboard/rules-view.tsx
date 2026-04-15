@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import { Plus, Search, Trash2, Edit2, Shield, Globe, Monitor, AlertCircle, ChevronUp, ChevronDown, Loader2, GripVertical, Check, RotateCcw, Zap, X } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, safeUnlisten } from "@/lib/utils"
 import { invoke } from "@tauri-apps/api/core"
 import { emit, listen } from "@tauri-apps/api/event"
 import { toast } from "sonner"
@@ -153,8 +153,8 @@ export function RulesView({
         })
 
         return () => {
-            unlistenProxyStatus.then(f => f())
-            unlistenRulesUpdate.then(f => f())
+            safeUnlisten(unlistenProxyStatus)
+            safeUnlisten(unlistenRulesUpdate)
         }
     }, [isLoaded, onReload])
 

@@ -1,3 +1,5 @@
+#![allow(unexpected_cfgs)]
+
 mod config;
 mod helper_client;
 mod installer;
@@ -9,7 +11,30 @@ mod service;
 pub mod settings;
 
 use service::ProxyService;
+use std::sync::OnceLock;
 use tauri::{Manager, State};
+
+static APP_ACTIVITY_TOKEN: OnceLock<usize> = OnceLock::new();
+static TRAY_LAST_HEARTBEAT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+#[tauri::command]
+fn tray_heartbeat() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    TRAY_LAST_HEARTBEAT.store(now, std::sync::atomic::Ordering::SeqCst);
+}
+
+#[tauri::command]
+fn poll_traffic(service: tauri::State<'_, service::ProxyService<tauri::Wry>>) -> serde_json::Value {
+    let (up, down) = service.get_latest_traffic();
+    serde_json::json!({
+        "up": up,
+        "down": down,
+    })
+}
+
 
 #[tauri::command]
 async fn start_proxy(
@@ -377,6 +402,23 @@ use std::sync::atomic::{AtomicI64, Ordering};
 static LAST_CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 static LAST_HIDE_TIME: AtomicI64 = AtomicI64::new(0);
 
+fn create_tray_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    log::info!("Creating/Re-creating tray window...");
+    let window = tauri::WebviewWindowBuilder::new(app, "tray", tauri::WebviewUrl::App("/tray".into()))
+        .inner_size(320.0, 450.0)
+        .resizable(false)
+        .transparent(true)
+        .decorations(false)
+        .always_on_top(true)
+        .visible(false)
+        .skip_taskbar(true)
+        .shadow(true)
+        .build()?;
+    
+    // Perform any platform-specific initialization here if needed
+    Ok(window)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();
@@ -436,33 +478,69 @@ pub fn run() {
                     let service = app.state::<ProxyService<tauri::Wry>>();
                     service.emergency_cleanup();
                     std::process::exit(0);
+                } else if event.id() == "reload_ui" {
+                    log::warn!("'Force Reload UI' clicked. Re-initializing Renderers...");
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.reload();
+                    }
+                    if let Some(window) = app.get_webview_window("tray") {
+                        let _ = window.reload();
+                    } else {
+                        // If tray window is missing during 'Force Reload', recreate it
+                        let _ = create_tray_window(app);
+                    }
                 }
             })
             .on_window_event(|window, event| {
-                let label = window.label();
                 match event {
-                    tauri::WindowEvent::Focused(focused) if label == "tray" => {
-                        if !*focused {
-                            let now = std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap_or_default()
-                                .as_millis() as i64;
-                            let last_click = LAST_CLICK_TIME.load(Ordering::Relaxed);
-                            if (now - last_click) > 500 {
-                                let _ = window.hide();
-                                LAST_HIDE_TIME.store(now, Ordering::Relaxed);
+                    tauri::WindowEvent::Focused(focused) => {
+                        let label = window.label();
+                        if *focused {
+                            log::info!("Window '{}' gained focus. Triggering safe geometry nudge (delayed)...", label);
+                            
+                            // Safe Nudge: Delay nudge by 1500ms to allow macOS graphics/app-nap to stabilize
+                            let window_clone = window.clone();
+                            tauri::async_runtime::spawn(async move {
+                                tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                                if let Ok(mut size) = window_clone.inner_size() {
+                                    log::info!("Performing safe geometry nudge for window '{}' after stabilization delay.", window_clone.label());
+                                    let original_w = size.width;
+                                    size.width += 1;
+                                    let _ = window_clone.set_size(tauri::Size::Physical(size));
+                                    size.width = original_w;
+                                    let _ = window_clone.set_size(tauri::Size::Physical(size));
+                                }
+                            });
+                        } else {
+                            log::info!("Window '{}' lost focus.", label);
+                            if label == "tray" {
+                                let now = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_millis() as i64;
+                                let last_click = LAST_CLICK_TIME.load(Ordering::Relaxed);
+                                if (now - last_click) > 500 {
+                                    let _ = window.hide();
+                                    LAST_HIDE_TIME.store(now, Ordering::Relaxed);
+                                }
                             }
                         }
                     }
-                    tauri::WindowEvent::CloseRequested { api, .. } if label == "main" => {
-                        #[cfg(not(target_os = "linux"))]
-                        {
-                            let _ = window.hide();
-                            api.prevent_close();
-                        }
-                        #[cfg(target_os = "linux")]
-                        {
-                            let _ = window.app_handle().exit(0);
+                    tauri::WindowEvent::Destroyed => {
+                        log::warn!("Window '{}' was destroyed!", window.label());
+                    }
+                    tauri::WindowEvent::CloseRequested { api, .. } => {
+                        let label = window.label();
+                        if label == "main" {
+                            #[cfg(not(target_os = "linux"))]
+                            {
+                                let _ = window.hide();
+                                api.prevent_close();
+                            }
+                            #[cfg(target_os = "linux")]
+                            {
+                                let _ = window.app_handle().exit(0);
+                            }
                         }
                     }
                     _ => {}
@@ -481,13 +559,36 @@ pub fn run() {
 
             #[cfg(target_os = "macos")]
             {
+                // Disable App Nap to prevent WebView process from being throttled/blanked
+                // We avoid LatencyCritical to prevent aggressive OS termination on wake delays
+                unsafe {
+                    use objc::{msg_send, sel, sel_impl};
+                    let process_info: cocoa::base::id = msg_send![objc::class!(NSProcessInfo), processInfo];
+                    // NSActivityIdleSystemSleepDisabled | NSActivityUserInitiated 
+                    let options: u64 = 0x0000000000000001 | 0x0000000000000010;
+                    let reason_str = "Tunnet background service and UI responsiveness\0";
+                    let reason: cocoa::base::id = msg_send![objc::class!(NSString), stringWithUTF8String: reason_str.as_ptr()];
+                    let activity: cocoa::base::id = msg_send![process_info, beginActivityWithOptions: options reason: reason];
+                    
+                    if !activity.is_null() {
+                        let _ = APP_ACTIVITY_TOKEN.set(activity as usize);
+                        log::info!("macOS App Nap disabled (balanced mode) via NSProcessInfo.");
+                    }
+                }
+            }
+
+            #[cfg(target_os = "macos")]
+            {
                 use tauri::menu::{Menu, MenuItem, Submenu};
                 let app_handle = app.handle();
                 // Create application menu (App Name)
                 let quit_i =
                     MenuItem::with_id(app_handle, "quit", "Quit Tunnet", true, Some("Cmd+Q"))
                         .unwrap();
-                let app_menu = Submenu::with_items(app_handle, "Tunnet", true, &[&quit_i]).unwrap();
+                let reload_ui_i =
+                    MenuItem::with_id(app_handle, "reload_ui", "Force Reload UI", true, Some("Cmd+Shift+R"))
+                        .unwrap();
+                let app_menu = Submenu::with_items(app_handle, "Tunnet", true, &[&reload_ui_i, &quit_i]).unwrap();
 
                 // Create Edit menu (Critical for Copy/Paste shortcuts to work)
                 let undo_i =
@@ -603,52 +704,97 @@ pub fn run() {
                             }
 
                             let app = tray.app_handle();
-                            if let Some(window) = app.get_webview_window("tray") {
-                                if window.is_visible().unwrap_or(false) {
-                                    let _ = window.hide();
-                                } else {
-                                    if let Ok(Some(monitor)) = window.current_monitor() {
-                                        // Use physical sizes for all calculations
-                                        let win_size = window
-                                            .outer_size()
-                                            .unwrap_or(tauri::PhysicalSize::new(320, 480));
-                                        let win_w = win_size.width as i32;
-                                        let win_h = win_size.height as i32;
-
-                                        let workarea = monitor.work_area();
-                                        let workarea_size = workarea.size;
-                                        let workarea_pos = workarea.position;
-
-                                        let wa_w = workarea_size.width as i32;
-                                        let wa_h = workarea_size.height as i32;
-                                        let wa_x = workarea_pos.x;
-                                        let wa_y = workarea_pos.y;
-
-                                        let mut x = (position.x as i32) - (win_w / 2);
-                                        let mut y = position.y as i32;
-
-                                        // Vertical Adjustment (Flip if overflow workarea bottom)
-                                        if y + win_h > wa_y + wa_h {
-                                            y = position.y as i32 - win_h - 36;
+                            // Self-healing: Get or Recreate the tray window
+                            let window = match app.get_webview_window("tray") {
+                                Some(w) => w,
+                                None => {
+                                    log::warn!("Tray window not found. Attempting to recreate...");
+                                    match create_tray_window(app) {
+                                        Ok(w) => w,
+                                        Err(e) => {
+                                            log::error!("Failed to recreate tray window: {}", e);
+                                            return;
                                         }
+                                    }
+                                }
+                            };
 
-                                        // Horizontal Adjustment (Clamp to workarea edges)
-                                        if x + win_w > wa_x + wa_w {
-                                            x = wa_x + wa_w - win_w;
-                                        }
-                                        if x < wa_x {
-                                            x = wa_x;
-                                        }
+                            if window.is_visible().unwrap_or(false) {
+                                let _ = window.hide();
+                            } else {
+                                // Default positioning if monitor detection fails
+                                let mut position_set = false;
+                                if let Ok(Some(monitor)) = window.current_monitor() {
+                                    // Use physical sizes for all calculations
+                                    let win_size = window
+                                        .outer_size()
+                                        .unwrap_or(tauri::PhysicalSize::new(320, 480));
+                                    let win_w = win_size.width as i32;
+                                    let win_h = win_size.height as i32;
 
-                                        let _ = window.set_position(tauri::Position::Physical(
-                                            tauri::PhysicalPosition { x, y },
-                                        ));
+                                    let workarea = monitor.work_area();
+                                    let workarea_size = workarea.size;
+                                    let workarea_pos = workarea.position;
+
+                                    let wa_w = workarea_size.width as i32;
+                                    let wa_h = workarea_size.height as i32;
+                                    let wa_x = workarea_pos.x;
+                                    let wa_y = workarea_pos.y;
+
+                                    let mut x = (position.x as i32) - (win_w / 2);
+                                    let mut y = position.y as i32;
+
+                                    // Vertical Adjustment (Flip if overflow workarea bottom)
+                                    if y + win_h > wa_y + wa_h {
+                                        y = position.y as i32 - win_h - 36;
                                     }
 
-                                    let _ = window.show();
-                                    let _ = window.set_focus(); // Re-enabled for blur detection
-                                    let _ = window.set_always_on_top(true);
+                                    // Horizontal Adjustment (Clamp to workarea edges)
+                                    if x + win_w > wa_x + wa_w {
+                                        x = wa_x + wa_w - win_w;
+                                    }
+                                    if x < wa_x {
+                                        x = wa_x;
+                                    }
+
+                                    let _ = window.set_position(tauri::Position::Physical(
+                                        tauri::PhysicalPosition { x, y },
+                                    ));
+                                    position_set = true;
                                 }
+
+                                if !position_set {
+                                    log::warn!("Could not detect monitor for tray positioning. Showing at last known/default position.");
+                                }
+
+                                // Pull-based Recovery Architecture:
+                                // Instead of synchronous eval (blocking), we show the window and verify liveness via heartbeat
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                                let _ = window.set_always_on_top(true);
+
+                                let app_handle = app.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    // Wait for JS to potentially wake up and send heartbeat
+                                    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+                                    let now = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_millis() as i64;
+                                    let last_heartbeat = TRAY_LAST_HEARTBEAT.load(std::sync::atomic::Ordering::SeqCst);
+                                    
+                                    // If no heartbeat for > 2 seconds, it's definitely dead or stuck
+                                    if (now - last_heartbeat) > 2000 {
+                                        log::warn!("Tray health check FAILED (no heartbeat). Re-creating silently...");
+                                        if let Some(w) = app_handle.get_webview_window("tray") {
+                                            let _ = w.close();
+                                        }
+                                        if let Ok(new_window) = create_tray_window(&app_handle) {
+                                            std::thread::sleep(std::time::Duration::from_millis(1500));
+                                            let _ = new_window.show();
+                                        }
+                                    }
+                                });
                             }
                         }
                     })
@@ -755,11 +901,13 @@ pub fn run() {
             refresh_geodata,
             restart_app,
             get_node_link,
+            poll_traffic,
+            tray_heartbeat,
             export_node_content,
             export_profile_content,
             export_group_content,
             export_all_nodes,
-            export_singbox_config,
+                    export_singbox_config,
             export_tunnet_backup,
             import_tunnet_backup,
             decode_qr,
@@ -789,6 +937,28 @@ pub fn run() {
                         let _ = window.show();
                         let _ = window.unminimize();
                         let _ = window.set_focus();
+                    }
+                }
+                // Wake-up Guard: Trigger silence period when the app resumes or wakes up
+                tauri::RunEvent::Resumed => {
+                    let service = _app_handle.state::<ProxyService<tauri::Wry>>();
+                    service.trigger_wake_up();
+                }
+                // Root Cause Detective: Watch for Webview process lifecycle and window events
+                tauri::RunEvent::WebviewEvent { label: _, event: webview_event, .. } => {
+                    match webview_event {
+                        _ => {
+                            // In Tauri v2, we satisfy the non-exhaustive enum here
+                        }
+                    }
+                }
+                tauri::RunEvent::WindowEvent { label, event: window_event, .. } => {
+                    match window_event {
+                        tauri::WindowEvent::Destroyed => {
+                            log::error!("CRITICAL SIGNAL: Webview window '{}' has been physically DESTROYED.", label);
+                            log::error!("MECHANISM CHECK: This often follows a renderer crash (SIGKILL/SIGSEGV).");
+                        }
+                        _ => {}
                     }
                 }
                 _ => {}

@@ -44,32 +44,34 @@ export function TrafficMonitor({ isRunning, traffic }: TrafficMonitorProps) {
                 </div>
             </div>
             <div className="h-12 flex items-end gap-[3px] opacity-80">
-                {trafficHistory.map((val, i) => {
+                {(() => {
                     const maxTotal = Math.max(...trafficHistory.map(t => t.up + t.down), 1024)
-                    const total = val.up + val.down
-                    const totalHeight = Math.min((total / maxTotal) * 100, 100)
+                    return trafficHistory.map((val, i) => {
+                        const total = val.up + val.down
+                        const totalHeight = Math.min((total / maxTotal) * 100, 100)
 
-                    const upRatio = total > 0 ? val.up / total : 0
-                    const downRatio = total > 0 ? val.down / total : 0
+                        const upRatio = total > 0 ? val.up / total : 0
+                        const downRatio = total > 0 ? val.down / total : 0
 
-                    return (
-                        <div
-                            key={i}
-                            className="flex-1 flex flex-col justify-end rounded-t-sm overflow-hidden relative bg-black/5 dark:bg-white/5"
-                            style={{ height: `${Math.max(totalHeight, 2)}%` }}
-                        >
-                            {/* Stacked Bars: Up (Green) top, Down (Blue) bottom */}
+                        return (
                             <div
-                                className="w-full bg-emerald-500 transition-all duration-300"
-                                style={{ height: `${upRatio * 100}%` }}
-                            />
-                            <div
-                                className="w-full bg-primary transition-all duration-300"
-                                style={{ height: `${downRatio * 100}%` }}
-                            />
-                        </div>
-                    )
-                })}
+                                key={i}
+                                className="flex-1 flex flex-col justify-end rounded-t-sm overflow-hidden relative bg-black/5 dark:bg-white/5"
+                                style={{ height: `${Math.max(totalHeight, 2)}%` }}
+                            >
+                                {/* Stacked Bars: Up (Green) top, Down (Blue) bottom */}
+                                <div
+                                    className="w-full bg-emerald-500 transition-all duration-300"
+                                    style={{ height: `${upRatio * 100}%` }}
+                                />
+                                <div
+                                    className="w-full bg-primary transition-all duration-300"
+                                    style={{ height: `${downRatio * 100}%` }}
+                                />
+                            </div>
+                        )
+                    })
+                })()}
             </div>
         </div>
     )

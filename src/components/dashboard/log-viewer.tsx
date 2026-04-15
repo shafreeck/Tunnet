@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useEffect, useMemo } from "react"
+import { useRef, useEffect, useMemo, memo } from "react"
 import { cn } from "@/lib/utils"
 
 
@@ -47,7 +47,7 @@ export function LogViewer({ logs, onClear, filter = "", autoScroll = true, class
     )
 }
 
-function LogLine({ content }: { content: string }) {
+const LogLine = memo(({ content }: { content: string }) => {
     // Basic ANSI parser
     const segments = parseAnsi(content)
 
@@ -60,7 +60,9 @@ function LogLine({ content }: { content: string }) {
             ))}
         </div>
     )
-}
+})
+
+LogLine.displayName = "LogLine"
 
 interface TextSegment {
     text: string

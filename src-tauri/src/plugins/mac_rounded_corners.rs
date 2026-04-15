@@ -125,7 +125,14 @@ pub fn enable_modern_window_style<R: Runtime>(
                     let layer: id = msg_send![content_view, layer];
                     if !layer.is_null() {
                         let _: () = msg_send![layer, setCornerRadius: radius];
+                        // Using setMasksToBounds: YES can sometimes clip content in high-DPI
+                        // but is needed for corner radius to show on the background.
                         let _: () = msg_send![layer, setMasksToBounds: cocoa::base::YES];
+                        
+                        // Ensure background color of the layer is transparent if the window is non-opaque
+                        let transparent_color: id = msg_send![objc::class!(NSColor), clearColor];
+                        let cg_color: id = msg_send![transparent_color, CGColor];
+                        let _: () = msg_send![layer, setBackgroundColor: cg_color];
                     }
                     
                     position_traffic_lights(ns_window, config.offset_x, config.offset_y);

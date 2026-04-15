@@ -3,7 +3,7 @@
 import React from "react"
 import { Search, Rocket, Globe, Settings, Sliders, Info, Server, Zap, LayoutGrid, Activity, Play, Square, ArrowDown, ArrowUp, Zap as ZapIcon, Power, Loader2, ChevronRight, RotateCcw } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { cn } from "@/lib/utils"
+import { cn, safeUnlisten } from "@/lib/utils"
 import { type } from '@tauri-apps/plugin-os'
 import { Switch } from "@/components/ui/switch"
 import { invoke } from "@tauri-apps/api/core"
@@ -281,7 +281,7 @@ function SidebarStatusWidget({ traffic, isLoading, onToggle, connectionState }: 
             setStatus(event.payload)
         })
         return () => {
-            unlisten.then(f => f())
+            safeUnlisten(unlisten)
         }
     }, [fetchStatus])
 
