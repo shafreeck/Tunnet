@@ -452,9 +452,14 @@ impl<R: Runtime> CoreManager<R> {
         self.backup_data()?;
 
         // Version 1 -> 2 Migration (sing-box v1.13)
-        // In reality, most of the logic is in config.rs generation.
-        // But we might want to update rules.json if we had any deprecated fields there.
-        // For now, we just bump the version to signal that we acknowledged the upgrade.
+        // 1. MTU correction: Reset 9000 or 0 to safe default 1500
+        if settings.tun_mtu == 9000 || settings.tun_mtu == 0 {
+            info!("Migration: resetting tun_mtu from {} to 1500", settings.tun_mtu);
+            settings.tun_mtu = 1500;
+        }
+
+        // 2. DNS servers: If it matches the old default exactly or is empty, we keep it as is
+        // since SingBoxConfig::new now handles it intelligently.
 
         settings.config_version = 2;
         self.save_settings(&settings)?;

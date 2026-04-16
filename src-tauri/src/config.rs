@@ -326,7 +326,7 @@ impl SingBoxConfig {
             .collect();
 
         if user_servers.is_empty() {
-            // Default fallback using DoH
+            // Default fallback using DoH over proxy (Cloudflare compatible)
             servers.push(DnsServer {
                 dns_type: "https".to_string(),
                 tag: "google".to_string(),
@@ -339,16 +339,45 @@ impl SingBoxConfig {
             });
         } else {
             for (i, s) in user_servers.iter().enumerate() {
-                servers.push(DnsServer {
-                    dns_type: "https".to_string(),
-                    tag: format!("dns-{}", i),
-                    address: None,
-                    server: Some(s.to_string()),
-                    server_port: Some(443),
-                    address_resolver: None,
-                    address_fallback_delay: None,
-                    detour: Some(proxy_tag.to_string()),
-                });
+                // Smart detection: Local/Private IPs should use UDP + Direct
+                // Public IPs should use HTTPS + Proxy (to bypass CF blocks)
+                let is_private = s.starts_with("192.168.") || 
+                                 s.starts_with("10.") || 
+                                 s.starts_with("127.") ||
+                                 s.starts_with("172.16.") || s.starts_with("172.17.") ||
+                                 s.starts_with("172.18.") || s.starts_with("172.19.") ||
+                                 s.starts_with("172.20.") || s.starts_with("172.21.") ||
+                                 s.starts_with("172.22.") || s.starts_with("172.23.") ||
+                                 s.starts_with("172.24.") || s.starts_with("172.25.") ||
+                                 s.starts_with("172.26.") || s.starts_with("172.27.") ||
+                                 s.starts_with("172.28.") || s.starts_with("172.29.") ||
+                                 s.starts_with("172.30.") || s.starts_with("172.31.") ||
+                                 s == "::1" || 
+                                 s.starts_with("localhost");
+
+                if is_private {
+                    servers.push(DnsServer {
+                        dns_type: "udp".to_string(),
+                        tag: format!("dns-local-{}", i),
+                        address: None,
+                        server: Some(s.to_string()),
+                        server_port: Some(53),
+                        address_resolver: None,
+                        address_fallback_delay: None,
+                        detour: Some("direct".to_string()),
+                    });
+                } else {
+                    servers.push(DnsServer {
+                        dns_type: "https".to_string(),
+                        tag: format!("dns-remote-{}", i),
+                        address: None,
+                        server: Some(s.to_string()),
+                        server_port: Some(443),
+                        address_resolver: None,
+                        address_fallback_delay: None,
+                        detour: Some(proxy_tag.to_string()),
+                    });
+                }
             }
         }
 
