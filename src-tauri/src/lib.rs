@@ -16,6 +16,16 @@ use tauri::{Manager, State};
 
 static APP_ACTIVITY_TOKEN: OnceLock<usize> = OnceLock::new();
 static TRAY_LAST_HEARTBEAT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+static MAIN_LAST_HEARTBEAT: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+#[tauri::command]
+fn main_heartbeat() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    MAIN_LAST_HEARTBEAT.store(now, std::sync::atomic::Ordering::SeqCst);
+}
 
 #[tauri::command]
 fn tray_heartbeat() {
@@ -33,6 +43,11 @@ fn poll_traffic(service: tauri::State<'_, service::ProxyService<tauri::Wry>>) ->
         "up": up,
         "down": down,
     })
+}
+
+#[tauri::command]
+fn poll_logs(service: tauri::State<'_, service::ProxyService<tauri::Wry>>) -> Vec<service::LogEvent> {
+    service.poll_logs()
 }
 
 
@@ -348,12 +363,49 @@ async fn close_all_connections(
 #[tauri::command]
 async fn open_main_window(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(desktop)]
-    if let Some(window) = app.get_webview_window("main") {
+    {
+        let window = if let Some(w) = app.get_webview_window("main") {
+            // Self-healing: Check health of the existing window
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as i64;
+            let last_heartbeat = MAIN_LAST_HEARTBEAT.load(std::sync::atomic::Ordering::SeqCst);
+            
+            // If it's been running but no heartbeat for > 2s, it's likely crashed/suspended
+            if (now - last_heartbeat) > 2000 && last_heartbeat > 0 {
+                log::warn!("Main window health check FAILED. Re-creating to recover from renderer crash/deadlock...");
+                let _ = w.close();
+                create_main_window(&app).map_err(|e| e.to_string())?
+            } else {
+                w
+            }
+        } else {
+            create_main_window(&app).map_err(|e| e.to_string())?
+        };
+
         window.show().map_err(|e| e.to_string())?;
         window.unminimize().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+fn create_main_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    log::info!("Creating/Re-creating main window...");
+    let builder = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("/".into()))
+        .title("Tunnet")
+        .inner_size(1000.0, 720.0)
+        .resizable(true)
+        .transparent(true)
+        .decorations(false)
+        .shadow(true);
+    
+    #[cfg(target_os = "macos")]
+    let builder = builder.title_bar_style(tauri::TitleBarStyle::Overlay);
+
+    let window = builder.build()?;
+    Ok(window)
 }
 
 #[tauri::command]
@@ -903,6 +955,8 @@ pub fn run() {
             get_node_link,
             poll_traffic,
             tray_heartbeat,
+            main_heartbeat,
+            poll_logs,
             export_node_content,
             export_profile_content,
             export_group_content,

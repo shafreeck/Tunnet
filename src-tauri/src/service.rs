@@ -1,6 +1,6 @@
 use crate::manager::CoreManager;
 use log::{debug, error, info, warn};
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::ffi::{CStr, CString};
 use std::io::{BufRead, BufReader};
 use std::sync::Mutex;
@@ -106,6 +106,7 @@ pub struct ProxyService<R: Runtime> {
     is_starting: std::sync::Arc<std::sync::atomic::AtomicBool>,
     last_wake_up_time: std::sync::Arc<std::sync::atomic::AtomicI64>,
     latest_traffic: std::sync::Arc<std::sync::Mutex<(u64, u64)>>,
+    latest_logs: std::sync::Arc<std::sync::Mutex<VecDeque<LogEvent>>>,
 }
 
 impl<R: Runtime> ProxyService<R> {
@@ -138,6 +139,7 @@ impl<R: Runtime> ProxyService<R> {
             is_starting: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             last_wake_up_time: std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0)),
             latest_traffic: std::sync::Arc::new(std::sync::Mutex::new((0, 0))),
+            latest_logs: std::sync::Arc::new(std::sync::Mutex::new(VecDeque::with_capacity(200))),
         }
     }
 
@@ -146,6 +148,14 @@ impl<R: Runtime> ProxyService<R> {
             *traffic
         } else {
             (0, 0)
+        }
+    }
+
+    pub fn poll_logs(&self) -> Vec<LogEvent> {
+        if let Ok(mut logs) = self.latest_logs.lock() {
+            logs.drain(..).collect()
+        } else {
+            Vec::new()
         }
     }
 
@@ -446,9 +456,9 @@ impl<R: Runtime> ProxyService<R> {
                     .store(true, std::sync::atomic::Ordering::SeqCst);
 
                 // Spawn local log forwarder with backpressure protection
-                let app_clone = self.app.clone();
                 let log_running_clone = self.log_running.clone();
                 let last_wake_clone = self.last_wake_up_time.clone();
+                let latest_logs_clone = self.latest_logs.clone();
                 std::thread::spawn(move || {
                     let reader = BufReader::new(reader);
                     // Experiment: Slight delay to prevent IPC flooding during boot/wake bursts
@@ -476,14 +486,17 @@ impl<R: Runtime> ProxyService<R> {
                                     std::thread::sleep(std::time::Duration::from_millis(100));
                                 } else {
                                     for msg in log_batch.drain(..) {
-                                        let _ = app_clone.emit_to(
-                                            "main",
-                                            "proxy-log",
-                                            LogEvent {
+                                        // REFACTOR: Instead of pushing via IPC (emit_to), we buffer for polling
+                                        if let Ok(mut logs_guard) = latest_logs_clone.lock() {
+                                            let logs: &mut VecDeque<LogEvent> = &mut *logs_guard;
+                                            if logs.len() >= 200 {
+                                                logs.pop_front();
+                                            }
+                                            logs.push_back(LogEvent {
                                                 source: "local".to_string(),
                                                 message: msg,
-                                            },
-                                        );
+                                            });
+                                        }
                                     }
                                     last_emit = std::time::Instant::now();
                                 }
@@ -564,9 +577,9 @@ impl<R: Runtime> ProxyService<R> {
 
                     // Tailing Helper Log
                     let log_path_clone = helper_log_path.clone();
-                    let app_clone = self.app.clone();
                     let log_running_clone = self.log_running.clone();
-                    tokio::spawn(async move {
+                    let latest_logs_clone = self.latest_logs.clone();
+                    tauri::async_runtime::spawn(async move {
                         info!("Helper log tailer started for {:?}", log_path_clone);
                         
                         let mut file = None;
@@ -605,14 +618,17 @@ impl<R: Runtime> ProxyService<R> {
                                     Ok(_) => {
                                         let message = line.trim();
                                         if !message.is_empty() {
-                                            let _ = app_clone.emit_to(
-                                                "main",
-                                                "proxy-log",
-                                                LogEvent {
+                                            // REFACTOR: Instead of pushing via IPC (emit_to), we buffer for polling
+                                            if let Ok(mut logs_guard) = latest_logs_clone.lock() {
+                                                let logs: &mut VecDeque<LogEvent> = &mut *logs_guard;
+                                                if logs.len() >= 200 {
+                                                    logs.pop_front();
+                                                }
+                                                logs.push_back(LogEvent {
                                                     source: "helper".to_string(),
                                                     message: message.to_string(),
-                                                },
-                                            );
+                                                });
+                                            }
                                         }
                                     }
                                     Err(e) => {
@@ -2395,7 +2411,7 @@ impl<R: Runtime> ProxyService<R> {
                 // selector, urltest, direct, block, dns do not support domain_strategy at the outbound level.
                 if matches!(
                     outbound.outbound_type.as_str(),
-                    "vmess" | "vless" | "shadowsocks" | "trojan" | "hysteria2" | "tuic"
+                    "vmess" | "vless" | "shadowsocks" | "ss" | "trojan" | "hysteria2" | "tuic"
                 ) {
                     outbound.domain_strategy = Some(strategy.clone());
                 }

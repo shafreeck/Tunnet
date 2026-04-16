@@ -86,9 +86,26 @@ export default function Home() {
   const [logs, setLogs] = useState<{ local: string[], helper: string[] }>({ local: [], helper: [] })
   const pendingLogsRef = useRef<{ local: string[], helper: string[] }>({ local: [], helper: [] })
 
-  // Batch log updates to prevent UI thread lock during bursts (e.g. after sleep/wake)
+  const [showLogs, setShowLogs] = useState(false)
+  const [showAddSubscription, setShowAddSubscription] = useState(false)
+
+  // Batch log updates AND Poll logs (Pull instead of Push)
   useEffect(() => {
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
+      // 1. Pull logs from backend ONLY when user is looking at the logs panel (Lazy Loading)
+      if (showLogs) {
+        try {
+          const newLogs: any[] = await invoke("poll_logs");
+          newLogs.forEach(log => {
+            const stream = log.source === "helper" ? "helper" : "local";
+            pendingLogsRef.current[stream].push(log.message);
+          });
+        } catch (e) {
+          // Silently ignore IPC errors during suspension/nap
+        }
+      }
+
+      // 2. Sync pending buffer to UI state
       if (pendingLogsRef.current.local.length > 0 || pendingLogsRef.current.helper.length > 0) {
         setLogs(prev => {
           const nextLocal = [...prev.local, ...pendingLogsRef.current.local].slice(-1000);
@@ -97,12 +114,17 @@ export default function Home() {
           return { local: nextLocal, helper: nextHelper };
         });
       }
-    }, 200);
+    }, 400); // 400ms interval provides a good balance between smoothness and IPC overhead
     return () => clearInterval(interval);
-  }, []);
+  }, [showLogs]);
 
-  const [showLogs, setShowLogs] = useState(false)
-  const [showAddSubscription, setShowAddSubscription] = useState(false)
+  // Main Window Heartbeat (Pull-based Health Check for Self-Healing)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      invoke("main_heartbeat").catch(() => {});
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Connection Details State (Real IP)
   const [connectionDetails, setConnectionDetails] = useState<{ ip: string; country: string; countryCode: string } | null>(null)
@@ -481,16 +503,6 @@ export default function Home() {
     const setupListeners = async () => {
       try {
         const results = await Promise.all([
-          listen<{ source: string, message: string }>("proxy-log", (event) => {
-            if (!active) return
-            const { source, message } = event.payload
-            const stream = source === "helper" ? "helper" : "local"
-            pendingLogsRef.current[stream].push(message);
-            // Cap the pending buffer to 1000 to prevent runaway memory if the sync timer hangs
-            if (pendingLogsRef.current[stream].length > 1000) {
-                pendingLogsRef.current[stream].shift();
-            }
-          }),
           listen<AppSettings>("settings-update", (event) => {
             if (!active) return
             setSettings(event.payload)
