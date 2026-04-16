@@ -352,8 +352,8 @@ impl SingBoxConfig {
                                  s.starts_with("172.26.") || s.starts_with("172.27.") ||
                                  s.starts_with("172.28.") || s.starts_with("172.29.") ||
                                  s.starts_with("172.30.") || s.starts_with("172.31.") ||
-                                 s.as_str() == "::1" || 
-                                 s.as_str() == "localhost";
+                                 *s == "::1" || 
+                                 *s == "localhost";
 
                 if is_private {
                     servers.push(DnsServer {
