@@ -776,7 +776,7 @@ function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle, m
                     <div className="flex items-center gap-1 bg-card-bg border border-border-color rounded-xl p-1">
                         <button
                             onClick={() => {
-                                const val = (parseInt(mtu) || 9000) - 100
+                                const val = (parseInt(mtu) || 1500) - 100
                                 setMtu(val.toString())
                                 update("tun_mtu", val)
                             }}
@@ -789,7 +789,7 @@ function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle, m
                             value={mtu}
                             onChange={(e) => setMtu(e.target.value)}
                             onBlur={() => {
-                                const val = parseInt(mtu) || 9000
+                                const val = parseInt(mtu) || 1500
                                 update("tun_mtu", val)
                             }}
                             className="w-16 bg-transparent border-none text-sm text-center focus:outline-none font-mono text-foreground p-0 no-spinner"
@@ -799,7 +799,7 @@ function ConnectionSettings({ settings, update, save, tunEnabled, onTunToggle, m
                         />
                         <button
                             onClick={() => {
-                                const val = (parseInt(mtu) || 9000) + 100
+                                const val = (parseInt(mtu) || 1500) + 100
                                 setMtu(val.toString())
                                 update("tun_mtu", val)
                             }}

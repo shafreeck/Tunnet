@@ -42,7 +42,7 @@ export const defaultSettings: AppSettings = {
     mixed_port: 2080,
     tun_mode: false,
     tun_stack: "gvisor",
-    tun_mtu: 9000,
+    tun_mtu: 1500,
     strict_route: true,
     dns_hijack: true,
     dns_strategy: "ipv4",

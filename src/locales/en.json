@@ -128,7 +128,7 @@
             },
             "mtu": {
                 "title": "MTU",
-                "desc": "Maximum Transmission Unit. Default 9000."
+                "desc": "Maximum Transmission Unit. Default 1500."
             },
             "strict_route": {
                 "title": "Strict Route",

@@ -312,8 +312,14 @@ pub struct DnsRule {
 }
 
 impl SingBoxConfig {
-    pub fn new(clash_api_port: Option<u16>, mode: ConfigMode, dns_servers: &str) -> Self {
-        // Parse user DNS servers or use defaults
+    pub fn new(
+        clash_api_port: Option<u16>,
+        mode: ConfigMode,
+        dns_servers: &str,
+        dns_strategy: &str,
+        bypass_ips: Vec<String>,
+    ) -> Self {
+        // ... (existing server parsing)
         let mut servers = Vec::new();
         let user_servers: Vec<&str> = dns_servers
             .lines()
@@ -361,6 +367,12 @@ impl SingBoxConfig {
             detour: Some("direct".to_string()),
         });
 
+        let strategy = match dns_strategy {
+            "ipv4" => "prefer_ipv4",
+            "ipv6" => "prefer_ipv6",
+            _ => dns_strategy,
+        };
+
         let dns = DnsConfig {
             servers,
             rules: vec![DnsRule {
@@ -381,8 +393,41 @@ impl SingBoxConfig {
                 }),
                 action: Some("route".to_string()),
             }],
-            strategy: None,
+            strategy: Some(strategy.to_string()),
         };
+
+        let mut route_rules = vec![
+            RouteRule {
+                action: Some("sniff".to_string()),
+                sniff: Some(true),
+                sniff_override_destination: Some(true),
+                ..Default::default()
+            },
+        ];
+
+        // Mandatory Bypass Rule at the very top
+        if !bypass_ips.is_empty() {
+            route_rules.insert(0, RouteRule {
+                ip_cidr: Some(bypass_ips),
+                action: Some("direct".to_string()),
+                ..Default::default()
+            });
+        }
+
+        if mode == ConfigMode::TunOnly || mode == ConfigMode::Combined {
+             route_rules.push(RouteRule {
+                inbound: Some(vec!["tun-in".to_string()]),
+                protocol: Some(vec!["dns".to_string()]),
+                port: Some(vec![53]),
+                action: Some("hijack-dns".to_string()),
+                ..Default::default()
+            });
+        }
+
+        route_rules.push(RouteRule {
+            outbound: Some("proxy".to_string()),
+            ..Default::default()
+        });
 
         let mut experimental = ExperimentalConfig {
             cache_file: Some(CacheFileConfig {
@@ -411,39 +456,7 @@ impl SingBoxConfig {
             inbounds: vec![],
             outbounds: vec![],
             route: Some(Route {
-                rules: match mode {
-                    ConfigMode::TunOnly | ConfigMode::Combined => vec![
-                        RouteRule {
-                            action: Some("sniff".to_string()),
-                            sniff: Some(true),
-                            sniff_override_destination: Some(true),
-                            ..Default::default()
-                        },
-                        RouteRule {
-                            inbound: Some(vec!["tun-in".to_string()]),
-                            protocol: Some(vec!["dns".to_string()]),
-                            port: Some(vec![53]),
-                            action: Some("hijack-dns".to_string()),
-                            ..Default::default()
-                        },
-                        RouteRule {
-                            outbound: Some("proxy".to_string()),
-                            ..Default::default()
-                        },
-                    ],
-                    _ => vec![
-                        RouteRule {
-                            action: Some("sniff".to_string()),
-                            sniff: Some(true),
-                            sniff_override_destination: Some(true),
-                            ..Default::default()
-                        },
-                        RouteRule {
-                            outbound: Some("proxy".to_string()),
-                            ..Default::default()
-                        },
-                    ],
-                },
+                rules: route_rules,
                 rule_set: None,
                 final_outbound: None,
                 auto_detect_interface: Some(true),

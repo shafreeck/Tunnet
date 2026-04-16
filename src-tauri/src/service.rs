@@ -1223,7 +1223,7 @@ impl<R: Runtime> ProxyService<R> {
             crate::config::ConfigMode::SystemProxyOnly
         };
         
-        let mut cfg = crate::config::SingBoxConfig::new(None, mode, &settings.dns_servers);
+        let mut cfg = crate::config::SingBoxConfig::new(None, mode, &settings.dns_servers, &settings.dns_strategy, vec![]);
         
         // Use remote rule-sets for portability
         if let Some(route) = &mut cfg.route {
@@ -1875,7 +1875,13 @@ impl<R: Runtime> ProxyService<R> {
         let tun_mode = mode == crate::config::ConfigMode::TunOnly
             || mode == crate::config::ConfigMode::Combined;
         let app_local_data = self.app.path().app_local_data_dir().unwrap();
-        let mut cfg = crate::config::SingBoxConfig::new(clash_api_port, mode, &settings.dns_servers);
+        let bypass_ips = if let Some(node) = node_opt {
+            vec![node.server.clone()]
+        } else {
+            vec![]
+        };
+        let mut cfg = crate::config::SingBoxConfig::new(clash_api_port, mode, &settings.dns_servers, &settings.dns_strategy, bypass_ips);
+
 
         // Synchronize log level with app settings
         if let Some(log) = &mut cfg.log {
@@ -4092,7 +4098,7 @@ impl<R: Runtime> ProxyService<R> {
 
     fn node_to_outbound(&self, node: &crate::profile::Node) -> crate::config::Outbound {
         let settings = self.get_app_settings().unwrap_or_default();
-        let mut cfg = crate::config::SingBoxConfig::new(None, crate::config::ConfigMode::Combined, &settings.dns_servers);
+        let mut cfg = crate::config::SingBoxConfig::new(None, crate::config::ConfigMode::Combined, &settings.dns_servers, &settings.dns_strategy, vec![]);
         let tag = node.id.clone();
 
         match node.protocol.as_str() {
