@@ -307,8 +307,6 @@ pub struct DnsRule {
     pub rule_set: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub action: Option<String>,
 }
 
 impl SingBoxConfig {
@@ -317,7 +315,7 @@ impl SingBoxConfig {
         mode: ConfigMode,
         dns_servers: &str,
         dns_strategy: &str,
-        bypass_ips: Vec<String>,
+        proxy_tag: &str,
     ) -> Self {
         // ... (existing server parsing)
         let mut servers = Vec::new();
@@ -328,28 +326,28 @@ impl SingBoxConfig {
             .collect();
 
         if user_servers.is_empty() {
-            // Default fallback
+            // Default fallback using DoH
             servers.push(DnsServer {
-                dns_type: "udp".to_string(),
+                dns_type: "https".to_string(),
                 tag: "google".to_string(),
                 address: None,
                 server: Some("8.8.8.8".to_string()),
-                server_port: Some(53),
+                server_port: Some(443),
                 address_resolver: None,
                 address_fallback_delay: None,
-                detour: Some("proxy".to_string()),
+                detour: Some(proxy_tag.to_string()),
             });
         } else {
             for (i, s) in user_servers.iter().enumerate() {
                 servers.push(DnsServer {
-                    dns_type: "udp".to_string(),
+                    dns_type: "https".to_string(),
                     tag: format!("dns-{}", i),
                     address: None,
                     server: Some(s.to_string()),
-                    server_port: Some(53),
+                    server_port: Some(443),
                     address_resolver: None,
                     address_fallback_delay: None,
-                    detour: Some("proxy".to_string()),
+                    detour: Some(proxy_tag.to_string()),
                 });
             }
         }
@@ -391,7 +389,6 @@ impl SingBoxConfig {
                 } else {
                     "dns-0".to_string()
                 }),
-                action: Some("route".to_string()),
             }],
             strategy: Some(strategy.to_string()),
         };
@@ -405,19 +402,9 @@ impl SingBoxConfig {
             },
         ];
 
-        // Mandatory Bypass Rule at the very top
-        if !bypass_ips.is_empty() {
-            route_rules.insert(0, RouteRule {
-                ip_cidr: Some(bypass_ips),
-                action: Some("direct".to_string()),
-                ..Default::default()
-            });
-        }
-
         if mode == ConfigMode::TunOnly || mode == ConfigMode::Combined {
              route_rules.push(RouteRule {
                 inbound: Some(vec!["tun-in".to_string()]),
-                protocol: Some(vec!["dns".to_string()]),
                 port: Some(vec![53]),
                 action: Some("hijack-dns".to_string()),
                 ..Default::default()
@@ -425,7 +412,7 @@ impl SingBoxConfig {
         }
 
         route_rules.push(RouteRule {
-            outbound: Some("proxy".to_string()),
+            outbound: Some(proxy_tag.to_string()),
             ..Default::default()
         });
 

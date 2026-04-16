@@ -1223,7 +1223,7 @@ impl<R: Runtime> ProxyService<R> {
             crate::config::ConfigMode::SystemProxyOnly
         };
         
-        let mut cfg = crate::config::SingBoxConfig::new(None, mode, &settings.dns_servers, &settings.dns_strategy, vec![]);
+        let mut cfg = crate::config::SingBoxConfig::new(None, mode, &settings.dns_servers, &settings.dns_strategy, "proxy");
         
         // Use remote rule-sets for portability
         if let Some(route) = &mut cfg.route {
@@ -1875,12 +1875,7 @@ impl<R: Runtime> ProxyService<R> {
         let tun_mode = mode == crate::config::ConfigMode::TunOnly
             || mode == crate::config::ConfigMode::Combined;
         let app_local_data = self.app.path().app_local_data_dir().unwrap();
-        let bypass_ips = if let Some(node) = node_opt {
-            vec![node.server.clone()]
-        } else {
-            vec![]
-        };
-        let mut cfg = crate::config::SingBoxConfig::new(clash_api_port, mode, &settings.dns_servers, &settings.dns_strategy, bypass_ips);
+        let mut cfg = crate::config::SingBoxConfig::new(clash_api_port, mode, &settings.dns_servers, &settings.dns_strategy, "proxy");
 
 
         // Synchronize log level with app settings
@@ -1908,7 +1903,6 @@ impl<R: Runtime> ProxyService<R> {
                     crate::config::DnsRule {
                         rule_set: Some(vec!["geosite-cn".to_string()]),
                         server: Some("local".to_string()),
-                        action: Some("route".to_string()),
                         inbound: None,
                         outbound: None,
                         domain: None,
@@ -1924,7 +1918,12 @@ impl<R: Runtime> ProxyService<R> {
             // CRITICAL FIX: To prevent IPv6 leak, we must enable IPv6 address for TUN
             // even if dns_strategy is "prefer_ipv4". Only disable if explicitly "only4".
             let ipv6_enabled = settings.dns_strategy != "only4";
-            cfg = cfg.with_tun_inbound(settings.tun_mtu, settings.tun_stack.clone(), ipv6_enabled, settings.strict_route);
+            // Force a safe MTU for maximum compatibility, especially with DoH/CDN nodes
+            let mut mtu = settings.tun_mtu;
+            if mtu > 1500 || mtu == 0 {
+                mtu = 1500;
+            }
+            cfg = cfg.with_tun_inbound(mtu, settings.tun_stack.clone(), ipv6_enabled, settings.strict_route);
         }
 
         let listen = if settings.allow_lan {
@@ -2192,7 +2191,7 @@ impl<R: Runtime> ProxyService<R> {
         // Apply Rules and Routing Mode
         let mut final_rules = Vec::new();
 
-        // 1. Preserve DNS Rule from initial config (only if enabled)
+        // 1. DNS Hijack (ABSOLUTE PRIORITY)
         if settings.dns_hijack {
             if let Some(route) = &cfg.route {
                 if let Some(dns_rule) = route
@@ -2205,15 +2204,9 @@ impl<R: Runtime> ProxyService<R> {
             }
         }
 
-        // 2. Clear then rebuild rules based on mode
-        if let Some(route) = &mut cfg.route {
-            route.rules.clear();
-        }
-
-        // Insert SNIFF rule at the top for TUN mode
+        // 2. Sniffing Rule (MUST follow Hijack so port 53 is caught first)
         if tun_mode {
-            final_rules.insert(
-                0,
+            final_rules.push(
                 crate::config::RouteRule {
                     inbound: Some(vec!["tun-in".to_string()]),
                     action: Some("sniff".to_string()),
@@ -2423,6 +2416,32 @@ impl<R: Runtime> ProxyService<R> {
                 }
             }
         }
+
+        // --- Final Stage: Robust Proxy Bypass (Routing Loop Prevention) ---
+        // Scan ALL outbounds to find their server IPs and ensure they are direct-routed.
+        // This is done last to catch all nodes across all profiles/groups/selectors.
+        let mut all_bypass_ips = Vec::new();
+        for outbound in &cfg.outbounds {
+            if let Some(server) = &outbound.server {
+                // Heuristic: if it's an IP address, we must bypass it.
+                // If it's a domain, sing-box's auto_detect_interface handles it better than a raw route.
+                if server.parse::<std::net::IpAddr>().is_ok() {
+                    all_bypass_ips.push(server.clone());
+                }
+            }
+        }
+
+        if !all_bypass_ips.is_empty() {
+            if let Some(route) = &mut cfg.route {
+                info!("Injecting {} proxy server IP bypass rules", all_bypass_ips.len());
+                route.rules.insert(0, crate::config::RouteRule {
+                    ip_cidr: Some(all_bypass_ips),
+                    outbound: Some("direct".to_string()),
+                    ..Default::default()
+                });
+            }
+        }
+        // ------------------------------------------------------------------
 
         let json = serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())?;
         let config_path = app_local_data.join("config.json");
@@ -4098,7 +4117,7 @@ impl<R: Runtime> ProxyService<R> {
 
     fn node_to_outbound(&self, node: &crate::profile::Node) -> crate::config::Outbound {
         let settings = self.get_app_settings().unwrap_or_default();
-        let mut cfg = crate::config::SingBoxConfig::new(None, crate::config::ConfigMode::Combined, &settings.dns_servers, &settings.dns_strategy, vec![]);
+        let mut cfg = crate::config::SingBoxConfig::new(None, crate::config::ConfigMode::Combined, &settings.dns_servers, &settings.dns_strategy, "proxy");
         let tag = node.id.clone();
 
         match node.protocol.as_str() {
