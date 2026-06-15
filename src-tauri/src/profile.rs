@@ -847,6 +847,40 @@ pub mod parser {
         nodes
     }
 
+    fn try_base64_decode(s: &str) -> Option<String> {
+        let engines = [
+            general_purpose::STANDARD,
+            general_purpose::URL_SAFE,
+            general_purpose::STANDARD_NO_PAD,
+            general_purpose::URL_SAFE_NO_PAD,
+        ];
+        let clean = s.replace(|c: char| c.is_whitespace(), "");
+        for engine in &engines {
+            if let Ok(bytes) = engine.decode(&clean) {
+                if let Ok(text) = String::from_utf8(bytes) {
+                    return Some(text);
+                }
+            }
+        }
+        None
+    }
+
+    fn extract_host_from_obfs_param(val: &str) -> String {
+        let trimmed = val.trim();
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                if let Some(h) = json_val
+                    .get("Host")
+                    .or_else(|| json_val.get("host"))
+                    .and_then(|v| v.as_str())
+                {
+                    return h.to_string();
+                }
+            }
+        }
+        val.to_string()
+    }
+
     fn parse_link(link: &str) -> Option<Node> {
         if link.starts_with("tunnet://") {
             let b64 = &link[9..];
@@ -1012,9 +1046,49 @@ pub mod parser {
                 }
             }
         } else if link.starts_with("ss://") {
-            // Basic SS placeholder - existing code logic seems limited,
-            // but for now we focus on adding NEW protocols.
-            // TODO: Enhance SS parsing if needed.
+            // ss://userinfo@host:port#name (SIP002 standard)
+            // or ss://base64(userinfo@host:port)#name (Legacy format)
+            if let Some(remainder) = link.strip_prefix("ss://") {
+                let (auth_host_port, fragment) = match remainder.split_once('#') {
+                    Some((u, f)) => (
+                        u,
+                        Some(urlencoding::decode(f).unwrap_or(f.into()).to_string()),
+                    ),
+                    None => (remainder, None),
+                };
+
+                let mut decoded_auth_host_port = auth_host_port.to_string();
+                if !decoded_auth_host_port.contains('@') {
+                    if let Some(decoded) = try_base64_decode(&decoded_auth_host_port) {
+                        if decoded.contains('@') {
+                            decoded_auth_host_port = decoded;
+                        }
+                    }
+                }
+
+                if let Some((userinfo, host_port)) = decoded_auth_host_port.split_once('@') {
+                    let decoded_userinfo = try_base64_decode(userinfo).unwrap_or_else(|| userinfo.to_string());
+                    if let Some((method, password)) = decoded_userinfo.split_once(':') {
+                        let (host_port_only, _query) = match host_port.split_once('?') {
+                            Some((hp, q)) => (hp, Some(q)),
+                            None => (host_port, None),
+                        };
+
+                        if let Some((host, port_str)) = host_port_only.rsplit_once(':') {
+                            return Some(Node {
+                                id: Uuid::new_v4().to_string(),
+                                name: fragment.unwrap_or("Shadowsocks Node".to_string()),
+                                protocol: "shadowsocks".to_string(),
+                                server: host.to_string(),
+                                port: port_str.parse().unwrap_or(443),
+                                cipher: Some(method.to_string()),
+                                password: Some(password.to_string()),
+                                ..Default::default()
+                            });
+                        }
+                    }
+                }
+            }
         } else if link.starts_with("vless://") {
             // vless://uuid@host:port?params#name
             if let Some(remainder) = link.strip_prefix("vless://") {
@@ -1031,15 +1105,25 @@ pub mod parser {
                     None => (user_host_port, None),
                 };
 
-                if let Some((uuid, host_port)) = user_host_port.split_once('@') {
+                let mut decoded_user_host_port = user_host_port.to_string();
+                if !decoded_user_host_port.contains('@') {
+                    if let Some(decoded) = try_base64_decode(&decoded_user_host_port) {
+                        if decoded.contains('@') {
+                            decoded_user_host_port = decoded;
+                        }
+                    }
+                }
+
+                if let Some((uuid, host_port)) = decoded_user_host_port.split_once('@') {
+                    let uuid = uuid.trim_start_matches(':').trim().to_string();
                     if let Some((host, port_str)) = host_port.rsplit_once(':') {
                         let mut node = Node {
                             id: Uuid::new_v4().to_string(),
-                            name: fragment.unwrap_or("VLESS Node".to_string()),
+                            name: fragment.clone().unwrap_or("VLESS Node".to_string()),
                             protocol: "vless".to_string(),
                             server: host.to_string(),
                             port: port_str.parse().unwrap_or(443),
-                            uuid: Some(uuid.to_string()),
+                            uuid: Some(uuid),
                             cipher: None,
                             password: None,
                             tls: false, // Default to false, check security param
@@ -1063,16 +1147,41 @@ pub mod parser {
                             disable_sni: None,
                         };
 
+                        let mut remarks_name = None;
+
                         if let Some(q) = query {
                             for pair in q.split('&') {
                                 if let Some((k, v)) = pair.split_once('=') {
                                     let v = urlencoding::decode(v).unwrap_or(v.into()).to_string();
                                     match k {
                                         "security" => node.tls = v == "tls" || v == "reality",
+                                        "tls" => {
+                                            if v == "1" || v == "true" {
+                                                node.tls = true;
+                                            }
+                                        }
                                         "flow" => node.flow = Some(v),
-                                        "type" => node.network = Some(v),
+                                        "type" => {
+                                            let v_lower = v.to_lowercase();
+                                            if v_lower == "websocket" || v_lower == "ws" {
+                                                node.network = Some("ws".to_string());
+                                            } else {
+                                                node.network = Some(v);
+                                            }
+                                        }
+                                        "obfs" => {
+                                            let v_lower = v.to_lowercase();
+                                            if v_lower == "websocket" || v_lower == "ws" {
+                                                node.network = Some("ws".to_string());
+                                            }
+                                        }
                                         "path" => node.path = Some(v),
-                                        "host" => node.host = Some(v),
+                                        "host" => {
+                                            node.host = Some(extract_host_from_obfs_param(&v));
+                                        }
+                                        "obfsParam" => {
+                                            node.host = Some(extract_host_from_obfs_param(&v));
+                                        }
                                         "sni" => node.sni = Some(v),
                                         "alpn" => {
                                             let list: Vec<String> = v
@@ -1091,11 +1200,21 @@ pub mod parser {
                                         "insecure" | "allowInsecure" => {
                                             node.insecure = v == "1" || v == "true"
                                         }
+                                        "remarks" => {
+                                            remarks_name = Some(v);
+                                        }
                                         _ => {}
                                     }
                                 }
                             }
                         }
+
+                        if fragment.is_none() {
+                            if let Some(rname) = remarks_name {
+                                node.name = rname;
+                            }
+                        }
+
                         return Some(node);
                     }
                 }
